@@ -204,9 +204,7 @@ def get_generated_pcap(filename):
     try:
         # Prevent path traversal
         filename = Path(filename).name
-        filepath = Path(CONFIG["PCAP_OUTPUT_DIR"]) / filename
-        if not filepath.exists():
-            return jsonify({"success": False, "error": f"File not found: {filename}"}), 404
+        filepath = 'generated_pcaps\\' + filename
 
         logger.info(f"Serving PCAP file: {filename}")
         return send_file(filepath, as_attachment=True)
@@ -247,11 +245,11 @@ def get_generated_pcap(filename):
 # @app.route('/generated_pcaps/<filename>')
 # def serve_generated_pcap(filename):
     # Ensure filename doesn't contain path traversal attempts for security
-    if ".." in filename or "/" in filename:
-        return jsonify({"status": "error", "message": "Invalid filename"}), 400
+    # if ".." in filename or "/" in filename:
+    #     return jsonify({"status": "error", "message": "Invalid filename"}), 400
     
-    # Serve the file from the designated PCAP generation output directory
-    return send_from_directory(PCAP_GEN_OUTPUT_DIR, filename, as_attachment=True)
+    # # Serve the file from the designated PCAP generation output directory
+    # return send_from_directory(PCAP_GEN_OUTPUT_DIR, filename, as_attachment=True)
 
 @app.route('/analyze-saved-pcap/<filename>', methods=['GET'])
 def analyze_saved_pcap(filename):
@@ -321,11 +319,12 @@ def save_results_endpoint():
     else:
         send_file = base_name + ".json"
 
-    output_dir = CLUSTERING_OUTPUT_DIR
+    output_dir = os.path.join(os.getcwd(), "server", "cluster_analysis")  # Absolute path
+
     full_path = os.path.join(output_dir, send_file)
 
     if not os.path.exists(full_path):
-        return jsonify({"error": f"{filetype.upper()} file not found"}), 404
+        return jsonify({"error": f"{filetype.upper()} file not found: {send_file}", "path_checked": full_path}), 404
 
     # Send the requested file
     return send_from_directory(output_dir, send_file, as_attachment=True)
@@ -337,7 +336,6 @@ def suggested_clusters():
         return jsonify({"error": "file parameter is required"}), 400
 
     filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, filename)
-    print(filepath)
     if not os.path.exists(filepath):
         return jsonify({"error": "file not found"}), 404
 
@@ -386,7 +384,6 @@ def run_pipeline_endpoint():
     print(f"[API] Model Name: {model_name}")
 
     try:
-        # **SYNCHRONOUS CALL** - This line blocks until the pipeline finishes.
         analysis_report = run_ip_role_pipeline(pcap_file_path, model_name)
         
         if analysis_report.get('status') == 'success':
@@ -403,6 +400,27 @@ def run_pipeline_endpoint():
         print(f"[API] Pipeline failed with error: {error_message}")
         return jsonify({"status": "error", "message": error_message}), 500
     
+@app.route('/save_roles', methods=['GET'])
+def save_roles_endpoint():
+    filename = request.args.get("file")
+    filetype = request.args.get("type", default="json").lower()
+
+    if not filename:
+        return jsonify({"error": "file parameter is required"}), 400
+
+    if filetype not in ["json", "csv"]:
+        return jsonify({"error": "Invalid type, must be 'json' or 'csv'"}), 400
+
+    base_name = os.path.splitext(filename)[0]
+    output_filename = f"{base_name}.{filetype}"
+    output_dir = os.path.join(os.getcwd(), "server", "results")  # Absolute path
+
+    full_path = os.path.join(output_dir, output_filename)
+
+    if not os.path.exists(full_path):
+        return jsonify({"error": f"{filetype.upper()} file not found: {output_filename}", "path_checked": full_path}), 404
+
+    return send_from_directory(output_dir, output_filename, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=False) 

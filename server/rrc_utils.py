@@ -31,41 +31,37 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
         # Cache None for failed attempts to avoid retrying
         _packet_cache[pcap_file] = None
         return None
+
+def get_cached_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
+    """Public function to get cached packets, loading if necessary."""
+    return _run_tshark_and_load_packets(pcap_file)
     
-def recognize_core_ips(packets: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+def recognize_core_ips(pcap_file: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Identifies the gNB and AMF IPs by finding the SCTP association initiation.
     The gNB initiates the connection (SCTP INIT, chunk_type=1) to the AMF.
+    Optimized with tshark fields.
     """
-    gnb_ip = None
-    amf_ip = None
-
-    for pkt in packets:
-        try:
-            layers = pkt.get("_source", {}).get("layers", {})
-            ip_layer = layers.get("ip")
-            sctp_layer = layers.get("sctp")
-            # SCTP chunk_type '1' is INIT (Initiation)
-            chunk_type = sctp_layer.get("sctp.chunk", {}).get("sctp.chunk_type")
-            if ip_layer and sctp_layer and chunk_type == "1":
-                # gNB is the initiator (source IP)
-                gnb_ip = ip_layer.get("ip.src")
-                amf_ip = ip_layer.get("ip.dst")
-                break
-        except Exception:
-            continue
-            
-    return gnb_ip, amf_ip
+    cmd = [
+        "tshark", "-r", pcap_file, "-Y", "sctp.chunk_type == 1",
+        "-T", "fields", "-e", "ip.src", "-e", "ip.dst", "-c", "1"
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        output = result.stdout.strip()
+        if output:
+            src, dst = output.split("\t")
+            return src, dst
+        return None, None
+    except Exception:
+        return None, None
 
 def get_gnb_ip(pcap_file: str) -> Optional[str]:
     """
     Reads the pcap file and returns the IP address of the gNB.
     Returns: The gNB IP address as a string, or None if not found.
     """
-    packets = _run_tshark_and_load_packets(pcap_file)
-    if not packets:
-        return None
-    gnb, _ = recognize_core_ips(packets)
+    gnb, _ = recognize_core_ips(pcap_file)
     return gnb
 
 def get_amf_ip(pcap_file: str) -> Optional[str]:
@@ -73,10 +69,7 @@ def get_amf_ip(pcap_file: str) -> Optional[str]:
     Reads the pcap file and returns the IP address of the AMF.
     Returns: The AMF IP address as a string, or None if not found.
     """
-    packets = _run_tshark_and_load_packets(pcap_file)
-    if not packets:
-        return None
-    _, amf = recognize_core_ips(packets)
+    _, amf = recognize_core_ips(pcap_file)
     return amf
 
 def get_unique_rrc_ips(pcap_file: str) -> List[str]:
@@ -84,51 +77,34 @@ def get_unique_rrc_ips(pcap_file: str) -> List[str]:
     Runs tshark on the given pcap file, extracts unique destination IPs
     from packets that contain NR-RRC, skips consecutive duplicates,
     and **excludes the gNB and AMF IPs**.
+    Optimized with tshark fields.
     """
-    packets = _run_tshark_and_load_packets(pcap_file)
-    if not packets:
-        return []
-
-    gnb_ip, amf_ip = recognize_core_ips(packets)
-
+    # First, get gNB and AMF
+    gnb_ip, amf_ip = recognize_core_ips(pcap_file)
     excluded_ips = {ip for ip in (gnb_ip, amf_ip) if ip}
 
-    ips = []
-    last_ip = None
-
-    for pkt in packets:
-        try:
-            layers = pkt.get("_source", {}).get("layers", {})
-            frame = layers.get("frame", {})
-            ip_layer = layers.get("ip")
-            
-            if not ip_layer:
-                continue
-                
-            if "nr-rrc" in frame.get("frame.protocols", ""):
-                ip_dst = ip_layer.get("ip.dst")
-                
-                if ip_dst and ip_dst != last_ip:
-                    if ip_dst not in excluded_ips:
-                        ips.append(ip_dst)
-                    
-                    last_ip = ip_dst 
-                    
-        except Exception:
-            continue
-
-    return sorted(list(set(ips)))
+    cmd = [
+        "tshark", "-r", pcap_file, "-Y", "nr-rrc",
+        "-T", "fields", "-e", "ip.dst"
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        ips = []
+        last_ip = None
+        for line in result.stdout.splitlines():
+            ip_dst = line.strip()
+            if ip_dst and ip_dst != last_ip and ip_dst not in excluded_ips:
+                ips.append(ip_dst)
+                last_ip = ip_dst
+        return sorted(list(set(ips)))
+    except Exception:
+        return []
 
 def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
     """
     Identifies O-RAN specific IPs (E2T, Redis, RIC Client, E2 Node)
     based on well-known ports and packet communication patterns.
-
-    Logic:
-    1. Redis Server: IP acting as the destination on TCP port 6379.
-    2. E2 Terminator (E2T): IP acting as the destination on TCP port 38000.
-    3. Near-RT RIC Client: IP that acts as the source/client for both Redis and E2T.
-    4. E2 Node: IP that acts as the source/client for the E2T, but not the RIC Client.
+    Optimized with tshark fields for each port.
     """
     roles: Dict[str, Optional[str]] = {
         "e2t_ip": None,
@@ -136,42 +112,42 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
         "ric_client_ip": None,
         "e2_node_ip": None
     }
-    packets = _run_tshark_and_load_packets(pcap_file)
     
-    if not packets:
-        return roles
-    
+    # Collect for Redis (port 6379)
+    cmd_redis = [
+        "tshark", "-r", pcap_file, "-Y", "tcp.dstport == 6379",
+        "-T", "fields", "-e", "ip.src", "-e", "ip.dst"
+    ]
     ric_client_candidates = set()
-    e2t_client_candidates = set()
-
-    for pkt in packets:
-        try:
-            layers = pkt.get("_source", {}).get("layers", {})
-            ip_layer = layers.get("ip")
-            tcp_layer = layers.get("tcp")
-
-            if not ip_layer or not tcp_layer:
-                continue
-
-            ip_src = ip_layer.get("ip.src")
-            ip_dst = ip_layer.get("ip.dst")
-            tcp_dstport = tcp_layer.get("tcp.dstport")
-
-            # 1. Identify Redis Server (Server Port 6379)
-            if tcp_dstport == "6379":
+    try:
+        result = subprocess.run(cmd_redis, capture_output=True, text=True, check=True)
+        for line in result.stdout.splitlines():
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                ip_src, ip_dst = parts
                 if roles["redis_ip"] is None:
                     roles["redis_ip"] = ip_dst
-                ric_client_candidates.add(ip_src)  # Source IP is the client
-                
-            # 2. Identify E2 Terminator (E2T) (Server Port 38000)
-            if tcp_dstport == "38000":
+                ric_client_candidates.add(ip_src)
+    except Exception:
+        pass
+
+    # Collect for E2T (port 38000)
+    cmd_e2t = [
+        "tshark", "-r", pcap_file, "-Y", "tcp.dstport == 38000",
+        "-T", "fields", "-e", "ip.src", "-e", "ip.dst"
+    ]
+    e2t_client_candidates = set()
+    try:
+        result = subprocess.run(cmd_e2t, capture_output=True, text=True, check=True)
+        for line in result.stdout.splitlines():
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                ip_src, ip_dst = parts
                 if roles["e2t_ip"] is None:
                     roles["e2t_ip"] = ip_dst
-                e2t_client_candidates.add(ip_src)  # Source IP is the client
-                
-
-        except Exception:
-            continue
+                e2t_client_candidates.add(ip_src)
+    except Exception:
+        pass
             
     # Post-process to assign the remaining roles
 

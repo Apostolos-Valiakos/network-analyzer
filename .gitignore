@@ -91,3 +91,10 @@ sw.*
 *.swp
 package-lock.json
 package.json
+
+server/__pycache__
+server/generated_pcaps
+server/models
+server/uploads
+server/cluster_analysis
+server/results

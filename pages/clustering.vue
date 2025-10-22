@@ -277,14 +277,15 @@
 
         <!-- STEP 3: RESULTS -->
         <v-stepper-content step="3">
-          <v-card class="mb-12" color="grey lighten-1" height="600px"></v-card>
+          <v-btn color="blue" @click="saveRoles"> Get Roles </v-btn>
+          <v-card class="mb-12" height="600px"></v-card>
           <div class="d-flex ga-4">
-            <v-btn color="secondary" @click="e1 = 2" class="control-btn"
-              >Previous</v-btn
-            >
-            <v-btn color="primary" @click="e1 = 1" class="control-btn"
-              >Continue</v-btn
-            >
+            <v-btn color="secondary" @click="e1 = 2" class="control-btn">
+              Previous
+            </v-btn>
+            <v-btn color="primary" @click="e1 = 1" class="control-btn">
+              Continue
+            </v-btn>
           </div>
         </v-stepper-content>
       </v-stepper-items>
@@ -470,6 +471,20 @@ export default {
       } finally {
         this.cnnLoading = false;
       }
+    },
+    async saveRoles() {
+      this.error = null;
+      var file = this.filename.substring(0, this.filename.length - 5);
+      const downloadUrl = `http://127.0.0.1:5000/save_roles?file=${file}&type=${this.fileType}`;
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute(
+        "download",
+        this.filename.replace(/\.[^/.]+$/, "") + this.fileType
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
   },
   computed: {

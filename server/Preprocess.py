@@ -4,18 +4,19 @@ import os
 import sys
 import time # Used for processing time calculation
 import multiprocessing as mp
+import json
 # Libraries for packet capture parsing.
 try:
     from scapy.all import rdpcap, IP, SCTP
     from scapy.layers.l2 import Ether
     import pandas as pd
     import numpy as np
-    import tensorflow as tf
-    from tensorflow import keras
-    from keras.models import Model
-    from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
-    from keras.optimizers import Adam
-    from sklearn.model_selection import train_test_split
+#     import tensorflow as tf
+#     from tensorflow import keras
+#     from keras.models import Model
+#     from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
+#     from keras.optimizers import Adam
+#     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import StandardScaler, LabelEncoder
     import pyshark
     from pyshark.capture.capture import TSharkCrashException
@@ -23,7 +24,7 @@ try:
     # Attempt to import rrc_utils, provide a fallback if it's not installed
     # Note: rrc_utils is imported inside the worker function as well for safety
     try:
-        from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles
+        from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles, get_cached_packets
     except ImportError:
         print("Warning: 'rrc_utils' not found.")
 
@@ -53,41 +54,44 @@ class PacketProcessor:
             # 'AMF': ['NGSetupRequest', 'InitialUEMessage', 'NgapPDUSessionResourceSetupRequest']
         }
 
-    def _process_packet(self, pkt):
+    def _process_packet(self, pkt_dict):
         """
         Extracts features and applies rule-based logic to assign roles.
         This function performs a detailed, layer-by-layer search for keywords.
         """
         features = {}
         try:
-            # Check for IP layer to get basic info
-            if 'IP' in pkt:
-                src_ip = pkt.ip.src
-                features['timestamp'] = 0.0
+            layers = pkt_dict.get("_source", {}).get("layers", {})
+            frame_layer = layers.get("frame", {})
+            ip_layer = layers.get("ip")
+            if not ip_layer:
+                return
 
-                features['src_ip'] = src_ip
-                # features['dst_ip'] = dst_ip
-                features['packet_len'] = pkt.length
-                
-                # Add the highest-level protocol to the features
-                features['protocol'] = pkt.highest_layer
-                
-                # Check if the IP's role is already determined. If so, return early for efficiency.
-                if self.ip_roles.get(src_ip) in self.role_rules.keys():
-                    return
-                
-                # Detailed search for keywords within layers
-                packet_string = str(pkt)
-                
-                for role, msgs in self.role_rules.items():
-                    for msg in msgs:
-                        if msg.lower() in packet_string.lower():
-                            self.ip_roles[src_ip] = role
-                            print("Found Role")
-                            print(role)
-                            return # Role found, stop processing this packet
-                
-                self.extracted_data.append(features)
+            src_ip = ip_layer.get("ip.src")
+            if src_ip not in self.ip_roles:
+                self.ip_roles[src_ip] = "Unidentified"
+            features['timestamp'] = 0
+            features['src_ip'] = src_ip
+            features['packet_len'] = int(frame_layer.get("frame.len", 0))
+
+            # Determine the highest-level protocol (last in frame.protocols)
+            protocols = frame_layer.get("frame.protocols", "").split(":")
+            features['protocol'] = protocols[-1] if protocols else "Unknown"
+
+            # Check if the IP's role is already determined. If so, return early for efficiency.
+            if self.ip_roles.get(src_ip) in self.role_rules.keys():
+                return
+
+            # Detailed search for keywords within layers (use json.dumps for string search to preserve functionality)
+            packet_string = json.dumps(layers)
+
+            for role, msgs in self.role_rules.items():
+                for msg in msgs:
+                    if msg.lower() in packet_string.lower():
+                        self.ip_roles[src_ip] = role
+                        return # Role found, stop processing this packet
+
+            self.extracted_data.append(features)
         except AttributeError:
             # Handle packets without an IP layer gracefully
             pass
@@ -95,58 +99,27 @@ class PacketProcessor:
             # Handle other potential parsing errors
             print(f"Error processing packet: {e}")
 
-    def parse_pcap(self):
+    def parse_pcap(self, packets=None):
         """
-        Parses a pcap using Pyshark, skipping corrupted or unreadable packets.
+        Parses a pcap using cached tshark JSON output if provided, otherwise falls back to loading via rrc_utils.
+        Skips corrupted or unreadable packets.
         """
-        import pyshark
-        from pyshark.capture.capture import TSharkCrashException
+        if packets is None:
+            packets = get_cached_packets(self.pcap_file)
+            if packets is None:
+                print(f"❌ Failed to load packets for {self.pcap_file}")
+                return self.extracted_data, self.ip_roles
 
-        try:
-            capture = pyshark.FileCapture(
-                self.pcap_file,
-                use_json=True,       # safer parsing
-                keep_packets=False,  # avoid storing all packets
-            )
+        for idx, pkt_dict in enumerate(packets):
+            try:
+                self._process_packet(pkt_dict)
+            except Exception as e:
+                # Catch-all safety net for unexpected parser errors
+                print(f"⚠️ Error on packet #{idx}, skipping. Details: {e}")
+                continue
 
-            for idx, pkt in enumerate(capture):
-                try:
-                    # Try to process normally
-                    if 'IP' in pkt:
-                        # Initialize role as 'Unidentified' if not set
-                        self.ip_roles.setdefault(pkt.ip.src, 'Unidentified')
-                    self._process_packet(pkt)
-
-                except (AttributeError, KeyError) as e:
-                    # These mean partial or malformed dissection
-                    print(f"⚠️ Skipping malformed packet #{idx}: {e}")
-                    continue
-
-                except TSharkCrashException as e:
-                    # TShark crashed on this packet
-                    print(f"⚠️ Skipping corrupted packet #{idx}: {e}")
-                    continue
-
-                except Exception as e:
-                    # Catch-all safety net for unexpected parser errors
-                    print(f"⚠️ Error on packet #{idx}, skipping. Details: {e}")
-                    continue
-
-            capture.close()
-            print(f"✅ Finished parsing {self.pcap_file}")
-            return self.extracted_data, self.ip_roles
-
-        except TSharkCrashException as e:
-            print(f"⚠️ File-level TShark crash (likely truncated pcap). Error: {e}")
-            return self.extracted_data, self.ip_roles
-
-        except FileNotFoundError:
-            print(f"❌ File not found: {self.pcap_file}")
-            return [], {}
-
-        except Exception as e:
-            print(f"❌ Unexpected parsing error: {e}")
-            return [], {}
+        print(f"✅ Finished parsing {self.pcap_file}")
+        return self.extracted_data, self.ip_roles
 
 class FeatureEngineer:
     """
@@ -244,53 +217,53 @@ class FeatureEngineer:
         # Return the encoder too for completeness
         return X, y_encoded, class_names, self.label_encoder 
 
-class HybridModel(Model):
-    """
-    Hybrid CNN-LSTM model for spatio-temporal feature learning.
-    This class handles Phase 3 of the pipeline.
-    """
-    def __init__(self, sequence_length, num_features, num_classes):
-        super(HybridModel, self).__init__()
-        self.sequence_length = sequence_length
-        self.num_features = num_features
-        self.num_classes = num_classes
-        
-        # CNN for spatial/packet-level feature extraction
-        self.conv1d = Conv1D(filters=64, kernel_size=3, activation='relu')
-        self.dropout1 = Dropout(0.2)
-        
-        # LSTM for temporal dependency modeling
-        self.lstm = LSTM(128, return_sequences=False)
-        self.dropout2 = Dropout(0.2)
-        
-        # Output layer
-        self.dense = Dense(num_classes, activation='softmax')
-    
-    def call(self, inputs):
-        x = self.conv1d(inputs)
-        x = self.dropout1(x)
-        x = self.lstm(x)
-        x = self.dropout2(x)
-        return self.dense(x)
-
-    def get_config(self):
-        config = super(HybridModel, self).get_config()
-        config.update({
-            "sequence_length": self.sequence_length,
-            "num_features": self.num_features,
-            "num_classes": self.num_classes
-        })
-        return config
-    
-    @classmethod
-    def from_config(cls, config):
-        # Extract only the parameters expected by __init__
-        relevant_config = {
-            "sequence_length": config["sequence_length"],
-            "num_features": config["num_features"],
-            "num_classes": config["num_classes"]
-        }
-        return cls(**relevant_config)
+# class HybridModel(Model):
+#     """
+#     Hybrid CNN-LSTM model for spatio-temporal feature learning.
+#     This class handles Phase 3 of the pipeline.
+#     """
+#     def __init__(self, sequence_length, num_features, num_classes):
+#         super(HybridModel, self).__init__()
+#         self.sequence_length = sequence_length
+#         self.num_features = num_features
+#         self.num_classes = num_classes
+#         
+#         # CNN for spatial/packet-level feature extraction
+#         self.conv1d = Conv1D(filters=64, kernel_size=3, activation='relu')
+#         self.dropout1 = Dropout(0.2)
+#         
+#         # LSTM for temporal dependency modeling
+#         self.lstm = LSTM(128, return_sequences=False)
+#         self.dropout2 = Dropout(0.2)
+#         
+#         # Output layer
+#         self.dense = Dense(num_classes, activation='softmax')
+#     
+#     def call(self, inputs):
+#         x = self.conv1d(inputs)
+#         x = self.dropout1(x)
+#         x = self.lstm(x)
+#         x = self.dropout2(x)
+#         return self.dense(x)
+#
+#     def get_config(self):
+#         config = super(HybridModel, self).get_config()
+#         config.update({
+#             "sequence_length": self.sequence_length,
+#             "num_features": self.num_features,
+#             "num_classes": self.num_classes
+#         })
+#         return config
+#     
+#     @classmethod
+#     def from_config(cls, config):
+#         # Extract only the parameters expected by __init__
+#         relevant_config = {
+#             "sequence_length": config["sequence_length"],
+#             "num_features": config["num_features"],
+#             "num_classes": config["num_classes"]
+#         })
+#         return cls(**relevant_config)
 
 # --- Multiprocessing Implementation (Solution 3) ---
 
@@ -305,7 +278,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     
     # Re-import rrc_utils here to ensure all dependencies are resolved in the new process
     try:
-        from rrc_utils import get_unique_rrc_ips
+        from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles, get_cached_packets
         ue_ips = get_unique_rrc_ips(pcap_file_path)
     except Exception as e:
         print(f"Error calling rrc_utils in worker: {e}")
@@ -317,8 +290,10 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
         return
         
     # --- Phase 1: Packet Capture Parsing and Feature Extraction ---
+    # Load packets once via rrc_utils cache (avoids double parsing)
+    packets = get_cached_packets(pcap_file_path)
     packet_processor = PacketProcessor(pcap_file_path)
-    raw_data, ip_roles = packet_processor.parse_pcap()
+    raw_data, ip_roles = packet_processor.parse_pcap(packets=packets)
         
     if not raw_data:
         print("No data extracted from any source. Exiting pipeline.")
@@ -371,7 +346,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
             "percentage": percentage,
             "ips": ips_for_role
         })
-
+    save_summary_results(rule_based_summary, pcap_file_path, model_name)
     print("\nFinal IP Roles (before training):")
     for ip, role in ip_roles.items():
         print(f"IP: {ip}, Role: {role}")
@@ -379,110 +354,111 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     for file in glob.glob("./generated_pcaps/*.json"):
         os.remove(file)
 
-    X, y, class_names, label_encoder = feature_engineer.run_preprocessing()
-    
-    if X is None or y is None:
-        print("Dataset preparation failed. Exiting.")
-        result_queue.put({
-            "status": "failed",
-            "message": "Dataset preparation failed. Not enough data or classes to train.",
-            "total_classified": 0,
-            "processing_time": round(time.time() - start_time, 2),
-            "classification_summary": []
-        })
-        return
-    
-    # --- Phase 2b: Safe Train/Test Split with small class handling ---
-    from collections import Counter
-    class_counts = Counter(y)
-    min_class_count = min(class_counts.values())
-    
-    from sklearn.model_selection import train_test_split
-    if min_class_count < 2:
-        print("⚠️ Warning: Some classes have fewer than 2 samples. Stratified split skipped.")
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=None
-        )
-    else:
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-    
-    # --- Phase 3: Model Design and Training ---
-    sequence_length = X_train.shape[1]
-    num_features = X_train.shape[2]
-    num_classes = len(class_names)
-
-    model = HybridModel(sequence_length, num_features, num_classes)
-    model.compile(optimizer=Adam(learning_rate=0.001),
-                loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
-                    
-    # Early stopping
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss', patience=10, restore_best_weights=True
-    )
-
-    # # print("\nStarting model training...")
-    # # model.fit(X_train, y_train,
-    # #           epochs=100,
-    # #           batch_size=32,
-    # #           validation_split=0.2,
-    # #           callbacks=[early_stopping],
-    # #           verbose=0)
-    #
-    # # --- Phase 4: Validation, Deployment, and Analysis Report ---
-    # print("\n--- Model Evaluation ---")
-    # loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
-    #
-    # # Classification summary
-    # y_pred_probs = model.predict(X_test, verbose=0)
-    # y_pred_indices = np.argmax(y_pred_probs, axis=1)
-    # total_classified = len(y_pred_indices)
-    # y_pred_roles = class_names[y_pred_indices]
-    #
-    # unique_roles, counts = np.unique(y_pred_roles, return_counts=True)
-    # role_to_ips = {}
-    # for ip, role in ip_roles.items():
-    #     role_to_ips.setdefault(role, []).append(ip)
-    # classification_summary = []
-    # for role, count in zip(unique_roles, counts):
-    #     percentage = round((count / total_classified) * 100, 1) if total_classified > 0 else 0.0
-    #     classification_summary.append({
-    #         "class_name": str(role),
-    #         "count": int(count),
-    #         "percentage": percentage,
-    #         "ips": role_to_ips.get(role, [])
-    #     })
-    #
-    # # Model saving
-    # MODEL_DIR = "server/models"
-    # # os.makedirs(MODEL_DIR, exist_ok=True)
-    # # full_model_path = os.path.join(MODEL_DIR, f"{model_name}_full_model.keras")
-    # # weights_path = os.path.join(MODEL_DIR, f"{model_name}.weights.h5")
-    #
-    # # try:
-    # #     model.save(full_model_path)
-    # #     model.save_weights(weights_path)
-    # #     print(f"\n✅ Model and weights saved successfully in the '{MODEL_DIR}' directory.")
-    # # except Exception as e:
-    # #     print(f"\n❌ An error occurred while saving the model: {e}")
-    #
-    end_time = time.time()
-    #
-    # # Final report
-    # final_report = {
-    #     "status": "success",
-    #     "message": f"Pipeline completed. Test Accuracy: {accuracy:.4f}",
-    #     "total_classified": total_classified,
-    #     "processing_time": round(end_time - start_time, 2),
-    #     "rule_based_classification_summary": rule_based_summary,
-    #     "classification_summary": classification_summary,
-    #     "ip_roles": ip_roles,
-    #     "saved_model_path_prefix": os.path.join(MODEL_DIR, model_name)
-    # }
+#     X, y, class_names, label_encoder = feature_engineer.run_preprocessing()
+#     
+#     if X is None or y is None:
+#         print("Dataset preparation failed. Exiting.")
+#         result_queue.put({
+#             "status": "failed",
+#             "message": "Dataset preparation failed. Not enough data or classes to train.",
+#             "total_classified": 0,
+#             "processing_time": round(time.time() - start_time, 2),
+#             "classification_summary": []
+#         })
+#         return
+#     
+#     # --- Phase 2b: Safe Train/Test Split with small class handling ---
+#     from collections import Counter
+#     class_counts = Counter(y)
+#     min_class_count = min(class_counts.values())
+#     
+#     from sklearn.model_selection import train_test_split
+#     if min_class_count < 2:
+#         print("⚠️ Warning: Some classes have fewer than 2 samples. Stratified split skipped.")
+#         X_train, X_test, y_train, y_test = train_test_split(
+#             X, y, test_size=0.2, random_state=42, stratify=None
+#         )
+#     else:
+#         X_train, X_test, y_train, y_test = train_test_split(
+#             X, y, test_size=0.2, random_state=42, stratify=y
+#         )
+#     
+#     # --- Phase 3: Model Design and Training ---
+#     sequence_length = X_train.shape[1]
+#     num_features = X_train.shape[2]
+#     num_classes = len(class_names)
+#
+#     model = HybridModel(sequence_length, num_features, num_classes)
+#     model.compile(optimizer=Adam(learning_rate=0.001),
+#                 loss='sparse_categorical_crossentropy',
+#                 metrics=['accuracy'])
+#                     
+#     # Early stopping
+#     early_stopping = tf.keras.callbacks.EarlyStopping(
+#         monitor='val_loss', patience=10, restore_best_weights=True
+#     )
+#
+#     # # print("\nStarting model training...")
+#     # # model.fit(X_train, y_train,
+#     # #           epochs=100,
+#     # #           batch_size=32,
+#     # #           validation_split=0.2,
+#     # #           callbacks=[early_stopping],
+#     # #           verbose=0)
+#     #
+#     # # --- Phase 4: Validation, Deployment, and Analysis Report ---
+#     # print("\n--- Model Evaluation ---")
+#     # loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
+#     #
+#     # # Classification summary
+#     # y_pred_probs = model.predict(X_test, verbose=0)
+#     # y_pred_indices = np.argmax(y_pred_probs, axis=1)
+#     # total_classified = len(y_pred_indices)
+#     # y_pred_roles = class_names[y_pred_indices]
+#     #
+#     # unique_roles, counts = np.unique(y_pred_roles, return_counts=True)
+#     # role_to_ips = {}
+#     # for ip, role in ip_roles.items():
+#     #     role_to_ips.setdefault(role, []).append(ip)
+#     # classification_summary = []
+#     # for role, count in zip(unique_roles, counts):
+#     #     percentage = round((count / total_classified) * 100, 1) if total_classified > 0 else 0.0
+#     #     classification_summary.append({
+#     #         "class_name": str(role),
+#     #         "count": int(count),
+#     #         "percentage": percentage,
+#     #         "ips": role_to_ips.get(role, [])
+#     #     })
+#     #
+#     # # Model saving
+#     # MODEL_DIR = "server/models"
+#     # # os.makedirs(MODEL_DIR, exist_ok=True)
+#     # # full_model_path = os.path.join(MODEL_DIR, f"{model_name}_full_model.keras")
+#     # # weights_path = os.path.join(MODEL_DIR, f"{model_name}.weights.h5")
+#     #
+#     # # try:
+#     # #     model.save(full_model_path)
+#     # #     model.save_weights(weights_path)
+#     # #     print(f"\n✅ Model and weights saved successfully in the '{MODEL_DIR}' directory.")
+#     # # except Exception as e:
+#     # #     print(f"\n❌ An error occurred while saving the model: {e}")
+#     #
+#     end_time = time.time()
+#     #
+#     # # Final report
+#     # final_report = {
+#     #     "status": "success",
+#     #     "message": f"Pipeline completed. Test Accuracy: {accuracy:.4f}",
+#     #     "total_classified": total_classified,
+#     #     "processing_time": round(end_time - start_time, 2),
+#     #     "rule_based_classification_summary": rule_based_summary,
+#     #     "classification_summary": classification_summary,
+#     #     "ip_roles": ip_roles,
+#     #     "saved_model_path_prefix": os.path.join(MODEL_DIR, model_name)
+#     # }
 
     # Since training and evaluation are commented out, return a report based on rule-based classification only
+    end_time = time.time()
     final_report = {
         "status": "success",
         "message": "Pipeline completed without training. Only rule-based classification performed.",
@@ -532,3 +508,35 @@ def run_ip_role_pipeline(pcap_file_path: str, model_name: str) -> dict:
     process.join()
     
     return analysis_report
+
+def save_summary_results(rule_based_summary, pcap_file_path, model_name):
+    """
+    Creates a 'results' folder if it doesn't exist and saves the rule_based_summary
+    as both CSV and JSON files with unique names based on the PCAP file and model name.
+    """
+    try:
+        # Create results directory
+        results_dir = "./server/results"
+        os.makedirs(results_dir, exist_ok=True)
+        
+        # Extract base filename from pcap_file_path
+        pcap_basename = os.path.splitext(os.path.basename(pcap_file_path))[0]
+        
+        # Define file paths
+        csv_file = os.path.join(results_dir, f"{pcap_basename}.csv")
+        json_file = os.path.join(results_dir, f"{pcap_basename}.json")
+        
+        # Convert rule_based_summary to DataFrame
+        df_summary = pd.DataFrame(rule_based_summary)
+        
+        # Save as CSV
+        df_summary.to_csv(csv_file, index=False)
+        print(f"✅ Saved rule-based summary to {csv_file}")
+        
+        # Save as JSON
+        with open(json_file, 'w') as f:
+            json.dump(rule_based_summary, f, indent=4)
+        print(f"✅ Saved rule-based summary to {json_file}")
+        
+    except Exception as e:
+        print(f"❌ Error saving summary results: {e}")
