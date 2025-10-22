@@ -35,14 +35,34 @@
       <v-stepper-items>
         <!-- STEP 1: CLUSTERING -->
         <v-stepper-content step="1">
-          <v-card class="pa-4 mb-4 rounded-xl connection-card">
+          <v-card class="pa-6 mb-8 rounded-xl connection-card">
+            <h3 class="text-h6 font-weight-bold mb-4 text-primary">
+              <v-icon color="primary" class="mr-2">mdi-chart-cluster</v-icon>
+              Network Clustering Overview
+            </h3>
+
+            <p class="text-subtitle-1 mb-2">
+              Using the elbow method, the suggested number of clusters is:
+              <b class="text-primary">{{ suggestedClusters }}</b
+              >.
+            </p>
+            <p class="text-subtitle-2 text-medium-emphasis">
+              Adjust the cluster count if needed and visualize the resulting
+              network graph below.
+            </p>
+
+            <v-divider class="my-4"></v-divider>
+
+            <!-- Cluster Selection -->
             <v-select
-              class="futuristic-input"
+              class="futuristic-input mb-6"
               :items="noOfclustersList"
-              label="No Of Clusters (Suggested)"
+              label="Number of Clusters"
               v-model="noOfclusters"
               @change="fetchAnalysis()"
             ></v-select>
+
+            <!-- Network Graph Section -->
             <v-card
               class="mb-12 d-flex align-center justify-center pa-4"
               height="600px"
@@ -60,64 +80,109 @@
                 :edgeLength="30"
               />
             </v-card>
-            <p class="text-subtitle-1 my-4">
-              The most important cluster is the cluster:
-              <b class="text-primary">{{ this.mostImportantCluster }}</b>
-              Because in it we detect the most network traffic
-            </p>
-          </v-card>
 
-          <v-card class="rounded-xl packets-card">
-            <v-card-title class="card-header">Cluster Hierarchy</v-card-title>
-            <v-data-table
-              :headers="headers"
-              :items="clusterHierarchy"
-              item-value="cluster"
-              class="packet-table"
+            <!-- Important Cluster Info -->
+            <v-alert
+              type="info"
+              variant="tonal"
+              border="start"
+              color="primary"
+              class="mb-6"
             >
-              <template v-slot:item.cluster="{ item }">
-                {{ item.cluster }}
-              </template>
-              <template v-slot:item.score="{ item }">
-                {{ item.score }}
-              </template>
-              <template v-slot:item.total_packets="{ item }">
-                {{ item.total_packets }}
-              </template>
-              <template v-slot:item.unique_ips="{ item }">
-                {{ item.unique_ips }}
-              </template>
-            </v-data-table>
-          </v-card>
+              The most important cluster is:
+              <b class="text-primary">{{ mostImportantCluster }}</b
+              >, as it contains the highest network activity.
+            </v-alert>
 
-          <v-card class="pa-4 mt-8 rounded-xl connection-card">
-            <p class="text-caption font-italic mb-2">
-              You can download the data clustering data in formats of
-              <b>.csv</b> or <b>.json</b>
-            </p>
-            <v-select
-              class="futuristic-input"
-              :items="['json', 'csv']"
-              label="Type of File"
-              v-model="fileType"
-            />
-            <div class="d-flex ga-4">
-              <v-btn
-                @click="saveResults()"
-                color="green"
-                class="white--text control-btn"
+            <!-- Cluster Hierarchy Table -->
+            <v-card class="rounded-xl packets-card mb-8">
+              <v-card-title class="card-header">
+                <v-icon color="primary" class="mr-2">mdi-sitemap</v-icon>
+                Cluster Hierarchy
+              </v-card-title>
+              <v-data-table
+                :headers="headers"
+                :items="clusterHierarchy"
+                item-value="cluster"
+                class="packet-table"
+                density="compact"
               >
-                Save Results
-              </v-btn>
-              <v-btn
-                color="primary"
-                @click="e1 = 2"
-                :disabled="loading"
-                class="control-btn"
-              >
-                Continue
-              </v-btn>
-            </div>
+                <template v-slot:item.cluster="{ item }">
+                  <b>{{ item.cluster }}</b>
+                </template>
+                <template v-slot:item.score="{ item }">
+                  {{ item.score }}
+                </template>
+                <template v-slot:item.total_packets="{ item }">
+                  {{ item.total_packets }}
+                </template>
+                <template v-slot:item.unique_ips="{ item }">
+                  {{ item.unique_ips }}
+                </template>
+              </v-data-table>
+            </v-card>
+
+            <!-- Save Results -->
+            <v-card class="pa-6 rounded-xl connection-card">
+              <h4 class="text-subtitle-1 font-weight-bold mb-3 text-primary">
+                <v-icon color="primary" class="mr-2">mdi-content-save</v-icon>
+                Save Clustering Results
+              </h4>
+              <p class="text-caption font-italic mb-4">
+                You can download the clustering results in <b>.csv</b> or
+                <b>.json</b>
+                format.
+              </p>
+
+              <v-select
+                class="futuristic-input mb-4"
+                :items="['json', 'csv']"
+                label="Choose File Type"
+                v-model="fileType"
+              />
+
+              <div class="d-flex flex-wrap ga-4">
+                <v-btn
+                  @click="saveResults()"
+                  color="green"
+                  class="white--text control-btn"
+                >
+                  <v-icon start>mdi-content-save</v-icon>
+                  Save Results ({{ fileType.toUpperCase() }})
+                </v-btn>
+                <!-- <v-btn
+                  color="primary"
+                  @click="e1 = 2"
+                  :disabled="loading"
+                  class="control-btn"
+                >
+                  Continue
+                  <v-icon end>mdi-arrow-right</v-icon>
+                </v-btn> -->
+              </div>
+            </v-card>
+          </v-card>
+          <div class="d-flex ga-4">
+            <v-btn
+              color="primary"
+              @click="e1 = 2"
+              :disabled="loading"
+              class="control-btn"
+            >
+              Continue
+              <v-icon end>mdi-arrow-right</v-icon>
+            </v-btn>
+          </div>
+
+          <!-- Elbow Chart -->
+          <v-card class="pa-6 mt-8 rounded-xl connection-card">
+            <h4 class="text-subtitle-1 font-weight-bold mb-4 text-primary">
+              <v-icon color="deep-purple-accent-4" class="mr-2">
+                mdi-chart-line
+              </v-icon>
+              Elbow Method Visualization
+            </h4>
+            <ElbowChart v-if="elbowData.length > 1" :elbowData="elbowData" />
           </v-card>
         </v-stepper-content>
 
@@ -277,26 +342,77 @@
 
         <!-- STEP 3: RESULTS -->
         <v-stepper-content step="3">
-          <v-btn color="blue" @click="saveRoles"> Get Roles </v-btn>
-          <v-card class="mb-12" height="600px"></v-card>
+          <v-card class="pa-6 mb-8 rounded-xl connection-card">
+            <h3 class="text-h6 font-weight-bold mb-4 text-primary">
+              <v-icon color="primary" class="mr-2">mdi-file-export</v-icon>
+              Export & Final Results
+            </h3>
+
+            <p class="text-subtitle-1 mb-4">
+              You can export the final <b>Roles</b> data or re-download the
+              <b>.pcap</b> file for further analysis. Choose your preferred file
+              format below.
+            </p>
+
+            <v-divider class="my-4"></v-divider>
+
+            <!-- File Type Selector -->
+            <v-select
+              class="futuristic-input mb-6"
+              :items="['json', 'csv']"
+              label="Select Export File Type"
+              v-model="fileType"
+            ></v-select>
+
+            <!-- Action Buttons -->
+            <div class="d-flex flex-wrap ga-4">
+              <v-btn
+                color="green"
+                class="white--text control-btn"
+                size="large"
+                @click="saveRoles"
+              >
+                <v-icon start>mdi-content-save</v-icon>
+                Download Roles ({{ fileType.toUpperCase() }})
+              </v-btn>
+
+              <v-btn
+                color="blue"
+                class="white--text control-btn"
+                size="large"
+                @click="downloadPcap"
+              >
+                <v-icon start>mdi-download</v-icon>
+                Download PCAP File
+              </v-btn>
+            </div>
+
+            <v-divider class="my-6"></v-divider>
+
+            <div class="text-center pa-4">
+              <v-icon size="48" color="primary">mdi-check-decagram</v-icon>
+              <p class="text-subtitle-1 text-medium-emphasis mt-2">
+                All analysis completed successfully.
+              </p>
+              <p class="text-caption text-medium-emphasis">
+                You can now save your data or return to previous steps for
+                review.
+              </p>
+            </div>
+          </v-card>
+
           <div class="d-flex ga-4">
             <v-btn color="secondary" @click="e1 = 2" class="control-btn">
+              <v-icon start>mdi-arrow-left</v-icon>
               Previous
             </v-btn>
             <v-btn color="primary" @click="e1 = 1" class="control-btn">
-              Continue
+              <v-icon start>mdi-restart</v-icon>
+              Start Over
             </v-btn>
           </div>
         </v-stepper-content>
       </v-stepper-items>
-
-      <!-- ELBOW CHART BELOW STEPPER -->
-      <div class="mt-2">
-        <ElbowChart
-          :elbowData="this.elbowData"
-          v-if="this.elbowData.length > 1 && e1 === 1"
-        />
-      </div>
     </v-stepper>
   </v-container>
 </template>
