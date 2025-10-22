@@ -1,9 +1,9 @@
 # Preprocess.py
+import glob
 import os
 import sys
 import time # Used for processing time calculation
-import multiprocessing as mp # <-- ADDED for process isolation
-
+import multiprocessing as mp
 # Libraries for packet capture parsing.
 try:
     from scapy.all import rdpcap, IP, SCTP
@@ -83,6 +83,8 @@ class PacketProcessor:
                     for msg in msgs:
                         if msg.lower() in packet_string.lower():
                             self.ip_roles[src_ip] = role
+                            print("Found Role")
+                            print(role)
                             return # Role found, stop processing this packet
                 
                 self.extracted_data.append(features)
@@ -374,6 +376,9 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     for ip, role in ip_roles.items():
         print(f"IP: {ip}, Role: {role}")
 
+    for file in glob.glob("./generated_pcaps/*.json"):
+        os.remove(file)
+
     X, y, class_names, label_encoder = feature_engineer.run_preprocessing()
     
     if X is None or y is None:
@@ -410,73 +415,85 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 
     model = HybridModel(sequence_length, num_features, num_classes)
     model.compile(optimizer=Adam(learning_rate=0.001),
-                  loss='sparse_categorical_crossentropy',
-                  metrics=['accuracy'])
-                      
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
+                    
     # Early stopping
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='val_loss', patience=10, restore_best_weights=True
     )
-    
-    print("\nStarting model training...")
-    model.fit(X_train, y_train,
-              epochs=100,
-              batch_size=32,
-              validation_split=0.2,
-              callbacks=[early_stopping],
-              verbose=0)
-    
-    # --- Phase 4: Validation, Deployment, and Analysis Report ---
-    print("\n--- Model Evaluation ---")
-    loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
 
-    # Classification summary
-    y_pred_probs = model.predict(X_test, verbose=0)
-    y_pred_indices = np.argmax(y_pred_probs, axis=1)
-    total_classified = len(y_pred_indices)
-    y_pred_roles = class_names[y_pred_indices]
-    
-    unique_roles, counts = np.unique(y_pred_roles, return_counts=True)
-    role_to_ips = {}
-    for ip, role in ip_roles.items():
-        role_to_ips.setdefault(role, []).append(ip)
-    classification_summary = []
-    for role, count in zip(unique_roles, counts):
-        percentage = round((count / total_classified) * 100, 1) if total_classified > 0 else 0.0
-        classification_summary.append({
-            "class_name": str(role),
-            "count": int(count),
-            "percentage": percentage,
-            "ips": role_to_ips.get(role, [])
-        })
-
-    # Model saving
-    MODEL_DIR = "models"
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    full_model_path = os.path.join(MODEL_DIR, f"{model_name}_full_model.keras")
-    weights_path = os.path.join(MODEL_DIR, f"{model_name}.weights.h5")
-
-    try:
-        model.save(full_model_path)
-        model.save_weights(weights_path)
-        print(f"\n✅ Model and weights saved successfully in the '{MODEL_DIR}' directory.")
-    except Exception as e:
-        print(f"\n❌ An error occurred while saving the model: {e}")
-        
+    # # print("\nStarting model training...")
+    # # model.fit(X_train, y_train,
+    # #           epochs=100,
+    # #           batch_size=32,
+    # #           validation_split=0.2,
+    # #           callbacks=[early_stopping],
+    # #           verbose=0)
+    #
+    # # --- Phase 4: Validation, Deployment, and Analysis Report ---
+    # print("\n--- Model Evaluation ---")
+    # loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
+    #
+    # # Classification summary
+    # y_pred_probs = model.predict(X_test, verbose=0)
+    # y_pred_indices = np.argmax(y_pred_probs, axis=1)
+    # total_classified = len(y_pred_indices)
+    # y_pred_roles = class_names[y_pred_indices]
+    #
+    # unique_roles, counts = np.unique(y_pred_roles, return_counts=True)
+    # role_to_ips = {}
+    # for ip, role in ip_roles.items():
+    #     role_to_ips.setdefault(role, []).append(ip)
+    # classification_summary = []
+    # for role, count in zip(unique_roles, counts):
+    #     percentage = round((count / total_classified) * 100, 1) if total_classified > 0 else 0.0
+    #     classification_summary.append({
+    #         "class_name": str(role),
+    #         "count": int(count),
+    #         "percentage": percentage,
+    #         "ips": role_to_ips.get(role, [])
+    #     })
+    #
+    # # Model saving
+    # MODEL_DIR = "server/models"
+    # # os.makedirs(MODEL_DIR, exist_ok=True)
+    # # full_model_path = os.path.join(MODEL_DIR, f"{model_name}_full_model.keras")
+    # # weights_path = os.path.join(MODEL_DIR, f"{model_name}.weights.h5")
+    #
+    # # try:
+    # #     model.save(full_model_path)
+    # #     model.save_weights(weights_path)
+    # #     print(f"\n✅ Model and weights saved successfully in the '{MODEL_DIR}' directory.")
+    # # except Exception as e:
+    # #     print(f"\n❌ An error occurred while saving the model: {e}")
+    #
     end_time = time.time()
-    
-    # Final report
+    #
+    # # Final report
+    # final_report = {
+    #     "status": "success",
+    #     "message": f"Pipeline completed. Test Accuracy: {accuracy:.4f}",
+    #     "total_classified": total_classified,
+    #     "processing_time": round(end_time - start_time, 2),
+    #     "rule_based_classification_summary": rule_based_summary,
+    #     "classification_summary": classification_summary,
+    #     "ip_roles": ip_roles,
+    #     "saved_model_path_prefix": os.path.join(MODEL_DIR, model_name)
+    # }
+
+    # Since training and evaluation are commented out, return a report based on rule-based classification only
     final_report = {
         "status": "success",
-        "message": f"Pipeline completed. Test Accuracy: {accuracy:.4f}",
-        "total_classified": total_classified,
+        "message": "Pipeline completed without training. Only rule-based classification performed.",
+        "total_classified": len(ip_roles),
         "processing_time": round(end_time - start_time, 2),
         "rule_based_classification_summary": rule_based_summary,
-        "classification_summary": classification_summary,
+        "classification_summary": [],  # No ML-based classification
         "ip_roles": ip_roles,
-        "saved_model_path_prefix": os.path.join(MODEL_DIR, model_name)
+        "saved_model_path_prefix": None
     }
-    
+
     result_queue.put(final_report)
 
 

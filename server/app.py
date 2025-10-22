@@ -24,7 +24,7 @@ app = Flask(__name__)
 CORS(app)
 
 CONFIG = {
-    "PCAP_OUTPUT_DIR": os.getenv("PCAP_OUTPUT_DIR", "generated_pcaps"),
+    "PCAP_OUTPUT_DIR": os.getenv("PCAP_OUTPUT_DIR", "server\generated_pcaps"),
     "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024)),
     "ALLOWED_ORIGINS": os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
 }
@@ -32,13 +32,13 @@ TEMP_PACKET_BUFFERS = {}
 buffer_lock = Lock()
 logger = logging.getLogger(__name__)
 
-UPLOAD_FOLDER = './uploads'
+UPLOAD_FOLDER = 'server/uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
-PCAP_GEN_OUTPUT_DIR = os.getenv('PCAP_OUTPUT_DIR', 'generated_pcaps')
+PCAP_GEN_OUTPUT_DIR = os.getenv('PCAP_OUTPUT_DIR', 'server\generated_pcaps')
 os.makedirs(PCAP_GEN_OUTPUT_DIR, exist_ok=True)
 
-CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'cluster_analysis')
+CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'server\cluster_analysis')
 os.makedirs(CLUSTERING_OUTPUT_DIR, exist_ok=True)
 
 def save_streamed_packets_as_pcap(session_id, packets_base64, is_final_chunk):
@@ -321,7 +321,7 @@ def save_results_endpoint():
     else:
         send_file = base_name + ".json"
 
-    output_dir = "./cluster_analysis"  # folder where files were saved
+    output_dir = CLUSTERING_OUTPUT_DIR
     full_path = os.path.join(output_dir, send_file)
 
     if not os.path.exists(full_path):

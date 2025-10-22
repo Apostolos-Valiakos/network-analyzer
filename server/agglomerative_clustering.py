@@ -162,7 +162,7 @@ def analyze_pcap(pcap_path, n_clusters=4, distance_threshold=None, anomaly_thres
     df = cluster_nodes(df, n_clusters=n_clusters, distance_threshold=distance_threshold)
     anomalies = detect_anomalies(df, threshold=anomaly_threshold)
     graph_data = build_graph_data(df)
-    save_results(df, os.path.basename(pcap_path), './cluster_analysis')
+    save_results(df, os.path.basename(pcap_path), 'server/cluster_analysis')
 
     return {
         "clusters": anomalies,  # includes anomaly flags

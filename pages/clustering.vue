@@ -253,7 +253,7 @@
                 >mdi-monitor-dashboard</v-icon
               >
               <p class="text-subtitle-1 text-medium-emphasis mt-2">
-                Click "Start CNN Analysis" to process data.
+                Click "Start Rule Based Analysis" to process data.
               </p>
             </div>
           </v-card>
