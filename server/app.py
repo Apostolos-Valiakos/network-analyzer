@@ -384,7 +384,11 @@ def run_pipeline_endpoint():
     print(f"[API] Model Name: {model_name}")
 
     try:
-        analysis_report = run_ip_role_pipeline(pcap_file_path, model_name)
+        selected_ips = data.get('selected_ips', None)  # Expecting a list of IP strings
+        if selected_ips is not None and not isinstance(selected_ips, list):
+            return jsonify({"error": "'selected_ips' must be a list of IP addresses"}), 400
+
+        analysis_report = run_ip_role_pipeline(pcap_file_path, model_name, selected_ips)
         
         if analysis_report.get('status') == 'success':
             response_data = {

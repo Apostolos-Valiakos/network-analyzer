@@ -267,201 +267,128 @@ class FeatureEngineer:
 
 # --- Multiprocessing Implementation (Solution 3) ---
 
-def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue):
+# def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue):
+def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue, selected_ips: list[str] = None):
     """
-    The main logic of the pipeline, executed in a separate process.
-    Handles PCAP parsing, feature engineering, model training, and reporting.
+    Multiprocessing-safe pipeline worker for PCAP analysis.
+    Handles:
+      - Loading packets
+      - Rule-based IP role classification
+      - Feature extraction
+      - Optional filtering by cluster IPs
+      - Returns results via a multiprocessing.Queue
     """
-    start_time = time.time()
-    
-    print(f"--- Starting Pipeline for PCAP: {pcap_file_path} (Model Name: {model_name}) ---")
-    
-    # Re-import rrc_utils here to ensure all dependencies are resolved in the new process
+
+    import time
+    import os
+    import json
+    import glob
+    import pandas as pd
+    import numpy as np
+
+    # Import rrc_utils safely inside the worker
     try:
         from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles, get_cached_packets
-        ue_ips = get_unique_rrc_ips(pcap_file_path)
-    except Exception as e:
-        print(f"Error calling rrc_utils in worker: {e}")
+        from Preprocess import PacketProcessor, FeatureEngineer  # Ensure these classes are visible
+    except ImportError as e:
         result_queue.put({
             "status": "failed",
-            "message": f"Error calling rrc_utils: {e}",
+            "message": f"Cannot import required modules: {e}",
+            "processing_time": 0,
+        })
+        return
+
+    start_time = time.time()
+
+    # --- Load packets ---
+    packets = get_cached_packets(pcap_file_path)
+    if packets is None:
+        result_queue.put({
+            "status": "failed",
+            "message": f"Failed to load packets from {pcap_file_path}.",
             "processing_time": round(time.time() - start_time, 2),
         })
         return
-        
-    # --- Phase 1: Packet Capture Parsing and Feature Extraction ---
-    # Load packets once via rrc_utils cache (avoids double parsing)
-    packets = get_cached_packets(pcap_file_path)
+
+    # --- Phase 1: Packet Parsing & Rule-Based Classification ---
     packet_processor = PacketProcessor(pcap_file_path)
     raw_data, ip_roles = packet_processor.parse_pcap(packets=packets)
-        
+
+    if selected_ips:
+        raw_data = [pkt for pkt in raw_data if pkt.get("src_ip") in selected_ips]
+        ip_roles = {ip: role for ip, role in ip_roles.items() if ip in selected_ips}
+
     if not raw_data:
-        print("No data extracted from any source. Exiting pipeline.")
         result_queue.put({
             "status": "failed",
-            "message": "No data extracted from PCAP file. Check file path and parsing logic.",
+            "message": "No packets extracted after parsing. Check PCAP file.",
             "total_classified": 0,
             "processing_time": round(time.time() - start_time, 2),
             "classification_summary": []
         })
         return
 
-    for ip in ue_ips:
-        ip_roles[ip] = "UE"
+    # Add UEs automatically
+    try:
+        ue_ips = get_unique_rrc_ips(pcap_file_path)
+        for ip in ue_ips:
+            ip_roles[ip] = "UE"
+    except Exception as e:
+        print(f"Warning: Failed to retrieve UE IPs: {e}")
 
+    # Map ORAN roles
+    try:
+        oran_roles_map = recognize_oran_ips_roles(pcap_file_path)
+        for role_key, ip_address in oran_roles_map.items():
+            if ip_address:
+                final_role = role_key.replace("_ip", "").upper()
+                if role_key == "e2_node_ip":
+                    final_role = "E2_NODE"
+                elif role_key == "ric_client_ip":
+                    final_role = "NEAR_RT_RIC"
+                if ip_roles.get(ip_address) in ("Unidentified", None) or final_role in ("E2_NODE", "NEAR_RT_RIC", "E2T", "REDIS"):
+                    ip_roles[ip_address] = final_role
+    except Exception as e:
+        print(f"Warning: Failed to recognize ORAN roles: {e}")
 
-    
-    oran_roles_map = recognize_oran_ips_roles(pcap_file_path)
-
-    for role_key, ip_address in oran_roles_map.items():
-        if ip_address:
-            # Clean up the role name for the final output (e.g., 'e2t_ip' -> 'E2T')
-            final_role = role_key.replace('_ip', '').upper()
-            
-            if role_key == 'e2_node_ip':
-                final_role = 'E2_NODE'
-            elif role_key == 'ric_client_ip':
-                final_role = 'NEAR_RT_RIC'
-            
-            # Assign the role, only if it hasn't been assigned a more specific role already
-            if ip_roles.get(ip_address) in ('Unidentified', None):
-                 ip_roles[ip_address] = final_role
-            # Ensure an IP that is an E2 Node but was previously Unidentified gets the E2 Node role
-            elif final_role in ('E2_NODE', 'NEAR_RT_RIC', 'E2T', 'REDIS'):
-                 ip_roles[ip_address] = final_role
-        
-    # --- Phase 2: Feature Engineering and Dataset Preparation ---
-
+    # --- Phase 2: Feature Engineering ---
     feature_engineer = FeatureEngineer(raw_data, ip_roles)
+    X, y_encoded, class_names, label_encoder = feature_engineer.run_preprocessing()
 
-    rule_based_roles = ip_roles
+    # Prepare rule-based summary
     rule_based_summary = []
-    unique_roles, counts = np.unique(list(rule_based_roles.values()), return_counts=True)
+    unique_roles, counts = np.unique(list(ip_roles.values()), return_counts=True)
     for role, count in zip(unique_roles, counts):
-        ips_for_role = [ip for ip, r in rule_based_roles.items() if r == role]
-        percentage = round((count / len(rule_based_roles)) * 100, 1) if len(rule_based_roles) > 0 else 0.0
+        ips_for_role = [ip for ip, r in ip_roles.items() if r == role]
+        percentage = round((count / len(ip_roles)) * 100, 1) if len(ip_roles) > 0 else 0
         rule_based_summary.append({
             "class_name": role,
             "count": int(count),
             "percentage": percentage,
             "ips": ips_for_role
         })
-    save_summary_results(rule_based_summary, pcap_file_path, model_name)
-    print("\nFinal IP Roles (before training):")
-    for ip, role in ip_roles.items():
-        print(f"IP: {ip}, Role: {role}")
 
+    # Save summary results
+    try:
+        results_dir = "./server/results"
+        os.makedirs(results_dir, exist_ok=True)
+        base_name = os.path.splitext(os.path.basename(pcap_file_path))[0]
+        pd.DataFrame(rule_based_summary).to_csv(f"{results_dir}/{base_name}.csv", index=False)
+        with open(f"{results_dir}/{base_name}.json", "w") as f:
+            json.dump(rule_based_summary, f, indent=4)
+    except Exception as e:
+        print(f"Error saving summary: {e}")
+
+    # Clean up any cached PCAP JSON files
     for file in glob.glob("./generated_pcaps/*.json"):
         os.remove(file)
 
-#     X, y, class_names, label_encoder = feature_engineer.run_preprocessing()
-#     
-#     if X is None or y is None:
-#         print("Dataset preparation failed. Exiting.")
-#         result_queue.put({
-#             "status": "failed",
-#             "message": "Dataset preparation failed. Not enough data or classes to train.",
-#             "total_classified": 0,
-#             "processing_time": round(time.time() - start_time, 2),
-#             "classification_summary": []
-#         })
-#         return
-#     
-#     # --- Phase 2b: Safe Train/Test Split with small class handling ---
-#     from collections import Counter
-#     class_counts = Counter(y)
-#     min_class_count = min(class_counts.values())
-#     
-#     from sklearn.model_selection import train_test_split
-#     if min_class_count < 2:
-#         print("⚠️ Warning: Some classes have fewer than 2 samples. Stratified split skipped.")
-#         X_train, X_test, y_train, y_test = train_test_split(
-#             X, y, test_size=0.2, random_state=42, stratify=None
-#         )
-#     else:
-#         X_train, X_test, y_train, y_test = train_test_split(
-#             X, y, test_size=0.2, random_state=42, stratify=y
-#         )
-#     
-#     # --- Phase 3: Model Design and Training ---
-#     sequence_length = X_train.shape[1]
-#     num_features = X_train.shape[2]
-#     num_classes = len(class_names)
-#
-#     model = HybridModel(sequence_length, num_features, num_classes)
-#     model.compile(optimizer=Adam(learning_rate=0.001),
-#                 loss='sparse_categorical_crossentropy',
-#                 metrics=['accuracy'])
-#                     
-#     # Early stopping
-#     early_stopping = tf.keras.callbacks.EarlyStopping(
-#         monitor='val_loss', patience=10, restore_best_weights=True
-#     )
-#
-#     # # print("\nStarting model training...")
-#     # # model.fit(X_train, y_train,
-#     # #           epochs=100,
-#     # #           batch_size=32,
-#     # #           validation_split=0.2,
-#     # #           callbacks=[early_stopping],
-#     # #           verbose=0)
-#     #
-#     # # --- Phase 4: Validation, Deployment, and Analysis Report ---
-#     # print("\n--- Model Evaluation ---")
-#     # loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
-#     #
-#     # # Classification summary
-#     # y_pred_probs = model.predict(X_test, verbose=0)
-#     # y_pred_indices = np.argmax(y_pred_probs, axis=1)
-#     # total_classified = len(y_pred_indices)
-#     # y_pred_roles = class_names[y_pred_indices]
-#     #
-#     # unique_roles, counts = np.unique(y_pred_roles, return_counts=True)
-#     # role_to_ips = {}
-#     # for ip, role in ip_roles.items():
-#     #     role_to_ips.setdefault(role, []).append(ip)
-#     # classification_summary = []
-#     # for role, count in zip(unique_roles, counts):
-#     #     percentage = round((count / total_classified) * 100, 1) if total_classified > 0 else 0.0
-#     #     classification_summary.append({
-#     #         "class_name": str(role),
-#     #         "count": int(count),
-#     #         "percentage": percentage,
-#     #         "ips": role_to_ips.get(role, [])
-#     #     })
-#     #
-#     # # Model saving
-#     # MODEL_DIR = "server/models"
-#     # # os.makedirs(MODEL_DIR, exist_ok=True)
-#     # # full_model_path = os.path.join(MODEL_DIR, f"{model_name}_full_model.keras")
-#     # # weights_path = os.path.join(MODEL_DIR, f"{model_name}.weights.h5")
-#     #
-#     # # try:
-#     # #     model.save(full_model_path)
-#     # #     model.save_weights(weights_path)
-#     # #     print(f"\n✅ Model and weights saved successfully in the '{MODEL_DIR}' directory.")
-#     # # except Exception as e:
-#     # #     print(f"\n❌ An error occurred while saving the model: {e}")
-#     #
-#     end_time = time.time()
-#     #
-#     # # Final report
-#     # final_report = {
-#     #     "status": "success",
-#     #     "message": f"Pipeline completed. Test Accuracy: {accuracy:.4f}",
-#     #     "total_classified": total_classified,
-#     #     "processing_time": round(end_time - start_time, 2),
-#     #     "rule_based_classification_summary": rule_based_summary,
-#     #     "classification_summary": classification_summary,
-#     #     "ip_roles": ip_roles,
-#     #     "saved_model_path_prefix": os.path.join(MODEL_DIR, model_name)
-#     # }
-
-    # Since training and evaluation are commented out, return a report based on rule-based classification only
     end_time = time.time()
+
+    # --- Send final report ---
     final_report = {
         "status": "success",
-        "message": "Pipeline completed without training. Only rule-based classification performed.",
+        "message": "Pipeline completed successfully (rule-based analysis).",
         "total_classified": len(ip_roles),
         "processing_time": round(end_time - start_time, 2),
         "rule_based_classification_summary": rule_based_summary,
@@ -473,17 +400,17 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     result_queue.put(final_report)
 
 
-def run_ip_role_pipeline(pcap_file_path: str, model_name: str) -> dict:
+#def run_ip_role_pipeline(pcap_file_path: str, model_name: str) -> dict:
+def run_ip_role_pipeline(pcap_file_path: str, model_name: str, selected_ips: list[str] = None) -> dict:
     """
     Public function that spawns a new process to run the pipeline 
     and waits for the result via a queue.
     """
     queue = mp.Queue()
     
-    # Create and start the child process
     process = mp.Process(
         target=_pipeline_worker, 
-        args=(pcap_file_path, model_name, queue)
+        args=(pcap_file_path, model_name, queue, selected_ips)
     )
     print(f"Spawning worker process for PCAP analysis: {pcap_file_path}...")
     process.start()

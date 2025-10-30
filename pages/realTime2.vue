@@ -51,7 +51,7 @@
             :disabled="isConnected"
             color="secondary"
             variant="tonal"
-            >Reconnect</v-btn
+            >Connect</v-btn
           >
         </div>
         <div class="mt-2 text-caption text-medium-emphasis">

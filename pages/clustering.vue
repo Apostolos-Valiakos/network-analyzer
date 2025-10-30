@@ -83,9 +83,9 @@
 
             <!-- Important Cluster Info -->
             <v-alert
+              v-if="mostImportantCluster"
               type="info"
               variant="tonal"
-              border="start"
               color="primary"
               class="mb-6"
             >
@@ -95,74 +95,20 @@
             </v-alert>
 
             <!-- Cluster Hierarchy Table -->
-            <v-card class="rounded-xl packets-card mb-8">
-              <v-card-title class="card-header">
-                <v-icon color="primary" class="mr-2">mdi-sitemap</v-icon>
-                Cluster Hierarchy
-              </v-card-title>
-              <v-data-table
-                :headers="headers"
-                :items="clusterHierarchy"
-                item-value="cluster"
-                class="packet-table"
-                density="compact"
-              >
-                <template v-slot:item.cluster="{ item }">
-                  <b>{{ item.cluster }}</b>
-                </template>
-                <template v-slot:item.score="{ item }">
-                  {{ item.score }}
-                </template>
-                <template v-slot:item.total_packets="{ item }">
-                  {{ item.total_packets }}
-                </template>
-                <template v-slot:item.unique_ips="{ item }">
-                  {{ item.unique_ips }}
-                </template>
-              </v-data-table>
-            </v-card>
 
-            <!-- Save Results -->
-            <v-card class="pa-6 rounded-xl connection-card">
-              <h4 class="text-subtitle-1 font-weight-bold mb-3 text-primary">
-                <v-icon color="primary" class="mr-2">mdi-content-save</v-icon>
-                Save Clustering Results
-              </h4>
-              <p class="text-caption font-italic mb-4">
-                You can download the clustering results in <b>.csv</b> or
-                <b>.json</b>
-                format.
-              </p>
-
-              <v-select
-                class="futuristic-input mb-4"
-                :items="['json', 'csv']"
-                label="Choose File Type"
-                v-model="fileType"
-              />
-
-              <div class="d-flex flex-wrap ga-4">
-                <v-btn
-                  @click="saveResults()"
-                  color="green"
-                  class="white--text control-btn"
-                >
-                  <v-icon start>mdi-content-save</v-icon>
-                  Save Results ({{ fileType.toUpperCase() }})
-                </v-btn>
-                <!-- <v-btn
-                  color="primary"
-                  @click="e1 = 2"
-                  :disabled="loading"
-                  class="control-btn"
-                >
-                  Continue
-                  <v-icon end>mdi-arrow-right</v-icon>
-                </v-btn> -->
-              </div>
-            </v-card>
+            <v-select
+              v-model="selectedCluster"
+              v-if="allIps && allIps.length"
+              :items="allIps"
+              label="Select Cluster(s) to analyze"
+              multiple
+              chips
+              small-chips
+              outlined
+              class="mb-4"
+            />
           </v-card>
-          <div class="d-flex ga-4">
+          <div class="d-flex ga-4 mb-6">
             <v-btn
               color="primary"
               @click="e1 = 2"
@@ -173,7 +119,72 @@
               <v-icon end>mdi-arrow-right</v-icon>
             </v-btn>
           </div>
+          <v-card class="rounded-xl packets-card mb-8">
+            <v-card-title class="card-header">
+              <v-icon color="primary" class="mr-2">mdi-sitemap</v-icon>
+              Cluster Hierarchy
+            </v-card-title>
+            <v-data-table
+              :headers="headers"
+              :items="clusterHierarchy"
+              item-value="cluster"
+              class="packet-table"
+              density="compact"
+            >
+              <template v-slot:item.cluster="{ item }">
+                <b>{{ item.cluster }}</b>
+              </template>
+              <template v-slot:item.score="{ item }">
+                {{ item.score }}
+              </template>
+              <template v-slot:item.total_packets="{ item }">
+                {{ item.total_packets }}
+              </template>
+              <template v-slot:item.unique_ips="{ item }">
+                {{ item.unique_ips }}
+              </template>
+            </v-data-table>
+          </v-card>
 
+          <!-- Save Results -->
+          <v-card class="pa-6 rounded-xl connection-card">
+            <h4 class="text-subtitle-1 font-weight-bold mb-3 text-primary">
+              <v-icon color="primary" class="mr-2">mdi-content-save</v-icon>
+              Save Clustering Results
+            </h4>
+            <p class="text-caption font-italic mb-4">
+              You can download the clustering results in <b>.csv</b> or
+              <b>.json</b>
+              format.
+            </p>
+
+            <v-select
+              class="futuristic-input mb-4"
+              :items="['json', 'csv']"
+              label="Choose File Type"
+              v-model="fileType"
+            />
+
+            <div class="d-flex flex-wrap ga-4">
+              <v-btn
+                @click="saveResults()"
+                color="green"
+                class="white--text control-btn"
+              >
+                <v-icon start>mdi-content-save</v-icon>
+                Save Results ({{ fileType.toUpperCase() }})
+              </v-btn>
+              <!-- <v-btn
+                  color="primary"
+                  @click="e1 = 2"
+                  :disabled="loading"
+                  class="control-btn"
+                >
+                  Continue
+                  <v-icon end>mdi-arrow-right</v-icon>
+                </v-btn> -->
+            </div>
+          </v-card>
           <!-- Elbow Chart -->
           <v-card class="pa-6 mt-8 rounded-xl connection-card">
             <h4 class="text-subtitle-1 font-weight-bold mb-4 text-primary">
@@ -431,6 +442,11 @@ export default {
 
   data() {
     return {
+      selectedCluster: null,
+      selectedIps: [],
+      clusters: [],
+      nodes: [],
+      allIps: null,
       filename: "",
       networkGraphKey: 0,
       e1: 1,
@@ -494,6 +510,9 @@ export default {
         const data = await response.json();
         this.clusters = data.clusters;
         this.graphData = data.graphData;
+        if (this.graphData && this.graphData.nodes) {
+          this.allIps = this.graphData.nodes.map((node) => node.category);
+        }
       } catch (err) {
         this.error = err.message;
       } finally {
@@ -566,6 +585,7 @@ export default {
       const payload = {
         pcap_file_path: this.filename,
         model_name: this.filename.replace(/\.[^/.]+$/, ""),
+        selected_ips: this.selectedIps.length ? this.selectedIps : undefined,
       };
 
       try {
@@ -614,6 +634,19 @@ export default {
         name: item.class_name,
         value: item.count,
       }));
+    },
+  },
+  watch: {
+    selectedCluster(newCluster) {
+      this.selectedIps = [];
+
+      const clusterIndex = this.selectedCluster[0];
+
+      this.graphData.nodes.forEach((element) => {
+        if (element.category === clusterIndex) {
+          this.selectedIps.push(element.name);
+        }
+      });
     },
   },
 };
