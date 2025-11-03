@@ -433,6 +433,14 @@ import NetworkGraph from "../components/NetworkGraph.vue";
 import PieChart from "../components/PieChart.vue";
 import ElbowChart from "../components/elbowChart.vue";
 
+/**
+ * ## Network Analysis Results Page
+ *
+ * This component handles the display and interaction for network analysis results,
+ * including K-Means clustering visualization (Network Graph, Elbow Chart),
+ * and rule-based classification (Profiling). It provides functionality to adjust
+ * cluster count, view cluster hierarchy, and download results.
+ */
 export default {
   components: {
     NetworkGraph,
@@ -487,6 +495,13 @@ export default {
   },
 
   methods: {
+    /**
+     * ## Fetches the network analysis data and cluster visualization (Network Graph).
+     *
+     * It uses the current `filename` and `noOfclusters` to request data from the backend.
+     * Updates `graphData` and populates `allIps`.
+     * @returns {Promise<void>}
+     */
     async fetchAnalysis() {
       this.loading = true;
       this.error = null;
@@ -521,6 +536,12 @@ export default {
       }
     },
 
+    /**
+     * ## Initiates the download of the original PCAP file.
+     *
+     * Constructs a direct download link using the `filename` and triggers the download.
+     * @returns {Promise<void>}
+     */
     async downloadPcap() {
       const downloadUrl = `http://127.0.0.1:5000/generated_pcaps/${this.filename}`;
       const link = document.createElement("a");
@@ -531,6 +552,12 @@ export default {
       document.body.removeChild(link);
     },
 
+    /**
+     * ## Saves the current clustering results in the selected file format (.json or .csv).
+     *
+     * Triggers a download of the results file from the backend.
+     * @returns {Promise<void>}
+     */
     async saveResults() {
       this.error = null;
       var file =
@@ -549,6 +576,12 @@ export default {
       document.body.removeChild(link);
     },
 
+    /**
+     * ## Fetches suggestions for the optimal number of clusters using the Elbow method.
+     *
+     * Updates `suggestedClusters`, `elbowData`, `clusterHierarchy`, and `mostImportantCluster`.
+     * @returns {Promise<void>}
+     */
     async askForClusters() {
       this.error = null;
       try {
@@ -576,6 +609,13 @@ export default {
       }
     },
 
+    /**
+     * ## Starts the Rule Based Analysis (Profiling) pipeline on the backend.
+     *
+     * Sends the filename and optionally selected IPs for focused analysis.
+     * Updates `cnnResults`, `cnnLoading`, and handles `cnnError`.
+     * @returns {Promise<void>}
+     */
     async startCnnAnalysis() {
       this.cnnLoading = true;
       this.cnnError = null;
@@ -608,6 +648,12 @@ export default {
         this.cnnLoading = false;
       }
     },
+    /**
+     * ## Saves the final roles/classification results in the selected file format (.json or .csv).
+     *
+     * Triggers a download of the final roles file from the backend.
+     * @returns {Promise<void>}
+     */
     async saveRoles() {
       this.error = null;
       var file = this.filename.substring(0, this.filename.length - 5);
@@ -623,7 +669,14 @@ export default {
       document.body.removeChild(link);
     },
   },
+  /**
+   * Computed properties for derived data.
+   */
   computed: {
+    /**
+     * ## Formats CNN classification results into a data structure suitable for the PieChart component.
+     * @returns {Array<{name: string, value: number}>} An array of objects with class name and count.
+     */
     formattedCnnChartData() {
       if (
         !this.cnnResults ||
@@ -636,7 +689,16 @@ export default {
       }));
     },
   },
+  /**
+   * Watchers for reactive changes.
+   */
   watch: {
+    /**
+     * Watches the selected cluster (or clusters, expecting only the first one to be relevant).
+     * Populates `selectedIps` with the IPs belonging to the selected cluster category in the graph data.
+     * @param {Array<string>} newCluster The new value of selectedCluster (array of cluster names/indices).
+     * @returns {void}
+     */
     selectedCluster(newCluster) {
       this.selectedIps = [];
 

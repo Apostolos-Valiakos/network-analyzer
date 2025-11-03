@@ -8,6 +8,12 @@ PCAP_OUTPUT_DIR = "generated_pcaps" # Or any desired path, e.g., /tmp/pcaps
 # Create the directory if it doesn't exist
 os.makedirs(PCAP_OUTPUT_DIR, exist_ok=True)
 
+##
+# Saves the provided raw binary data as a .pcap file in the designated directory.
+# A unique filename is generated using a timestamp.
+#
+# @param [bytes] raw_binary_data The raw binary content of the PCAP file uploaded by the user.
+# @return [tuple] (success: bool, message: str, filename: str|None)
 def save_pcap_data(raw_binary_data):
     """
     Saves the provided raw binary data as a .pcap file in the designated directory.
@@ -35,4 +41,4 @@ def save_pcap_data(raw_binary_data):
     except Exception as e:
         message = f"Error saving PCAP file: {e}"
         print(f"Error: {e}")
-        return False, message, None
+        return

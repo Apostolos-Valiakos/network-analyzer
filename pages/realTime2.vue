@@ -270,12 +270,15 @@ export default {
     };
   },
   computed: {
+    /**
+     * @returns {string} The total captured data size converted to megabytes (MB), fixed to 2 decimal places.
+     */
     totalDataSizeMb() {
       return (this.totalDataSize / (1024 * 1024)).toFixed(2);
     },
   },
   mounted() {
-    //  // Start connection attempt on mount
+    //  // Start connection attempt on mount - currently commented out
     // this.connect();
   },
   beforeDestroy() {
@@ -286,6 +289,16 @@ export default {
     }
   },
   methods: {
+    /**
+     * @async
+     * Handles the entire workflow for network visualization:
+     * 1. Pauses live capture (if active).
+     * 2. Resets graph display and shows loading skeleton.
+     * 3. Calls `generatePcap` to create the PCAP file on the server.
+     * 4. Calls the Flask API to analyze the saved PCAP file and update `graphData`.
+     * 5. Resumes live capture afterwards.
+     * @returns {void}
+     */
     async handleVisualizeNetwork() {
       try {
         // Pause live capture
@@ -300,6 +313,7 @@ export default {
         this.graphKey++;
 
         // Generate PCAP from captured data
+        // NOTE: generatePcap sets the `this.filename` which is used below.
         await this.generatePcap();
 
         // Send file for analysis
@@ -329,12 +343,22 @@ export default {
       }
     },
     // --- Utility Methods ---
+    /**
+     * Displays a notification snackbar to the user.
+     * @param {string} text - The message to display.
+     * @param {string} [type='info'] - The type/color of the snackbar.
+     * @returns {void}
+     */
     showSnackbar(text, type = "info") {
       this.snackbarText = text;
       this.snackbarType = type;
       this.snackbar = true;
     },
 
+    /**
+     * Generates a unique, readable session ID for file uploads.
+     * @returns {string} A unique ID string.
+     */
     generateUniqueId() {
       return (
         "pcap_" +
@@ -343,12 +367,23 @@ export default {
       );
     },
 
+    /**
+     * Updates the displayed packets per second metric based on the count from the last second.
+     * Resets the counter for the next interval.
+     * @returns {void}
+     */
     updateMetrics() {
       this.packetsPerSecond = this.packetsLastSecond;
       this.packetsLastSecond = 0;
     },
 
     // --- WebSocket Connection ---
+    /**
+     * Establishes or re-establishes the WebSocket connection.
+     * Sets up event handlers for open, error, close, and message.
+     * Manages automatic reconnection attempts.
+     * @returns {void}
+     */
     connect() {
       setInterval(this.updateMetrics, 1000);
       if (this.client && this.client.readyState === WebSocket.OPEN) {
@@ -426,6 +461,7 @@ export default {
         ) {
           const base64Packet = msgObj.packet;
           try {
+            // ... (Packet processing logic remains the same)
             const binaryString = atob(base64Packet);
             const len = binaryString.length;
 
@@ -467,6 +503,11 @@ export default {
       };
     },
 
+    /**
+     * Sends a control command (e.g., START_CAPTURE, STOP_CAPTURE) to the WebSocket server.
+     * @param {string} command - The command string to send.
+     * @returns {void}
+     */
     sendControlCommand(command) {
       if (this.client && this.client.readyState === WebSocket.OPEN) {
         const payload = JSON.stringify({ command, timestamp: Date.now() });
@@ -480,14 +521,26 @@ export default {
       }
     },
 
+    /**
+     * Initiates the packet capture by sending the START_CAPTURE command.
+     * @returns {void}
+     */
     startCapture() {
       this.sendControlCommand("START_CAPTURE");
     },
 
+    /**
+     * Pauses the packet capture by sending the STOP_CAPTURE command.
+     * @returns {void}
+     */
     stopCapture() {
       this.sendControlCommand("STOP_CAPTURE");
     },
 
+    /**
+     * Clears all captured packet data and resets associated metrics/UI state.
+     * @returns {void}
+     */
     clearPackets() {
       this.rawPackets = [];
       this.lastPackets = [];
@@ -499,6 +552,10 @@ export default {
       this.showSnackbar("Packet buffer cleared.", "info");
     },
 
+    /**
+     * Stops the live capture and initiates the PCAP file generation process.
+     * @returns {void}
+     */
     stopCaptureAndDownload() {
       if (this.rawPackets.length === 0) {
         this.showSnackbar("No packets captured to generate PCAP.", "warning");
@@ -521,6 +578,17 @@ export default {
       }, 500);
     },
 
+    /**
+     * @async
+     * Sends a chunk of Base64 encoded packets to the Flask API for PCAP assembly.
+     * Implements retry logic for robustness.
+     * @param {string[]} chunk - Array of Base64 packet strings.
+     * @param {number} chunkIndex - The 0-based index of the current chunk.
+     * @param {number} totalChunks - The total number of chunks expected.
+     * @param {boolean} isFinalChunk - True if this is the last chunk.
+     * @returns {Promise<object>} The JSON response data from the API.
+     * @throws {Error} If the API call fails after all retry attempts.
+     */
     async sendPacketsToFlask(chunk, chunkIndex, totalChunks, isFinalChunk) {
       const MAX_RETRIES = 3;
       let attempt = 0;
@@ -573,6 +641,12 @@ export default {
       }
     },
 
+    /**
+     * @async
+     * Manages the chunked upload of all captured packets to the Flask API
+     * for assembly into a PCAP file. Sets the download link upon success.
+     * @returns {void}
+     */
     async generatePcap() {
       const packets = this.rawPackets; // Base64 strings
       const totalPackets = packets.length;
@@ -619,6 +693,10 @@ export default {
         // User must clear the buffer manually
       }
     },
+    /**
+     * Navigates the user to the 'clustering' route, passing the generated PCAP filename as a query parameter.
+     * @returns {void}
+     */
     startClustering() {
       this.$router.push({
         name: "clustering",

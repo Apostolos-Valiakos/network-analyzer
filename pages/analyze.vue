@@ -62,13 +62,13 @@
         <template #expanded-item="{ item }">
           <td :colspan="ipProtocolHeaders.length">
             <div class="mt-4">
-              <!-- Customize with the data you want to show -->
               <p><b>Full Protocol List: </b>{{ item.protocols.join(", ") }}</p>
             </div>
           </td>
         </template>
       </v-data-table>
     </div>
+
     <v-btn
       v-if="showUEButon"
       :disabled="!file"
@@ -78,11 +78,13 @@
     >
       Get UE Sessions
     </v-btn>
+
     <v-row v-if="ueInfo && ueInfo.length == 0" class="mt-4 ml-3">
       <b>
         UE Sessions are not able to be generated please check your pcap file
       </b>
     </v-row>
+
     <v-row class="mt-3">
       <v-col v-for="(ue, i) in ueInfo" :key="i" cols="6" md="3">
         <v-card color="primary" class="mx-auto">
@@ -100,6 +102,7 @@
         </v-card>
       </v-col>
     </v-row>
+
     <div class="mt-3" v-if="ipProtocolItems.length > 0">
       <v-btn @click="getAssessments"> Set Roles in IPs </v-btn>
       <Assessments :results="roles" />
@@ -109,8 +112,21 @@
 
 <script>
 import Assessments from "../components/Assessments.vue";
+
+/**
+ * ## Network Traffic Analyzer Page
+ *
+ * This component allows users to upload a PCAP file for network traffic analysis,
+ * displays the analysis results, visualizes the network conversation graph,
+ * fetches UE (User Equipment) session information, and provides IP role assessments.
+ * It integrates with backend API endpoints for processing the PCAP file.
+ */
 export default {
   computed: {
+    /**
+     * ## Transforms raw IP protocol analysis data into a format suitable for the v-data-table.
+     * @returns {ProtocolEntry[]} An array of objects, each containing an IP address and its associated protocols.
+     */
     ipProtocolItems() {
       if (!this.analysis?.ip_protocols) return [];
       return Object.entries(this.analysis.ip_protocols).map(
@@ -138,10 +154,24 @@ export default {
     };
   },
   methods: {
+    /**
+     * ## Handles the change event from the file input.
+     *
+     * Updates the `file` data property with the selected file.
+     * @param {File | null} file The file object from the input event.
+     * @returns {void}
+     */
     handleFile(file) {
       this.file = file;
     },
 
+    /**
+     * ## Uploads the selected PCAP file to the server for analysis.
+     *
+     * Sets the `loading` state, makes a POST request, and updates the `analysis` data property upon success.
+     * Also sets `showUEButon` to true to enable further actions.
+     * @returns {Promise<void>}
+     */
     async sendFile() {
       this.loading = true;
       if (!this.file) return;
@@ -170,6 +200,12 @@ export default {
       this.showUEButon = true;
     },
 
+    /**
+     * ## Fetches the network conversation graph data from the server.
+     *
+     * The data is used to populate the `NetworkGraph` component.
+     * @returns {Promise<void>}
+     */
     async downloadConversations() {
       try {
         const response = await fetch(
@@ -186,6 +222,12 @@ export default {
       }
     },
 
+    /**
+     * ## Fetches User Equipment (UE) session information from the server.
+     *
+     * Updates the `ueInfo` data property with the session details.
+     * @returns {Promise<void>}
+     */
     async getUeInfo() {
       try {
         const response = await fetch("http://127.0.0.1:5000/ue_sessions");
@@ -199,6 +241,12 @@ export default {
         alert("Error fetching UE data: " + err.message);
       }
     },
+    /**
+     * ## Fetches IP role assessments from the server.
+     *
+     * Updates the `roles` data property with the assessment results.
+     * @returns {Promise<void>}
+     */
     async getAssessments() {
       try {
         const response = await fetch("http://127.0.0.1:5000/role_assessment");

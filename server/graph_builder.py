@@ -1,3 +1,15 @@
+##
+# Builds a JSON object representing a force-directed graph structure from
+# network conversation data. The output is typically used for visualization
+# libraries like ECharts.
+#
+# Nodes represent unique IP addresses, and links represent conversations
+# between them, weighted by the total number of packets exchanged.
+#
+# @param [dict] conversations A dictionary where keys are IP pairs (ip1, ip2)
+# and values are dictionaries of packet counts per protocol.
+# @return [dict] A dictionary formatted as a graph object with 'nodes', 'links',
+# and 'categories'.
 def build_graph_json(conversations):
     # Collect unique IPs
     unique_ips = set()
@@ -17,6 +29,7 @@ def build_graph_json(conversations):
     # Links list
     links = []
     for (ip1, ip2), counts in conversations.items():
+        # Calculate the total traffic value (sum of all protocols in the conversation)
         value = sum(counts.values())
         links.append({
             "source": ip_to_index[ip1],

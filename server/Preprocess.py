@@ -11,12 +11,12 @@ try:
     from scapy.layers.l2 import Ether
     import pandas as pd
     import numpy as np
-#     import tensorflow as tf
-#     from tensorflow import keras
-#     from keras.models import Model
-#     from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
-#     from keras.optimizers import Adam
-#     from sklearn.model_selection import train_test_split
+#     import tensorflow as tf
+#     from tensorflow import keras
+#     from keras.models import Model
+#     from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
+#     from keras.optimizers import Adam
+#     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import StandardScaler, LabelEncoder
     import pyshark
     from pyshark.capture.capture import TSharkCrashException
@@ -35,6 +35,9 @@ except ImportError as e:
 
 # --- Class Definitions ---
 
+##
+# Parses pcap files and extracts rule-based features for IP role assignment.
+# This class handles Phase 1 of the pipeline using Scapy and Pyshark.
 class PacketProcessor:
     """
     Parses pcap files and extracts rule-based features for IP role assignment.
@@ -54,6 +57,12 @@ class PacketProcessor:
             # 'AMF': ['NGSetupRequest', 'InitialUEMessage', 'NgapPDUSessionResourceSetupRequest']
         }
 
+    ##
+    # Extracts features and applies rule-based logic to assign roles.
+    # This function performs a detailed, layer-by-layer search for keywords in a single packet.
+    #
+    # @param [dict] pkt_dict The packet data in tshark JSON format.
+    # @return [None] Updates internal `self.ip_roles` and `self.extracted_data`.
     def _process_packet(self, pkt_dict):
         """
         Extracts features and applies rule-based logic to assign roles.
@@ -99,6 +108,12 @@ class PacketProcessor:
             # Handle other potential parsing errors
             print(f"Error processing packet: {e}")
 
+    ##
+    # Parses a pcap using cached tshark JSON output if provided, otherwise falls back to loading via rrc_utils.
+    # Skips corrupted or unreadable packets.
+    #
+    # @param [list|None] packets A list of packets in tshark JSON dictionary format. If None, loads them internally.
+    # @return [tuple] (extracted_data: list, ip_roles: dict) The list of extracted features and the dictionary of IP roles.
     def parse_pcap(self, packets=None):
         """
         Parses a pcap using cached tshark JSON output if provided, otherwise falls back to loading via rrc_utils.
@@ -121,6 +136,9 @@ class PacketProcessor:
         print(f"✅ Finished parsing {self.pcap_file}")
         return self.extracted_data, self.ip_roles
 
+##
+# Transforms raw packet data into a structured dataset for a deep learning model.
+# This class handles Phase 2 of the pipeline: creating time series sequences and normalizing features.
 class FeatureEngineer:
     """
     Transforms raw packet data into a structured dataset for a deep learning model.
@@ -140,6 +158,11 @@ class FeatureEngineer:
         self.protocol_encoder = LabelEncoder()
         self.label_encoder = LabelEncoder()
 
+    ##
+    # Groups the raw packet DataFrame by source IP and generates fixed-length time series sequences
+    # (of length `self.sequence_length`) for deep learning model input.
+    #
+    # @return [None] Populates `self.processed_data` (X) and `self.labels` (y).
     def _prepare_time_series(self):
         """
         Prepares time series sequences from the dataframe.
@@ -164,6 +187,11 @@ class FeatureEngineer:
                 self.labels.append(self.ip_roles[ip])
                 self.ip_sequence_map.append((ip, i))
 
+    ##
+    # Main function to run all feature engineering steps: handling N/A, encoding protocols,
+    # generating sequences, encoding labels, and normalizing numerical features.
+    #
+    # @return [tuple] (X: np.array|None, y_encoded: np.array|None, class_names: np.array|None, label_encoder: LabelEncoder|None)
     def run_preprocessing(self):
         """
         Main function to run all feature engineering steps.
@@ -267,7 +295,16 @@ class FeatureEngineer:
 
 # --- Multiprocessing Implementation (Solution 3) ---
 
-# def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue):
+##
+# Multiprocessing-safe pipeline worker for PCAP analysis.
+# Runs the full analysis pipeline for a single PCAP file, applying rule-based
+# classification and feature engineering.
+#
+# @param [str] pcap_file_path The path to the PCAP file to analyze.
+# @param [str] model_name A placeholder for the model name (unused in rule-only pipeline).
+# @param [mp.Queue] result_queue The queue to push the final analysis report to.
+# @param [list[str]|None] selected_ips Optional list of IPs to filter the analysis to.
+# @return [None] Puts the final analysis report into `result_queue`.
 def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue, selected_ips: list[str] = None):
     """
     Multiprocessing-safe pipeline worker for PCAP analysis.
@@ -315,6 +352,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     raw_data, ip_roles = packet_processor.parse_pcap(packets=packets)
 
     if selected_ips:
+        # Filter raw data and roles if only specific IPs are requested
         raw_data = [pkt for pkt in raw_data if pkt.get("src_ip") in selected_ips]
         ip_roles = {ip: role for ip, role in ip_roles.items() if ip in selected_ips}
 
@@ -330,6 +368,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 
     # Add UEs automatically
     try:
+        # Uses external utility to identify UE IPs and assign the 'UE' role
         ue_ips = get_unique_rrc_ips(pcap_file_path)
         for ip in ue_ips:
             ip_roles[ip] = "UE"
@@ -338,6 +377,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 
     # Map ORAN roles
     try:
+        # Uses external utility to identify ORAN component IPs and assign roles
         oran_roles_map = recognize_oran_ips_roles(pcap_file_path)
         for role_key, ip_address in oran_roles_map.items():
             if ip_address:
@@ -370,6 +410,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 
     # Save summary results
     try:
+        # Note: This is redundant if save_summary_results is called outside the worker, but retained for worker independence.
         results_dir = "./server/results"
         os.makedirs(results_dir, exist_ok=True)
         base_name = os.path.splitext(os.path.basename(pcap_file_path))[0]
@@ -379,7 +420,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     except Exception as e:
         print(f"Error saving summary: {e}")
 
-    # Clean up any cached PCAP JSON files
+    # Clean up any cached PCAP JSON files (used by the file loading utility)
     for file in glob.glob("./generated_pcaps/*.json"):
         os.remove(file)
 
@@ -400,7 +441,14 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     result_queue.put(final_report)
 
 
-#def run_ip_role_pipeline(pcap_file_path: str, model_name: str) -> dict:
+##
+# Public function that spawns a new process to run the analysis pipeline and waits for the result via a queue.
+# This function isolates the heavy-lifting PCAP processing in a separate process to prevent blocking the main application thread.
+#
+# @param [str] pcap_file_path The path to the PCAP file.
+# @param [str] model_name A placeholder for the model name.
+# @param [list[str]|None] selected_ips Optional list of IPs to filter the analysis to.
+# @return [dict] The final analysis report from the worker process.
 def run_ip_role_pipeline(pcap_file_path: str, model_name: str, selected_ips: list[str] = None) -> dict:
     """
     Public function that spawns a new process to run the pipeline 
@@ -436,6 +484,14 @@ def run_ip_role_pipeline(pcap_file_path: str, model_name: str, selected_ips: lis
     
     return analysis_report
 
+##
+# Creates a 'results' folder if it doesn't exist and saves the rule_based_summary
+# as both CSV and JSON files with unique names based on the PCAP file.
+#
+# @param [list] rule_based_summary The list of dictionaries containing IP role classification counts.
+# @param [str] pcap_file_path The path to the original PCAP file.
+# @param [str] model_name A placeholder for the model name (unused in the filename).
+# @return [None] Prints success or failure message.
 def save_summary_results(rule_based_summary, pcap_file_path, model_name):
     """
     Creates a 'results' folder if it doesn't exist and saves the rule_based_summary

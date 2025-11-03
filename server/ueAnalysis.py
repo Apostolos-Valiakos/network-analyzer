@@ -2,8 +2,18 @@ import pyshark
 import json
 from collections import defaultdict
 import asyncio # Import asyncio for event loop management
+from typing import List, Dict, Any
 
-def initialize_analysis_for_ue(filepath):
+##
+# Initializes a pyshark capture for UE-specific analysis from the given filepath.
+#
+# It ensures an asyncio event loop is available in the current thread for pyshark operations,
+# then uses pyshark to read the PCAP file, structures the packet data into a list of dictionaries,
+# and finally calls `extract_ue_info` to filter and return the relevant UE data.
+#
+# @param [str] filepath The path to the PCAP file.
+# @return [List[Dict[str, Any]]] A list of dictionaries, where each dictionary contains extracted UE information.
+def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
     """
     Initializes a pyshark capture for UE-specific analysis from the given filepath.
     Ensures an asyncio event loop is available in the current thread for pyshark operations.
@@ -26,6 +36,8 @@ def initialize_analysis_for_ue(filepath):
     capture = None # Initialize capture to None for proper cleanup
 
     try:
+        ##
+        # Creates a pyshark file capture object.
         capture = pyshark.FileCapture(filepath)
 
         # Parse all packets and extract fields into a structured dictionary format
@@ -59,6 +71,7 @@ def initialize_analysis_for_ue(filepath):
         if capture:
             capture.close() 
 
+    # Export all parsed packets to a temporary file for debugging or external analysis
     with open('./uploads/all_packets.json', 'w') as f:
         json.dump(packets_data, f, indent=2)
 
@@ -67,7 +80,15 @@ def initialize_analysis_for_ue(filepath):
     return ue_data # Return the extracted UE data
 
 
-def extract_ue_info(packets_data):
+##
+# Extracts specific UE-related information from a list of structured packet dictionaries.
+#
+# This function processes the already parsed packet data (from pyshark) to find relevant UE fields
+# based on common 5G Core signaling protocols (like PFCP or GTPv2-C) fields.
+#
+# @param [List[Dict[str, Any]]] packets_data A list of dictionaries, each representing a packet's layers and fields.
+# @return [List[Dict[str, Any]]] A list of dictionaries, where each dictionary represents a UE session found.
+def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Extracts specific UE-related information from a list of structured packet dictionaries.
     This function processes the already parsed packet data to find relevant UE fields.
@@ -82,7 +103,7 @@ def extract_ue_info(packets_data):
 
     for pkt in packets_data:
         ue_info = {}
-        found_ue_ip = False # Flag to indicate if a UE IP trigger has been found in the current packet
+        found_ue_ip = False # Flag to indicate if a UE IP address field has been found in the current packet
 
         for layer in pkt["layers"]:
             fields = layer["fields"]

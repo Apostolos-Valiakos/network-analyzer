@@ -15,6 +15,12 @@ from kneed import KneeLocator
 # ----------------------------
 # 1. Parse PCAP and extract features
 # ----------------------------
+##
+# Extracts traffic features for each unique IP address in a PCAP file.
+#
+# @param [str] pcap_file The path to the PCAP file.
+# @return [pandas.DataFrame] A DataFrame where each row is an IP address and
+#         columns are the extracted features (bytes, packets, partners, ports, duration, etc.).
 def extract_features(pcap_file):
     packets = rdpcap(pcap_file)
 
@@ -75,6 +81,14 @@ def extract_features(pcap_file):
 # ----------------------------
 # 2. Perform Agglomerative Clustering
 # ----------------------------
+##
+# Performs Agglomerative Hierarchical Clustering on the IP features.
+# Features are first scaled using StandardScaler.
+#
+# @param [pandas.DataFrame] df The feature DataFrame containing IP traffic metrics.
+# @param [int|None] n_clusters The number of clusters to form (mutually exclusive with distance_threshold).
+# @param [float|None] distance_threshold The linkage distance threshold (mutually exclusive with n_clusters).
+# @return [pandas.DataFrame] The input DataFrame augmented with a 'cluster' label column.
 def cluster_nodes(df, n_clusters=None, distance_threshold=None):
     features = df.drop(columns=["ip"]).fillna(0)
 
@@ -95,6 +109,12 @@ def cluster_nodes(df, n_clusters=None, distance_threshold=None):
 # ----------------------------
 # 3. Detect anomalies
 # ----------------------------
+##
+# Identifies clusters with a size less than or equal to a specified threshold as anomalies.
+#
+# @param [pandas.DataFrame] df The clustered DataFrame containing the 'cluster' column.
+# @param [int] threshold The maximum size a cluster can be to be flagged as anomalous.
+# @return [list] A list of dictionaries, each containing the IP, its cluster ID, and an 'anomaly' boolean flag.
 def detect_anomalies(df, threshold=2):
     anomalies = []
     for cluster_id, group in df.groupby("cluster"):
@@ -107,6 +127,12 @@ def detect_anomalies(df, threshold=2):
 # ----------------------------
 # 4. Build graph data for ECharts
 # ----------------------------
+##
+# Converts the clustered IP data into a graph format suitable for network visualization libraries like ECharts.
+# Nodes are IPs, and links connect IPs within the same cluster.
+#
+# @param [pandas.DataFrame] df The clustered DataFrame.
+# @return [dict] A dictionary containing 'categories', 'nodes', and 'links' for graph visualization.
 def build_graph_data(df):
     categories = [{"name": f"Cluster {c}", "keyword": {}, "base": "IP"} for c in df["cluster"].unique()]
 
@@ -142,6 +168,13 @@ def build_graph_data(df):
 # ----------------------------
 # 5. Save results
 # ----------------------------
+##
+# Saves the clustered DataFrame to both CSV and JSON files in the specified directory.
+#
+# @param [pandas.DataFrame] df The clustered DataFrame to save.
+# @param [str] filename_base The base filename (e.g., "capture.pcap") to derive the output filenames from.
+# @param [str] upload_folder The directory path where the files should be saved.
+# @return [tuple] (csv_path: str, json_path: str) The full paths to the saved files.
 def save_results(df, filename_base, upload_folder="./uploads"):
     timestamped = os.path.splitext(filename_base)[0] + "_clusters"
 
@@ -157,6 +190,14 @@ def save_results(df, filename_base, upload_folder="./uploads"):
 # ----------------------------
 # 6. Full pipeline
 # ----------------------------
+##
+# Executes the full clustering and anomaly detection pipeline for a given PCAP file.
+#
+# @param [str] pcap_path The path to the PCAP file.
+# @param [int] n_clusters The number of clusters to form.
+# @param [float|None] distance_threshold The distance threshold for clustering.
+# @param [int] anomaly_threshold The cluster size threshold for flagging anomalies.
+# @return [dict] A dictionary containing the list of anomalies and the graph data for visualization.
 def analyze_pcap(pcap_path, n_clusters=4, distance_threshold=None, anomaly_threshold=2):
     df = extract_features(pcap_path)
     df = cluster_nodes(df, n_clusters=n_clusters, distance_threshold=distance_threshold)
@@ -169,6 +210,14 @@ def analyze_pcap(pcap_path, n_clusters=4, distance_threshold=None, anomaly_thres
         "graphData": graph_data
     }
 
+##
+# Computes the Within-Cluster Sum of Squares (WCSS) for a range of cluster numbers (k)
+# using Agglomerative Clustering and suggests an optimal k via the Elbow method.
+#
+# @param [pandas.DataFrame] df The feature DataFrame.
+# @param [int] max_clusters The maximum number of clusters to test.
+# @return [dict] A dictionary containing WCSS values, the suggested elbow point (k),
+#         cluster importance, and the most important cluster ID.
 def suggest_clusters_elbow(df, max_clusters=10):
     """
     Returns WCSS data, suggested elbow point, and most important cluster.
@@ -225,6 +274,11 @@ def suggest_clusters_elbow(df, max_clusters=10):
         "mostImportantCluster": most_important
     }
 
+##
+# Computes an importance score for each cluster based on total packet count and unique IP count.
+#
+# @param [pandas.DataFrame] df The clustered DataFrame.
+# @return [tuple] (importance_sorted: list, most_important: int|None) A list of cluster importance dictionaries sorted descendingly by score, and the ID of the most important cluster.
 def compute_cluster_importance(df):
     """
     Compute importance of clusters based on total packets
