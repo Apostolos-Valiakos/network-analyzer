@@ -1,3 +1,22 @@
+"""
+Network Traffic Analysis and PCAP Generation Service
+===================================================
+
+This module implements a Flask API server for handling PCAP file uploads,
+performing network traffic analysis (conversation statistics, UE session
+extraction, IP role assessment, and clustering), and managing the generation
+and serving of dynamically created PCAP files.
+
+The API relies on several external analysis modules (pcap_analysis, ueAnalysis,
+role_assessment, agglomerative_clustering, etc.) to perform the core functions.
+
+Configuration is managed via environment variables, defaulting to local
+server directories for uploads and generated PCAPs.
+
+:copyright: (c) 2024 by Example Corporation.
+:license: MIT License, see LICENSE for more details.
+"""
+
 import os
 import json
 from pcap_analysis import initialize_analysis
@@ -11,46 +30,59 @@ from Preprocess import run_ip_role_pipeline
 import base64
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from scapy.error import Scapy_Exception
-from scapy.all import Ether, wrpcap, conf
+from scapy.all import wrpcap
 from threading import Lock
+from typing import List, Dict, Any, Tuple, Optional
 
+
+# --- FLASK SETUP & CONFIGURATION ---
 
 app = Flask(__name__)
 CORS(app)
 
 CONFIG = {
-    "PCAP_OUTPUT_DIR": os.getenv("PCAP_OUTPUT_DIR", "server\generated_pcaps"),
+    "PCAP_OUTPUT_DIR": os.getenv("PCAP_OUTPUT_DIR", "server\\generated_pcaps"),
     "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024)),
     "ALLOWED_ORIGINS": os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
 }
-TEMP_PACKET_BUFFERS = {}
+
+#: Temporary buffer for storing packet chunks during streaming PCAP generation.
+TEMP_PACKET_BUFFERS: Dict[str, Dict[str, Any]] = {}
 buffer_lock = Lock()
 logger = logging.getLogger(__name__)
 
+# Directory setup
 UPLOAD_FOLDER = 'server/uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
-PCAP_GEN_OUTPUT_DIR = os.getenv('PCAP_OUTPUT_DIR', 'server\generated_pcaps')
+PCAP_GEN_OUTPUT_DIR = os.getenv('PCAP_OUTPUT_DIR', 'server\\generated_pcaps')
 os.makedirs(PCAP_GEN_OUTPUT_DIR, exist_ok=True)
 
-CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'server\cluster_analysis')
+CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'server\\cluster_analysis')
 os.makedirs(CLUSTERING_OUTPUT_DIR, exist_ok=True)
 
-##
-# Handles chunked upload: buffers packets until the final chunk, then assembles the PCAP file.
-#
-# @param [str] session_id Unique identifier for the current PCAP generation session.
-# @param [list] packets_base64 List of Base64 encoded packet strings for the current chunk.
-# @param [bool] is_final_chunk True if this is the last chunk of the session.
-# @return [tuple] (success: bool, message: str, filename: str|None)
-def save_streamed_packets_as_pcap(session_id, packets_base64, is_final_chunk):
+
+# --- UTILITY FUNCTIONS ---
+
+def save_streamed_packets_as_pcap(session_id: str, packets_base64: List[str], is_final_chunk: bool) -> Tuple[bool, str, Optional[str]]:
     """
-    Handles chunked upload: buffers packets until the final chunk, then assembles the PCAP file.
+    Handles chunked upload: buffers Base64 encoded packets until the final chunk, 
+    then decodes and assembles them into a PCAP file using Scapy's wrpcap.
+
+    :param session_id: Unique identifier for the current PCAP generation session.
+    :type session_id: str
+    :param packets_base64: List of Base64 encoded packet strings for the current chunk.
+    :type packets_base64: List[str]
+    :param is_final_chunk: True if this is the last chunk of the session.
+    :type is_final_chunk: bool
+    :raises Scapy_Exception: If Scapy encounters an error during PCAP assembly.
+    :return: A tuple containing (success: bool, message: str, filename: str | None).
+    :rtype: Tuple[bool, str, Optional[str]]
     """
     try:
         # Decode and store raw packet bytes in the session buffer
@@ -82,7 +114,7 @@ def save_streamed_packets_as_pcap(session_id, packets_base64, is_final_chunk):
             filename = f"capture_{timestamp_str}_{session_id[:6]}.pcap"
             filepath = Path(CONFIG["PCAP_OUTPUT_DIR"]) / filename
             
-            # Scapy's wrpcap expects raw bytes
+            # Scapy's wrpcap expects a list of raw byte strings or packet objects
             wrpcap(str(filepath), final_packets)
             
             message = f"PCAP file assembled successfully with {len(final_packets)} packets."
@@ -95,28 +127,44 @@ def save_streamed_packets_as_pcap(session_id, packets_base64, is_final_chunk):
 
     except Scapy_Exception as e:
         logger.error(f"Scapy exception during PCAP assembly for session {session_id}: {e}")
+        # Clean up buffer on major failure
+        with buffer_lock:
+             if session_id in TEMP_PACKET_BUFFERS:
+                 del TEMP_PACKET_BUFFERS[session_id]
         return False, f"PCAP assembly error: {str(e)}", None
     except Exception as e:
         logger.error(f"General error in save_streamed_packets_as_pcap for session {session_id}: {e}")
         return False, f"Internal server error: {str(e)}", None
 
 
-##
-# Serializes conversation data for JSON output.
-#
-# @param [dict] conversations A dictionary where keys are conversation tuples (ip1, ip2)
-# and values are conversation statistics.
-# @return [dict] A dictionary with string keys (e.g., "ip1-ip2") suitable for JSON serialization.
-def serialize_conversations(conversations):
+def serialize_conversations(conversations: Dict[Tuple[str, str], Any]) -> Dict[str, Any]:
+    """
+    Serializes conversation data for JSON output by converting tuple keys (ip1, ip2) 
+    into string keys (e.g., "ip1-ip2").
+
+    :param conversations: A dictionary where keys are conversation tuples (ip1, ip2)
+                          and values are conversation statistics.
+    :type conversations: Dict[Tuple[str, str], Any]
+    :return: A dictionary with string keys suitable for JSON serialization.
+    :rtype: Dict[str, Any]
+    """
     return {f"{k[0]}-{k[1]}": v for k, v in conversations.items()}
 
-##
-# API endpoint to upload a PCAP file, perform initial analysis (including UE session
-# extraction), and generate a network graph JSON.
-#
-# @return [flask.Response] JSON response containing analysis results or an error message.
+
+# --- API ENDPOINTS ---
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    """
+    API endpoint to upload a PCAP file, perform initial network analysis 
+    (conversation stats, total packets, protocol breakdown), extract UE session
+    information, and generate a network graph JSON.
+
+    :status 400: If no file is provided, no filename is selected, or the file is not a PCAP.
+    :status 200: If the analysis is successful.
+    :return: JSON response containing analysis results or an error message.
+    :rtype: :class:`flask.Response`
+    """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
 
@@ -129,19 +177,20 @@ def analyze():
 
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
-    ue_sessions_json = initialize_analysis_for_ue(filepath)
     
+    # 1. UE Session Analysis
+    ue_sessions_json = initialize_analysis_for_ue(filepath)
     ue_sessions_json_path = os.path.join(UPLOAD_FOLDER, 'ue_sessions.json')
     with open(ue_sessions_json_path, 'w') as f:
         json.dump(ue_sessions_json, f, indent=2)
 
-
+    # 2. General Conversation/Protocol Analysis
     analysis_result, error = initialize_analysis(filepath)
     if error:
         return jsonify({'error': 'Failed to analyze PCAP: ' + error}), 400
 
+    # 3. Graph JSON Generation
     graph_json = build_graph_json(analysis_result['conversations'])
-
     graph_json_path = os.path.join(UPLOAD_FOLDER, 'conversations.json')
     with open(graph_json_path, 'w') as f:
         json.dump(graph_json, f, indent=2)
@@ -154,29 +203,40 @@ def analyze():
 
     return jsonify({'message': 'File analyzed successfully', 'analysis': response_data}), 200
 
-##
-# Serves the generated network conversation graph JSON file.
-#
-# @return [flask.Response] The 'conversations.json' file.
+
 @app.route('/conversations.json')
 def get_conversations():
+    """
+    Serves the generated network conversation graph JSON file.
+
+    :return: The 'conversations.json' file.
+    :rtype: :class:`flask.Response`
+    """
     return send_from_directory(UPLOAD_FOLDER, 'conversations.json')
 
-##
-# Serves the User Equipment (UE) session analysis JSON file.
-#
-# @return [flask.Response] The 'ue_sessions.json' file.
+
 @app.route('/ue_sessions') 
 def get_ue_sessions():
+    """
+    Serves the User Equipment (UE) session analysis JSON file.
+
+    :return: The 'ue_sessions.json' file.
+    :rtype: :class:`flask.Response`
+    """
     return send_from_directory(UPLOAD_FOLDER, 'ue_sessions.json')
 
-##
-# Performs IP role assessment on the extracted packet data and serves the results.
-# Requires a prior call to `/analyze` to create the input file.
-#
-# @return [flask.Response] The 'role_assessment.json' file.
+
 @app.route('/role_assessment') 
 def get_role_assessment_data():
+    """
+    Performs IP role assessment on the extracted packet data (from the prior 
+    :func:`analyze` call's 'all_packets.json') and serves the results.
+
+    :status 404: If the required 'all_packets.json' file is not found.
+    :status 500: If there is an error writing the output file.
+    :return: The 'role_assessment.json' file.
+    :rtype: :class:`flask.Response`
+    """
     input_packets_file = os.path.join(UPLOAD_FOLDER, 'all_packets.json')
     output_roles_file = os.path.join(UPLOAD_FOLDER, 'role_assessment.json')
 
@@ -195,15 +255,22 @@ def get_role_assessment_data():
 
     return send_from_directory(UPLOAD_FOLDER, 'role_assessment.json')
 
-##
-# API endpoint to receive packet chunks and assemble the PCAP file.
-# Used for real-time capture and generation.
-#
-# @return [flask.Response] JSON indicating success, message, and the final filename if applicable.
+
 @app.route("/save-pcap", methods=["POST"])
 def save_pcap_stream():
-    """API endpoint to receive packet chunks and assemble the PCAP file."""
-    logger.info("--- Received POST request for /save-pcap ---") # ADD THIS LINE
+    """
+    API endpoint to receive chunked Base64-encoded packet data and assemble 
+    the final PCAP file on the server. Used for real-time capture and generation.
+
+    The request payload must contain 'session_id', a list of 'packets' (Base64 strings), 
+    and an optional 'is_final_chunk' flag.
+
+    :status 400: If the payload is invalid or missing required fields.
+    :status 500: If a server error occurs during assembly.
+    :return: JSON indicating success, message, and the final filename if applicable.
+    :rtype: :class:`flask.Response`
+    """
+    logger.info("--- Received POST request for /save-pcap ---") 
     try:
         data = request.get_json()
         if not data:
@@ -233,74 +300,44 @@ def save_pcap_stream():
         logger.error(f"Unhandled error in /save-pcap: {e}")
         return jsonify({"success": False, "error": f"Internal server error: {str(e)}"}), 500
 
-##
-# Serves a generated PCAP file to the client for download.
-#
-# @param [str] filename The name of the PCAP file to serve.
-# @return [flask.Response] The PCAP file as an attachment or an error JSON.
+
 @app.route("/generated_pcaps/<filename>", methods=["GET"])
-def get_generated_pcap(filename):
-    """Serve a generated PCAP file."""
+def get_generated_pcap(filename: str):
+    """
+    Serves a generated PCAP file to the client for download from the 
+    :data:`PCAP_GEN_OUTPUT_DIR`.
+
+    :param filename: The name of the PCAP file to serve.
+    :type filename: str
+    :status 500: If there is an error serving the file.
+    :return: The PCAP file as an attachment or an error JSON.
+    :rtype: :class:`flask.Response`
+    """
     try:
         # Prevent path traversal
-        filename = Path(filename).name
-        filepath = 'generated_pcaps\\' + filename
+        safe_filename = Path(filename).name
+        filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, safe_filename)
 
-        logger.info(f"Serving PCAP file: {filename}")
+        logger.info(f"Serving PCAP file: {safe_filename}")
         return send_file(filepath, as_attachment=True)
 
     except Exception as e:
         logger.error(f"Error serving file {filename}: {e}")
         return jsonify({"success": False, "error": "Could not serve file."}), 500
 
-# @app.route('/save-pcap', methods=['POST']) # Renamed route to match Vue.js fetch
-# def handle_save_pcap_request():
-#     """
-#     Handles the POST request from the client (Vue.js app) to save a PCAP file.
-#     It retrieves raw binary packet data from the request body and passes it
-#     to the 'save_pcap_data' function located in 'pcap_generator_service.py'.
-#     """
-#     # Get the raw binary data directly from the request stream
-#     pcap_data = request.get_data()
 
-#     if not pcap_data:
-#         return jsonify({"status": "error", "message": "No binary data found in request body"}), 400
-
-#     # Call the function from your service file
-#     success, message, filename = save_pcap_data(pcap_data)
-
-#     if success:
-#         return jsonify({
-#             "status": "success",
-#             "message": message,
-#             "filename": filename # Return the generated filename for client reference
-#         }), 200
-#     else:
-#         # Use 500 for server-side errors, 400 for bad client requests
-#         return jsonify({
-#             "status": "error",
-#             "message": message
-#         }), 500
-
-# @app.route('/generated_pcaps/<filename>')
-# def serve_generated_pcap(filename):
-#     # Ensure filename doesn't contain path traversal attempts for security
-#     # if ".." in filename or "/" in filename:
-#     #     return jsonify({"status": "error", "message": "Invalid filename"}), 400
-    
-#     # # Serve the file from the designated PCAP generation output directory
-#     # return send_from_directory(PCAP_GEN_OUTPUT_DIR, filename, as_attachment=True)
-
-##
-# Analyzes a PCAP file that has already been saved on the server (typically from a
-# real-time capture).
-#
-# @param [str] filename The name of the PCAP file saved in PCAP_GEN_OUTPUT_DIR.
-# @return [flask.Response] JSON response containing analysis results (including graph data) or an error message.
 @app.route('/analyze-saved-pcap/<filename>', methods=['GET'])
-def analyze_saved_pcap(filename):
+def analyze_saved_pcap(filename: str):
     """
-    Analyzes a PCAP file that has already been saved on the server.
+    Analyzes a PCAP file that has already been saved on the server (typically 
+    from a real-time capture).
+
+    :param filename: The name of the PCAP file saved in :data:`PCAP_GEN_OUTPUT_DIR`.
+    :type filename: str
+    :status 404: If the file is not found on the server.
+    :status 400: If the underlying PCAP analysis fails.
+    :return: JSON response containing analysis results (including graph data) or an error message.
+    :rtype: :class:`flask.Response`
     """
     # 1. Construct the secure file path
     filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, filename)
@@ -326,16 +363,25 @@ def analyze_saved_pcap(filename):
     # 5. Return the analysis data
     return jsonify({'message': 'Analysis completed successfully', 'analysis': response_data}), 200
 
-##
-# Performs agglomerative clustering analysis on a specified PCAP file.
-#
-# @param [str] file The filename of the PCAP to analyze (required query parameter).
-# @param [int] clusters The desired number of clusters (optional query parameter, default=4).
-# @param [int] anomaly_threshold Distance threshold for flagging anomalies (optional query parameter, default=2).
-# @param [float] distance_threshold Max distance for clustering (optional query parameter).
-# @return [flask.Response] JSON response containing the clustering results.
+
 @app.route('/clustering', methods=['GET'])
 def clusteringAnalysis():
+    """
+    Performs agglomerative clustering analysis on a specified PCAP file using node features.
+
+    :query file: The filename of the PCAP to analyze (required query parameter).
+    :query clusters: The desired number of clusters (optional, default=4).
+    :query anomaly_threshold: Distance threshold for flagging anomalies (optional, default=2).
+    :query distance_threshold: Max distance for clustering (optional query parameter).
+    :type file: str
+    :type clusters: int
+    :type anomaly_threshold: int
+    :type distance_threshold: float
+    :status 400: If the 'file' parameter is missing.
+    :status 404: If the specified file is not found.
+    :return: JSON response containing the clustering results.
+    :rtype: :class:`flask.Response`
+    """
     filename = request.args.get("file")
     if not filename:
         return jsonify({"error": "file parameter is required"}), 400
@@ -359,27 +405,33 @@ def clusteringAnalysis():
     )
     return jsonify(results)
 
-##
-# Serves the saved results (JSON or CSV) of a clustering analysis.
-#
-# @param [str] file The base filename of the PCAP used for the analysis (required query parameter).
-# @param [str] type The desired output format ("json" or "csv", optional query parameter, default="json").
-# @return [flask.Response] The requested analysis results file as an attachment.
+
 @app.route('/save_results', methods=['GET'])
 def save_results_endpoint():
+    """
+    Serves the saved results (JSON or CSV) of a clustering analysis from the 
+    :data:`CLUSTERING_OUTPUT_DIR`.
+
+    :query file: The base filename of the PCAP used for the analysis (required query parameter).
+    :query type: The desired output format ("json" or "csv", optional query parameter, default="json").
+    :type file: str
+    :type type: str
+    :status 400: If the 'file' parameter is missing.
+    :status 404: If the requested result file is not found.
+    :return: The requested analysis results file as an attachment.
+    :rtype: :class:`flask.Response`
+    """
     filename = request.args.get("file")
-    filetype = request.args.get("type", default="json")  # "json" or "csv"
+    filetype = request.args.get("type", default="json") 
     if not filename:
         return jsonify({"error": "file parameter is required"}), 400
 
     # Build the filename as save_results does
     base_name = os.path.splitext(filename)[0]
-    if filetype.lower() == "csv":
-        send_file = base_name + ".csv"
-    else:
-        send_file = base_name + ".json"
+    send_file = base_name + (".csv" if filetype.lower() == "csv" else ".json")
 
-    output_dir = os.path.join(os.getcwd(), "server", "cluster_analysis")  # Absolute path
+    # Use the configured clustering output directory
+    output_dir = CLUSTERING_OUTPUT_DIR 
 
     full_path = os.path.join(output_dir, send_file)
 
@@ -389,14 +441,20 @@ def save_results_endpoint():
     # Send the requested file
     return send_from_directory(output_dir, send_file, as_attachment=True)
 
-##
-# Calculates and returns suggested cluster numbers using the Elbow method,
-# and provides initial clustering and importance metrics based on the suggested number.
-#
-# @param [str] file The filename of the PCAP to analyze (required query parameter).
-# @return [flask.Response] JSON containing WCSS data, the elbow point, and cluster importance.
+
 @app.route('/suggested_clusters', methods=['GET'])
 def suggested_clusters():
+    """
+    Calculates and returns suggested cluster numbers using the Elbow method,
+    and provides initial clustering and importance metrics based on the suggested number.
+
+    :query file: The filename of the PCAP to analyze (required query parameter).
+    :type file: str
+    :status 400: If the 'file' parameter is missing.
+    :status 404: If the specified file is not found.
+    :return: JSON containing WCSS data, the elbow point, and cluster importance.
+    :rtype: :class:`flask.Response`
+    """
     filename = request.args.get("file")
     if not filename:
         return jsonify({"error": "file parameter is required"}), 400
@@ -433,24 +491,39 @@ def suggested_clusters():
         "mostImportantCluster": most_important
     })
 
-##
-# Runs the full IP role identification pipeline using a specified PCAP file and model.
-#
-# @param [str] pcap_file_path The server path to the PCAP file.
-# @param [str] model_name The name of the machine learning model to use.
-# @param [list] selected_ips A list of specific IPs to include in the analysis (optional).
-# @return [flask.Response] JSON response containing the analysis report or an error message.
+
 @app.route('/run_pipeline', methods=['POST'])
 def run_pipeline_endpoint():
+    """
+    Runs the full IP role identification pipeline using a specified PCAP file and 
+    a trained machine learning model.
+
+    The request payload must contain 'pcap_file_path' (filename), 'model_name', 
+    and optionally a list of 'selected_ips'.
+
+    :json pcap_file_path: The filename of the PCAP file located in :data:`PCAP_GEN_OUTPUT_DIR`.
+    :json model_name: The name of the machine learning model to use.
+    :json selected_ips: A list of specific IPs to include in the analysis (optional).
+    :type pcap_file_path: str
+    :type model_name: str
+    :type selected_ips: List[str]
+    :status 400: If the payload is invalid or required fields are missing.
+    :status 500: If a critical error occurs during pipeline execution.
+    :return: JSON response containing the analysis report or an error message.
+    :rtype: :class:`flask.Response`
+    """
     if not request.is_json:
         return jsonify({"error": "Missing JSON in request"}), 400
 
     data = request.get_json()
-    pcap_file_path = PCAP_GEN_OUTPUT_DIR + "/" + data.get('pcap_file_path')
+    # The client sends the filename, we prepend the directory
+    pcap_filename = data.get('pcap_file_path')
     model_name = data.get('model_name')
 
-    if not pcap_file_path or not model_name:
+    if not pcap_filename or not model_name:
         return jsonify({"error": "Missing 'pcap_file_path' or 'model_name' in JSON body"}), 400
+
+    pcap_file_path = os.path.join(PCAP_GEN_OUTPUT_DIR, pcap_filename)
 
     print(f"\n[API] Received request to run pipeline (Synchronous):")
     print(f"[API] PCAP Path: {pcap_file_path}")
@@ -465,7 +538,7 @@ def run_pipeline_endpoint():
         
         if analysis_report.get('status') == 'success':
             response_data = {
-                "pcap_file": pcap_file_path,
+                "pcap_file": pcap_filename,
                 **analysis_report # Python 3.5+ dictionary merging
             }
             return jsonify(response_data), 200
@@ -477,14 +550,24 @@ def run_pipeline_endpoint():
         print(f"[API] Pipeline failed with error: {error_message}")
         return jsonify({"status": "error", "message": error_message}), 500
     
-##
-# Serves the saved results (JSON or CSV) from the IP role identification pipeline.
-#
-# @param [str] file The base filename of the PCAP used for the analysis (required query parameter).
-# @param [str] type The desired output format ("json" or "csv", optional query parameter, default="json").
-# @return [flask.Response] The requested role assessment results file as an attachment.
+
 @app.route('/save_roles', methods=['GET'])
 def save_roles_endpoint():
+    """
+    Serves the saved results (JSON or CSV) from the IP role identification pipeline.
+
+    The results are typically saved in 'server/results' by the 
+    :func:`~Preprocess.run_ip_role_pipeline` function.
+
+    :query file: The base filename of the PCAP used for the analysis (required query parameter).
+    :query type: The desired output format ("json" or "csv", optional query parameter, default="json").
+    :type file: str
+    :type type: str
+    :status 400: If the 'file' parameter is missing or 'type' is invalid.
+    :status 404: If the requested result file is not found.
+    :return: The requested role assessment results file as an attachment.
+    :rtype: :class:`flask.Response`
+    """
     filename = request.args.get("file")
     filetype = request.args.get("type", default="json").lower()
 
@@ -496,7 +579,7 @@ def save_roles_endpoint():
 
     base_name = os.path.splitext(filename)[0]
     output_filename = f"{base_name}.{filetype}"
-    output_dir = os.path.join(os.getcwd(), "server", "results")  # Absolute path
+    output_dir = os.path.join(os.getcwd(), "server", "results")  # Assuming fixed output dir for roles
 
     full_path = os.path.join(output_dir, output_filename)
 
@@ -505,5 +588,8 @@ def save_roles_endpoint():
 
     return send_from_directory(output_dir, output_filename, as_attachment=True)
 
+
 if __name__ == '__main__':
+    # Use a specific port and configuration suitable for development/production
+    # The default is (debug=True, threaded=False) which is fine for development.
     app.run(debug=True, threaded=False)

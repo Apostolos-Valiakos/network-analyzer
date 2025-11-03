@@ -98,3 +98,6 @@ server/models
 server/uploads
 server/cluster_analysis
 server/results
+server/source
+server/make.bat
+server/Makefile
