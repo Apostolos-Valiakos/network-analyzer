@@ -13,7 +13,7 @@ role_assessment, agglomerative_clustering, etc.) to perform the core functions.
 Configuration is managed via environment variables, defaulting to local
 server directories for uploads and generated PCAPs.
 
-:copyright: (c) 2024 by Example Corporation.
+:copyright: (c) 2025 by University of Thessaly.
 :license: MIT License, see LICENSE for more details.
 """
 
@@ -38,12 +38,51 @@ from scapy.error import Scapy_Exception
 from scapy.all import wrpcap
 from threading import Lock
 from typing import List, Dict, Any, Tuple, Optional
+from flasgger import Swagger
 
 
 # --- FLASK SETUP & CONFIGURATION ---
 
 app = Flask(__name__)
 CORS(app)
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "Network Traffic Analyzer",
+        "description": """
+        This API provides endpoints for uploading, analyzing, clustering, 
+        and managing PCAP files, as well as performing IP role and UE session analysis.
+        """,
+        "version": "1.0.0",
+        "contact": {
+            "name": "Apostolos Valiakos",
+            "email": "avaliakos@uth.gr"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        }
+    },
+    "basePath": "/",  # Base URL path
+    "schemes": ["http", "https"]
+}
+
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec_1",
+            "route": "/apispec_1.json",
+            "rule_filter": lambda rule: True,  # include all endpoints
+            "model_filter": lambda tag: True,  # include all models
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/"
+}
+
+swagger = Swagger(app, template=swagger_template, config=swagger_config)
 
 CONFIG = {
     "PCAP_OUTPUT_DIR": os.getenv("PCAP_OUTPUT_DIR", "server\\generated_pcaps"),
@@ -156,14 +195,23 @@ def serialize_conversations(conversations: Dict[Tuple[str, str], Any]) -> Dict[s
 @app.route('/analyze', methods=['POST'])
 def analyze():
     """
-    API endpoint to upload a PCAP file, perform initial network analysis 
-    (conversation stats, total packets, protocol breakdown), extract UE session
-    information, and generate a network graph JSON.
-
-    :status 400: If no file is provided, no filename is selected, or the file is not a PCAP.
-    :status 200: If the analysis is successful.
-    :return: JSON response containing analysis results or an error message.
-    :rtype: :class:`flask.Response`
+    Upload and analyze a PCAP file
+    ---
+    tags:
+      - PCAP Analysis
+    consumes:
+      - multipart/form-data
+    parameters:
+      - name: file
+        in: formData
+        type: file
+        required: true
+        description: PCAP file to analyze
+    responses:
+      200:
+        description: Analysis completed successfully
+      400:
+        description: Invalid file or analysis error
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -207,10 +255,13 @@ def analyze():
 @app.route('/conversations.json')
 def get_conversations():
     """
-    Serves the generated network conversation graph JSON file.
-
-    :return: The 'conversations.json' file.
-    :rtype: :class:`flask.Response`
+    Get conversation graph data
+    ---
+    tags:
+      - PCAP Analysis
+    responses:
+      200:
+        description: JSON containing network conversation graph
     """
     return send_from_directory(UPLOAD_FOLDER, 'conversations.json')
 
@@ -218,10 +269,13 @@ def get_conversations():
 @app.route('/ue_sessions') 
 def get_ue_sessions():
     """
-    Serves the User Equipment (UE) session analysis JSON file.
-
-    :return: The 'ue_sessions.json' file.
-    :rtype: :class:`flask.Response`
+    Get UE session analysis
+    ---
+    tags:
+      - UE Analysis
+    responses:
+      200:
+        description: JSON of UE session data
     """
     return send_from_directory(UPLOAD_FOLDER, 'ue_sessions.json')
 
@@ -229,13 +283,15 @@ def get_ue_sessions():
 @app.route('/role_assessment') 
 def get_role_assessment_data():
     """
-    Performs IP role assessment on the extracted packet data (from the prior 
-    :func:`analyze` call's 'all_packets.json') and serves the results.
-
-    :status 404: If the required 'all_packets.json' file is not found.
-    :status 500: If there is an error writing the output file.
-    :return: The 'role_assessment.json' file.
-    :rtype: :class:`flask.Response`
+    Perform IP role assessment and return results
+    ---
+    tags:
+      - Role Assessment
+    responses:
+      200:
+        description: IP role assessment results
+      404:
+        description: Required packet file not found
     """
     input_packets_file = os.path.join(UPLOAD_FOLDER, 'all_packets.json')
     output_roles_file = os.path.join(UPLOAD_FOLDER, 'role_assessment.json')
@@ -259,16 +315,38 @@ def get_role_assessment_data():
 @app.route("/save-pcap", methods=["POST"])
 def save_pcap_stream():
     """
-    API endpoint to receive chunked Base64-encoded packet data and assemble 
-    the final PCAP file on the server. Used for real-time capture and generation.
-
-    The request payload must contain 'session_id', a list of 'packets' (Base64 strings), 
-    and an optional 'is_final_chunk' flag.
-
-    :status 400: If the payload is invalid or missing required fields.
-    :status 500: If a server error occurs during assembly.
-    :return: JSON indicating success, message, and the final filename if applicable.
-    :rtype: :class:`flask.Response`
+    Upload Base64-encoded packet data (chunked) and assemble PCAP file
+    ---
+    tags:
+      - PCAP Generation
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - session_id
+            - packets
+          properties:
+            session_id:
+              type: string
+              description: Unique session identifier
+            packets:
+              type: array
+              items:
+                type: string
+                description: Base64-encoded packets
+            is_final_chunk:
+              type: boolean
+              description: True if this is the final chunk
+    responses:
+      200:
+        description: PCAP successfully saved
+      500:
+        description: Assembly error
     """
     logger.info("--- Received POST request for /save-pcap ---") 
     try:
@@ -304,14 +382,21 @@ def save_pcap_stream():
 @app.route("/generated_pcaps/<filename>", methods=["GET"])
 def get_generated_pcap(filename: str):
     """
-    Serves a generated PCAP file to the client for download from the 
-    :data:`PCAP_GEN_OUTPUT_DIR`.
-
-    :param filename: The name of the PCAP file to serve.
-    :type filename: str
-    :status 500: If there is an error serving the file.
-    :return: The PCAP file as an attachment or an error JSON.
-    :rtype: :class:`flask.Response`
+    Download generated PCAP file
+    ---
+    tags:
+      - PCAP Generation
+    parameters:
+      - name: filename
+        in: path
+        type: string
+        required: true
+        description: PCAP filename
+    responses:
+      200:
+        description: Returns PCAP file as attachment
+      404:
+        description: File not found
     """
     try:
         # Prevent path traversal
@@ -329,15 +414,21 @@ def get_generated_pcap(filename: str):
 @app.route('/analyze-saved-pcap/<filename>', methods=['GET'])
 def analyze_saved_pcap(filename: str):
     """
-    Analyzes a PCAP file that has already been saved on the server (typically 
-    from a real-time capture).
-
-    :param filename: The name of the PCAP file saved in :data:`PCAP_GEN_OUTPUT_DIR`.
-    :type filename: str
-    :status 404: If the file is not found on the server.
-    :status 400: If the underlying PCAP analysis fails.
-    :return: JSON response containing analysis results (including graph data) or an error message.
-    :rtype: :class:`flask.Response`
+    Analyze an already-saved PCAP file
+    ---
+    tags:
+      - PCAP Analysis
+    parameters:
+      - name: filename
+        in: path
+        type: string
+        required: true
+        description: Name of the PCAP file to analyze
+    responses:
+      200:
+        description: Analysis results for the saved PCAP
+      404:
+        description: File not found
     """
     # 1. Construct the secure file path
     filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, filename)
@@ -367,20 +458,33 @@ def analyze_saved_pcap(filename: str):
 @app.route('/clustering', methods=['GET'])
 def clusteringAnalysis():
     """
-    Performs agglomerative clustering analysis on a specified PCAP file using node features.
-
-    :query file: The filename of the PCAP to analyze (required query parameter).
-    :query clusters: The desired number of clusters (optional, default=4).
-    :query anomaly_threshold: Distance threshold for flagging anomalies (optional, default=2).
-    :query distance_threshold: Max distance for clustering (optional query parameter).
-    :type file: str
-    :type clusters: int
-    :type anomaly_threshold: int
-    :type distance_threshold: float
-    :status 400: If the 'file' parameter is missing.
-    :status 404: If the specified file is not found.
-    :return: JSON response containing the clustering results.
-    :rtype: :class:`flask.Response`
+    Perform agglomerative clustering on a PCAP file
+    ---
+    tags:
+      - Clustering
+    parameters:
+      - name: file
+        in: query
+        type: string
+        required: true
+        description: Filename of the PCAP
+      - name: clusters
+        in: query
+        type: integer
+        description: Number of clusters
+      - name: anomaly_threshold
+        in: query
+        type: number
+        description: Anomaly threshold
+      - name: distance_threshold
+        in: query
+        type: number
+        description: Maximum cluster distance
+    responses:
+      200:
+        description: Clustering results
+      404:
+        description: File not found
     """
     filename = request.args.get("file")
     if not filename:
@@ -409,17 +513,35 @@ def clusteringAnalysis():
 @app.route('/save_results', methods=['GET'])
 def save_results_endpoint():
     """
-    Serves the saved results (JSON or CSV) of a clustering analysis from the 
-    :data:`CLUSTERING_OUTPUT_DIR`.
-
-    :query file: The base filename of the PCAP used for the analysis (required query parameter).
-    :query type: The desired output format ("json" or "csv", optional query parameter, default="json").
-    :type file: str
-    :type type: str
-    :status 400: If the 'file' parameter is missing.
-    :status 404: If the requested result file is not found.
-    :return: The requested analysis results file as an attachment.
-    :rtype: :class:`flask.Response`
+    Save clustering or analysis results to a JSON file
+    ---
+    tags:
+      - Clustering
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - results
+          properties:
+            results:
+              type: object
+              description: The clustering or analysis results to be saved
+    responses:
+      200:
+        description: Results saved successfully
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Results saved successfully"
+      400:
+        description: Invalid input or save error
     """
     filename = request.args.get("file")
     filetype = request.args.get("type", default="json") 
@@ -445,15 +567,33 @@ def save_results_endpoint():
 @app.route('/suggested_clusters', methods=['GET'])
 def suggested_clusters():
     """
-    Calculates and returns suggested cluster numbers using the Elbow method,
-    and provides initial clustering and importance metrics based on the suggested number.
-
-    :query file: The filename of the PCAP to analyze (required query parameter).
-    :type file: str
-    :status 400: If the 'file' parameter is missing.
-    :status 404: If the specified file is not found.
-    :return: JSON containing WCSS data, the elbow point, and cluster importance.
-    :rtype: :class:`flask.Response`
+    Return suggested clustering configurations for PCAP analysis
+    ---
+    tags:
+      - Clustering
+    parameters:
+      - name: file
+        in: query
+        type: string
+        required: false
+        description: Optional PCAP filename to base suggestions on
+    responses:
+      200:
+        description: Suggested cluster configurations
+        schema:
+          type: object
+          properties:
+            suggested_clusters:
+              type: array
+              items:
+                type: object
+                properties:
+                  num_clusters:
+                    type: integer
+                  description:
+                    type: string
+      404:
+        description: File not found (if filename provided and invalid)
     """
     filename = request.args.get("file")
     if not filename:
@@ -495,22 +635,39 @@ def suggested_clusters():
 @app.route('/run_pipeline', methods=['POST'])
 def run_pipeline_endpoint():
     """
-    Runs the full IP role identification pipeline using a specified PCAP file and 
-    a trained machine learning model.
-
-    The request payload must contain 'pcap_file_path' (filename), 'model_name', 
-    and optionally a list of 'selected_ips'.
-
-    :json pcap_file_path: The filename of the PCAP file located in :data:`PCAP_GEN_OUTPUT_DIR`.
-    :json model_name: The name of the machine learning model to use.
-    :json selected_ips: A list of specific IPs to include in the analysis (optional).
-    :type pcap_file_path: str
-    :type model_name: str
-    :type selected_ips: List[str]
-    :status 400: If the payload is invalid or required fields are missing.
-    :status 500: If a critical error occurs during pipeline execution.
-    :return: JSON response containing the analysis report or an error message.
-    :rtype: :class:`flask.Response`
+    Run IP role identification ML pipeline
+    ---
+    tags:
+      - Machine Learning Pipeline
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+            - pcap_file_path
+            - model_name
+          properties:
+            pcap_file_path:
+              type: string
+              description: PCAP file path relative to server
+            model_name:
+              type: string
+              description: Model to use
+            selected_ips:
+              type: array
+              items:
+                type: string
+              description: Optional list of IPs
+    responses:
+      200:
+        description: Pipeline executed successfully
+      400:
+        description: Invalid input
+      500:
+        description: Internal error
     """
     if not request.is_json:
         return jsonify({"error": "Missing JSON in request"}), 400
