@@ -176,7 +176,7 @@ def build_graph_data(df):
 # @param [str] upload_folder The directory path where the files should be saved.
 # @return [tuple] (csv_path: str, json_path: str) The full paths to the saved files.
 def save_results(df, filename_base, upload_folder="./uploads"):
-    timestamped = os.path.splitext(filename_base)[0] + "_clusters"
+    timestamped = os.path.splitext(filename_base)[0]
 
     csv_path = os.path.join(upload_folder, f"{timestamped}.csv")
     json_path = os.path.join(upload_folder, f"{timestamped}.json")

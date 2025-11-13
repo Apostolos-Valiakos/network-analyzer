@@ -39,6 +39,7 @@ from scapy.all import wrpcap
 from threading import Lock
 from typing import List, Dict, Any, Tuple, Optional
 from flasgger import Swagger
+import pandas as pd
 
 
 # --- FLASK SETUP & CONFIGURATION ---
@@ -57,10 +58,6 @@ swagger_template = {
         "contact": {
             "name": "Apostolos Valiakos",
             "email": "avaliakos@uth.gr"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
         }
     },
     "basePath": "/",  # Base URL path
@@ -102,7 +99,8 @@ if not os.path.exists(UPLOAD_FOLDER):
 PCAP_GEN_OUTPUT_DIR = os.getenv('PCAP_OUTPUT_DIR', 'server\\generated_pcaps')
 os.makedirs(PCAP_GEN_OUTPUT_DIR, exist_ok=True)
 
-CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'server\\cluster_analysis')
+# CLUSTERING_OUTPUT_DIR = os.getenv('CLUSTERING_OUTPUT_DIR', 'server\\cluster_analysis')
+CLUSTERING_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "cluster_analysis\\")
 os.makedirs(CLUSTERING_OUTPUT_DIR, exist_ok=True)
 
 
@@ -455,65 +453,10 @@ def analyze_saved_pcap(filename: str):
     return jsonify({'message': 'Analysis completed successfully', 'analysis': response_data}), 200
 
 
-@app.route('/clustering', methods=['GET'])
-def clusteringAnalysis():
+@app.route('/clustering', methods=['POST'])
+def clustering_analysis():
     """
     Perform agglomerative clustering on a PCAP file
-    ---
-    tags:
-      - Clustering
-    parameters:
-      - name: file
-        in: query
-        type: string
-        required: true
-        description: Filename of the PCAP
-      - name: clusters
-        in: query
-        type: integer
-        description: Number of clusters
-      - name: anomaly_threshold
-        in: query
-        type: number
-        description: Anomaly threshold
-      - name: distance_threshold
-        in: query
-        type: number
-        description: Maximum cluster distance
-    responses:
-      200:
-        description: Clustering results
-      404:
-        description: File not found
-    """
-    filename = request.args.get("file")
-    if not filename:
-        return jsonify({"error": "file parameter is required"}), 400
-
-    filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, filename)
-
-    if not os.path.exists(filepath):
-        return jsonify({"error": "file not found"}), 404
-
-    # Optional query params
-    n_clusters = request.args.get("clusters", default=4, type=int)
-    anomaly_threshold = request.args.get("anomaly_threshold", default=2, type=int)
-    distance_threshold = request.args.get("distance_threshold", default=None, type=float)
-
-    # Run analysis
-    results = analyze_pcap(
-        filepath,
-        n_clusters=n_clusters,
-        distance_threshold=distance_threshold,
-        anomaly_threshold=anomaly_threshold
-    )
-    return jsonify(results)
-
-
-@app.route('/save_results', methods=['GET'])
-def save_results_endpoint():
-    """
-    Save clustering or analysis results to a JSON file
     ---
     tags:
       - Clustering
@@ -526,43 +469,152 @@ def save_results_endpoint():
         schema:
           type: object
           required:
+            - file
+          properties:
+            file:
+              type: string
+              description: Filename of the PCAP (relative to generated_pcaps)
+            clusters:
+              type: integer
+              default: 4
+              description: Number of clusters
+            anomaly_threshold:
+              type: number
+              default: 2
+              description: Anomaly detection threshold
+            distance_threshold:
+              type: number
+              description: Maximum distance for a cluster (overrides n_clusters if set)
+    responses:
+      200:
+        description: Clustering results
+      400:
+        description: Missing/invalid parameters
+      404:
+        description: PCAP file not found
+      500:
+        description: Analysis error
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    filename = data.get("file")
+    if not filename:
+        return jsonify({"error": "Missing required field 'file'"}), 400
+
+    # Build safe path
+    filepath = os.path.join(PCAP_GEN_OUTPUT_DIR, Path(filename).name)
+    if not os.path.exists(filepath):
+        return jsonify({"error": "PCAP file not found"}), 404
+
+    # Optional parameters
+    n_clusters = data.get("clusters", 4)
+    anomaly_threshold = data.get("anomaly_threshold", 2)
+    distance_threshold = data.get("distance_threshold", None)
+
+    try:
+        results = analyze_pcap(
+            filepath,
+            n_clusters=n_clusters,
+            distance_threshold=distance_threshold,
+            anomaly_threshold=anomaly_threshold
+        )
+
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error(f"Clustering failed for {filename}: {e}")
+        return jsonify({"error": f"Clustering failed: {str(e)}"}), 500
+
+@app.route('/save-results', methods=['POST'])
+def save_results_endpoint():
+    """
+    Save clustering / analysis results to a JSON or CSV file
+    ---
+    tags:
+      - Clustering
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - filename
             - results
           properties:
+            filename:
+              type: string
+              description: Base name of the original PCAP (e.g. capture_2025.pcap)
             results:
               type: object
-              description: The clustering or analysis results to be saved
+              description: Full clustering/analysis result object
+            type:
+              type: string
+              enum: [json, csv]
+              default: json
+              description: Output file format
     responses:
       200:
         description: Results saved successfully
         schema:
           type: object
           properties:
-            message:
-              type: string
-              example: "Results saved successfully"
+            message: {type: string}
+            saved_file: {type: string}
       400:
-        description: Invalid input or save error
+        description: Invalid input
+      500:
+        description: Save error
     """
-    filename = request.args.get("file")
-    filetype = request.args.get("type", default="json") 
-    if not filename:
-        return jsonify({"error": "file parameter is required"}), 400
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
 
-    # Build the filename as save_results does
-    base_name = os.path.splitext(filename)[0]
-    send_file = base_name + (".csv" if filetype.lower() == "csv" else ".json")
+    data = request.get_json()
+    filename = data.get("filename")
+    results = data.get("results")  # ← must be list of dicts
+    filetype = data.get("type", "json").lower()
 
-    # Use the configured clustering output directory
-    output_dir = CLUSTERING_OUTPUT_DIR 
+    if not filename or results is None:
+        return jsonify({"error": "Missing 'filename' or 'results'"}), 400
+    if filetype not in ("json", "csv"):
+        return jsonify({"error": "type must be 'json' or 'csv'"}), 400
 
-    full_path = os.path.join(output_dir, send_file)
+    try:
+        df = pd.DataFrame(results)
+    except Exception as e:
+        return jsonify({"error": f"Invalid results format: {e}"}), 400
 
-    if not os.path.exists(full_path):
-        return jsonify({"error": f"{filetype.upper()} file not found: {send_file}", "path_checked": full_path}), 404
+    try:
+        csv_path, json_path = save_results(df, filename, upload_folder=CLUSTERING_OUTPUT_DIR)
+    except Exception as e:
+        return jsonify({"error": f"Save failed: {e}"}), 500
 
-    # Send the requested file
-    return send_from_directory(output_dir, send_file, as_attachment=True)
+    target_path = csv_path if filetype == "csv" else json_path
+    saved_filename = os.path.basename(target_path)
 
+    return jsonify({
+        "message": "Results saved successfully",
+        "saved_file": saved_filename,
+        "download_url": f"/clustering-output/{saved_filename}"
+    }), 200
+
+@app.route('/clustering-output/<filename>', methods=['GET'])
+def get_clustering_result(filename: str):
+    """
+    Download saved clustering results (CSV or JSON)
+    """
+    safe_filename = Path(filename).name
+    filepath = os.path.join(CLUSTERING_OUTPUT_DIR, safe_filename)
+
+    if not os.path.exists(filepath):
+        logger.warning(f"Clustering result not found: {filepath}")
+        return jsonify({"error": "File not found"}), 404
+
+    logger.info(f"Serving clustering result: {safe_filename}")
+    return send_file(filepath, as_attachment=True, download_name=safe_filename)
 
 @app.route('/suggested_clusters', methods=['GET'])
 def suggested_clusters():
