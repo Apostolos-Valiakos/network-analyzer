@@ -4,12 +4,12 @@
       <h2 class="text-h5 font-weight-bold mb-4">Network Analysis</h2>
       <p class="text-subtitle-1">
         For later reference you can retrieve the network data using the name:
-        <b class="text-primary">{{ this.filename }}</b>
+        <b class="text-primary">{{ filename }}</b>
       </p>
       <p class="text-subtitle-1">
         Using our API like this:
         <b class="text-primary">
-          https://127.0.0.1:5000/generated_pcaps/{{ this.filename }}
+          http://127.0.0.1:5000/generated_pcaps/{{ filename }}
         </b>
       </p>
       <div @click="downloadPcap" class="text-h6 font-weight-bold my-4">
@@ -19,7 +19,7 @@
       </div>
       <p class="text-subtitle-1" v-if="e1 === 1">
         Using the elbow method the suggested number of clusters is:
-        <b class="text-primary">{{ this.suggestedClusters }}</b>
+        <b class="text-primary">{{ suggestedClusters }}</b>
       </p>
     </v-card>
 
@@ -33,395 +33,50 @@
       </v-stepper-header>
 
       <v-stepper-items>
-        <!-- STEP 1: CLUSTERING -->
         <v-stepper-content step="1">
-          <v-card class="pa-6 mb-8 rounded-xl connection-card">
-            <h3 class="text-h6 font-weight-bold mb-4 text-primary">
-              <v-icon color="primary" class="mr-2">mdi-chart-cluster</v-icon>
-              Network Clustering Overview
-            </h3>
-
-            <p class="text-subtitle-1 mb-2">
-              Using the elbow method, the suggested number of clusters is:
-              <b class="text-primary">{{ suggestedClusters }}</b
-              >.
-            </p>
-            <p class="text-subtitle-2 text-medium-emphasis">
-              Adjust the cluster count if needed and visualize the resulting
-              network graph below.
-            </p>
-
-            <v-divider class="my-4"></v-divider>
-
-            <!-- Cluster Selection -->
-            <v-select
-              class="futuristic-input mb-6"
-              :items="noOfclustersList"
-              label="Number of Clusters"
-              v-model="noOfclusters"
-              @change="fetchAnalysis()"
-            ></v-select>
-
-            <!-- Network Graph Section -->
-            <v-card
-              class="mb-12 d-flex align-center justify-center pa-4"
-              height="600px"
-              elevation="0"
-            >
-              <v-progress-circular
-                color="primary"
-                indeterminate
-                v-if="loading"
-              />
-              <NetworkGraph
-                v-if="graphData"
-                :graphData="graphData"
-                :key="networkGraphKey"
-                :edgeLength="30"
-              />
-            </v-card>
-
-            <!-- Important Cluster Info -->
-            <v-alert
-              v-if="mostImportantCluster"
-              type="info"
-              variant="tonal"
-              color="primary"
-              class="mb-6"
-            >
-              The most important cluster is:
-              <b class="text-primary">{{ mostImportantCluster }}</b
-              >, as it contains the highest network activity.
-            </v-alert>
-
-            <!-- Cluster Hierarchy Table -->
-
-            <v-select
-              v-model="selectedCluster"
-              v-if="allIps && allIps.length"
-              :items="allIps"
-              label="Select Cluster(s) to analyze"
-              multiple
-              chips
-              small-chips
-              outlined
-              class="mb-4"
-            />
-          </v-card>
-          <div class="d-flex ga-4 mb-6">
-            <v-btn
-              color="primary"
-              @click="e1 = 2"
-              :disabled="loading"
-              class="control-btn"
-            >
-              Continue
-              <v-icon end>mdi-arrow-right</v-icon>
-            </v-btn>
-          </div>
-          <v-card class="rounded-xl packets-card mb-8">
-            <v-card-title class="card-header">
-              <v-icon color="primary" class="mr-2">mdi-sitemap</v-icon>
-              Cluster Hierarchy
-            </v-card-title>
-            <v-data-table
-              :headers="headers"
-              :items="clusterHierarchy"
-              item-value="cluster"
-              class="packet-table"
-              density="compact"
-            >
-              <template v-slot:item.cluster="{ item }">
-                <b>{{ item.cluster }}</b>
-              </template>
-              <template v-slot:item.score="{ item }">
-                {{ item.score }}
-              </template>
-              <template v-slot:item.total_packets="{ item }">
-                {{ item.total_packets }}
-              </template>
-              <template v-slot:item.unique_ips="{ item }">
-                {{ item.unique_ips }}
-              </template>
-            </v-data-table>
-          </v-card>
-
-          <!-- Save Results -->
-          <v-card class="pa-6 rounded-xl connection-card">
-            <h4 class="text-subtitle-1 font-weight-bold mb-3 text-primary">
-              <v-icon color="primary" class="mr-2">mdi-content-save</v-icon>
-              Save Clustering Results
-            </h4>
-            <p class="text-caption font-italic mb-4">
-              You can download the clustering results in <b>.csv</b> or
-              <b>.json</b>
-              format.
-            </p>
-
-            <v-select
-              class="futuristic-input mb-4"
-              :items="['json', 'csv']"
-              label="Choose File Type"
-              v-model="fileType"
-            />
-
-            <div class="d-flex flex-wrap ga-4">
-              <v-btn
-                @click="saveResults()"
-                color="green"
-                class="white--text control-btn"
-              >
-                <v-icon start>mdi-content-save</v-icon>
-                Save Results ({{ fileType.toUpperCase() }})
-              </v-btn>
-              <!-- <v-btn
-                  color="primary"
-                  @click="e1 = 2"
-                  :disabled="loading"
-                  class="control-btn"
-                >
-                  Continue
-                  <v-icon end>mdi-arrow-right</v-icon>
-                </v-btn> -->
-            </div>
-          </v-card>
-          <!-- Elbow Chart -->
-          <v-card class="pa-6 mt-8 rounded-xl connection-card">
-            <h4 class="text-subtitle-1 font-weight-bold mb-4 text-primary">
-              <v-icon color="deep-purple-accent-4" class="mr-2">
-                mdi-chart-line
-              </v-icon>
-              Elbow Method Visualization
-            </h4>
-            <ElbowChart v-if="elbowData.length > 1" :elbowData="elbowData" />
-          </v-card>
+          <StepClustering
+            v-bind="clusteringProps"
+            @next="e1 = 2"
+            @update:noOfclusters="
+              (v) => {
+                noOfclusters = v;
+                fetchAnalysis();
+              }
+            "
+            @update:selectedCluster="(v) => (selectedCluster = v)"
+            @update:fileType="(v) => (fileType = v)"
+            @save-results="
+              ({ fileType: ft }) => {
+                fileType = ft;
+                saveResults();
+              }
+            "
+          />
         </v-stepper-content>
 
-        <!-- STEP 2: CNN PROFILING -->
         <v-stepper-content step="2">
-          <v-card class="pa-6 mb-8 rounded-xl connection-card">
-            <h3 class="text-h6 font-weight-bold mb-4 text-primary">
-              <v-icon color="primary" class="mr-2">mdi-brain</v-icon>
-              Rule Based Analysis
-            </h3>
-
-            <v-alert
-              v-if="cnnError"
-              type="error"
-              class="mb-4"
-              icon="mdi-alert-circle"
-              variant="tonal"
-            >
-              Error during CNN analysis: {{ cnnError }}
-            </v-alert>
-
-            <div class="d-flex align-center mb-4">
-              <v-btn
-                color="primary"
-                size="large"
-                @click="startCnnAnalysis"
-                :loading="cnnLoading"
-                :disabled="cnnLoading"
-                class="white--text control-btn"
-              >
-                <v-icon start>mdi-send-circle</v-icon>
-                Start Rule Based Analysis
-              </v-btn>
-
-              <v-progress-linear
-                v-if="cnnLoading"
-                indeterminate
-                color="deep-purple-accent-4"
-                class="ml-4 rounded-lg"
-                height="10"
-              ></v-progress-linear>
-            </div>
-
-            <v-divider class="my-4"></v-divider>
-
-            <!-- DISPLAY CNN RESULTS -->
-            <div v-if="cnnResults">
-              <h4 class="text-subtitle-1 font-weight-bold mb-2">
-                <v-icon color="success" class="mr-1">mdi-chart-bar</v-icon>
-                Analysis Results Overview
-              </h4>
-
-              <v-row>
-                <v-col cols="12" sm="6" md="4">
-                  <v-card class="pa-3" variant="outlined" elevation="0">
-                    <div class="text-caption text-medium-emphasis">
-                      Most Frequent Class
-                    </div>
-                    <div class="text-h5 font-weight-bold text-success">
-                      {{ cnnResults.most_frequent_class }}
-                    </div>
-                  </v-card>
-                </v-col>
-                <v-col cols="12" sm="6" md="4">
-                  <v-card class="pa-3" variant="outlined" elevation="0">
-                    <div class="text-caption text-medium-emphasis">
-                      Total Classified Items
-                    </div>
-                    <div class="text-h5 font-weight-bold text-info">
-                      {{ cnnResults.total_classified }}
-                    </div>
-                  </v-card>
-                </v-col>
-                <v-col cols="12" sm="6" md="4">
-                  <v-card class="pa-3" variant="outlined" elevation="0">
-                    <div class="text-caption text-medium-emphasis">
-                      Processing Time (s)
-                    </div>
-                    <div class="text-h5 font-weight-bold text-warning">
-                      {{ cnnResults.processing_time.toFixed(2) }}
-                    </div>
-                  </v-card>
-                </v-col>
-              </v-row>
-
-              <v-divider class="my-4"></v-divider>
-
-              <h4 class="text-subtitle-1 font-weight-bold mb-2">
-                <v-icon color="deep-purple-accent-4" class="mr-1"
-                  >mdi-table</v-icon
-                >
-                Classification Summary
-              </h4>
-
-              <v-data-table
-                :headers="cnnHeaders"
-                :items="cnnResults.rule_based_classification_summary"
-                item-value="class_name"
-                class="packet-table elevation-2"
-                density="compact"
-              >
-                <template v-slot:item.ips="{ item }">
-                  <div v-if="item.ips && item.ips.length">
-                    <ul>
-                      <li v-for="ip in item.ips" :key="ip">{{ ip }}</li>
-                    </ul>
-                  </div>
-                  <div v-else>—</div>
-                </template>
-              </v-data-table>
-
-              <v-divider class="my-4"></v-divider>
-
-              <!-- Dynamic Pie Chart for CNN Results -->
-              <h4 class="text-subtitle-1 font-weight-bold mb-2">
-                <v-icon color="deep-purple-accent-4" class="mr-1">
-                  mdi-chart-pie
-                </v-icon>
-                Classification Summary Chart
-              </h4>
-              <PieChart
-                v-if="
-                  cnnResults &&
-                  cnnResults.rule_based_classification_summary.length
-                "
-                :chartData="formattedCnnChartData"
-                chartTitle="Rule Based Classification Summary"
-              />
-            </div>
-
-            <div v-else-if="!cnnLoading" class="text-center pa-4">
-              <v-icon size="48" color="grey-lighten-1"
-                >mdi-monitor-dashboard</v-icon
-              >
-              <p class="text-subtitle-1 text-medium-emphasis mt-2">
-                Click "Start Rule Based Analysis" to process data.
-              </p>
-            </div>
-          </v-card>
-
-          <div class="d-flex ga-4">
-            <v-btn color="secondary" @click="e1 = 1" class="control-btn">
-              <v-icon start>mdi-arrow-left</v-icon>
-              Previous
-            </v-btn>
-            <v-btn
-              color="primary"
-              @click="e1 = 3"
-              :disabled="!cnnResults"
-              class="control-btn"
-            >
-              Continue
-              <v-icon end>mdi-arrow-right</v-icon>
-            </v-btn>
-          </div>
+          <StepProfiling
+            v-bind="profilingProps"
+            @prev="e1 = 1"
+            @next="e1 = 3"
+            @start-analysis="startAnalysisWithIps"
+          />
         </v-stepper-content>
 
-        <!-- STEP 3: RESULTS -->
         <v-stepper-content step="3">
-          <v-card class="pa-6 mb-8 rounded-xl connection-card">
-            <h3 class="text-h6 font-weight-bold mb-4 text-primary">
-              <v-icon color="primary" class="mr-2">mdi-file-export</v-icon>
-              Export & Final Results
-            </h3>
-
-            <p class="text-subtitle-1 mb-4">
-              You can export the final <b>Roles</b> data or re-download the
-              <b>.pcap</b> file for further analysis. Choose your preferred file
-              format below.
-            </p>
-
-            <v-divider class="my-4"></v-divider>
-
-            <!-- File Type Selector -->
-            <v-select
-              class="futuristic-input mb-6"
-              :items="['json', 'csv']"
-              label="Select Export File Type"
-              v-model="fileType"
-            ></v-select>
-
-            <!-- Action Buttons -->
-            <div class="d-flex flex-wrap ga-4">
-              <v-btn
-                color="green"
-                class="white--text control-btn"
-                size="large"
-                @click="saveRoles"
-              >
-                <v-icon start>mdi-content-save</v-icon>
-                Download Roles ({{ fileType.toUpperCase() }})
-              </v-btn>
-
-              <v-btn
-                color="blue"
-                class="white--text control-btn"
-                size="large"
-                @click="downloadPcap"
-              >
-                <v-icon start>mdi-download</v-icon>
-                Download PCAP File
-              </v-btn>
-            </div>
-
-            <v-divider class="my-6"></v-divider>
-
-            <div class="text-center pa-4">
-              <v-icon size="48" color="primary">mdi-check-decagram</v-icon>
-              <p class="text-subtitle-1 text-medium-emphasis mt-2">
-                All analysis completed successfully.
-              </p>
-              <p class="text-caption text-medium-emphasis">
-                You can now save your data or return to previous steps for
-                review.
-              </p>
-            </div>
-          </v-card>
-
-          <div class="d-flex ga-4">
-            <v-btn color="secondary" @click="e1 = 2" class="control-btn">
-              <v-icon start>mdi-arrow-left</v-icon>
-              Previous
-            </v-btn>
-            <v-btn color="primary" @click="e1 = 1" class="control-btn">
-              <v-icon start>mdi-restart</v-icon>
-              Start Over
-            </v-btn>
-          </div>
+          <StepResults
+            v-bind="resultsProps"
+            @prev="e1 = 2"
+            @restart="e1 = 1"
+            @download-pcap="downloadPcap"
+            @save-roles="
+              (ft) => {
+                fileType = ft;
+                saveRoles();
+              }
+            "
+            @update:fileType="(v) => (fileType = v)"
+          />
         </v-stepper-content>
       </v-stepper-items>
     </v-stepper>
@@ -429,56 +84,43 @@
 </template>
 
 <script>
-import NetworkGraph from "../components/NetworkGraph.vue";
-import PieChart from "../components/PieChart.vue";
-import ElbowChart from "../components/elbowChart.vue";
+import StepClustering from "@/components/stepper/StepClustering.vue";
+import StepProfiling from "@/components/stepper/StepProfiling.vue";
+import StepResults from "@/components/stepper/StepResults.vue";
 
-/**
- * ## Network Analysis Results Page
- *
- * This component handles the display and interaction for network analysis results,
- * including K-Means clustering visualization (Network Graph, Elbow Chart),
- * and rule-based classification (Profiling). It provides functionality to adjust
- * cluster count, view cluster hierarchy, and download results.
- */
 export default {
   components: {
-    NetworkGraph,
-    ElbowChart,
-    PieChart,
+    StepClustering,
+    StepProfiling,
+    StepResults,
   },
 
   data() {
     return {
-      selectedCluster: null,
-      selectedIps: [],
-      clusters: [],
-      nodes: [],
-      allIps: null,
+      e1: 1,
       filename: "",
       networkGraphKey: 0,
-      e1: 1,
-      graphData: null,
-      error: null,
       loading: true,
-      distanceThreshold: null,
-      noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      graphData: null,
+      allIps: null,
+      selectedCluster: [],
+      selectedIps: [],
       noOfclusters: 4,
+      noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       fileType: "json",
       suggestedClusters: null,
       elbowData: [],
       mostImportantCluster: null,
       clusterHierarchy: [],
-      cnnChartInstance: null,
+      cnnResults: null,
+      cnnLoading: false,
+      cnnError: null,
       headers: [
         { text: "Cluster", value: "cluster" },
         { text: "Score", value: "score" },
         { text: "Total Packets", value: "total_packets" },
         { text: "Unique IPs", value: "unique_ips" },
       ],
-      cnnResults: null,
-      cnnLoading: false,
-      cnnError: null,
       cnnHeaders: [
         { text: "Class Name", value: "class_name" },
         { text: "Count", value: "count" },
@@ -488,6 +130,67 @@ export default {
     };
   },
 
+  computed: {
+    clusteringProps() {
+      return {
+        filename: this.filename,
+        loading: this.loading,
+        graphData: this.graphData,
+        networkGraphKey: this.networkGraphKey,
+        noOfclusters: this.noOfclusters,
+        noOfclustersList: this.noOfclustersList,
+        suggestedClusters: this.suggestedClusters,
+        mostImportantCluster: this.mostImportantCluster,
+        allIps: this.allIps,
+        selectedCluster: this.selectedCluster,
+        elbowData: this.elbowData,
+        clusterHierarchy: this.clusterHierarchy,
+        headers: this.headers,
+        fileType: this.fileType,
+      };
+    },
+
+    profilingProps() {
+      return {
+        filename: this.filename,
+        cnnLoading: this.cnnLoading,
+        cnnResults: this.cnnResults,
+        cnnError: this.cnnError,
+        cnnHeaders: this.cnnHeaders,
+        formattedCnnChartData: this.formattedCnnChartData,
+        selectedIps: this.selectedIps,
+      };
+    },
+
+    resultsProps() {
+      return {
+        filename: this.filename,
+        fileType: this.fileType,
+      };
+    },
+
+    formattedCnnChartData() {
+      if (!this.cnnResults?.rule_based_classification_summary) return [];
+      return this.cnnResults.rule_based_classification_summary.map((item) => ({
+        name: item.class_name,
+        value: item.count,
+      }));
+    },
+  },
+
+  watch: {
+    selectedCluster(newVal) {
+      this.selectedIps = [];
+      if (!newVal?.length || !this.graphData?.nodes) return;
+      const clusterIdx = newVal[0];
+      this.graphData.nodes.forEach((node) => {
+        if (node.category === clusterIdx) {
+          this.selectedIps.push(node.name);
+        }
+      });
+    },
+  },
+
   async created() {
     this.filename = this.$route.query.id;
     await this.askForClusters();
@@ -495,38 +198,36 @@ export default {
   },
 
   methods: {
-    /**
-     * ## Fetches the network analysis data and cluster visualization (Network Graph).
-     *
-     * It uses the current `filename` and `noOfclusters` to request data from the backend.
-     * Updates `graphData` and populates `allIps`.
-     * @returns {Promise<void>}
-     */
     async fetchAnalysis() {
       this.loading = true;
       this.error = null;
 
       try {
-        const params = new URLSearchParams({
+        const payload = {
           file: this.filename,
           clusters: this.noOfclusters || 4,
-          anomaly_threshold: this.anomalyThreshold || 3,
+          anomaly_threshold: 3,
+        };
+
+        const response = await fetch("http://127.0.0.1:5000/clustering", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
 
-        const response = await fetch(
-          `http://127.0.0.1:5000/clustering?${params.toString()}`
-        );
-
         if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`API error: ${response.status} - ${errText}`);
+          const err = await response.text();
+          throw new Error(`API error: ${response.status} – ${err}`);
         }
 
         const data = await response.json();
-        this.clusters = data.clusters;
         this.graphData = data.graphData;
-        if (this.graphData && this.graphData.nodes) {
-          this.allIps = this.graphData.nodes.map((node) => node.category);
+        this.clusters = data.clusters;
+
+        if (this.graphData?.nodes) {
+          this.allIps = [
+            ...new Set(this.graphData.nodes.map((n) => n.category)),
+          ];
         }
       } catch (err) {
         this.error = err.message;
@@ -536,92 +237,78 @@ export default {
       }
     },
 
-    /**
-     * ## Initiates the download of the original PCAP file.
-     *
-     * Constructs a direct download link using the `filename` and triggers the download.
-     * @returns {Promise<void>}
-     */
     async downloadPcap() {
-      const downloadUrl = `http://127.0.0.1:5000/generated_pcaps/${this.filename}`;
+      const url = `http://127.0.0.1:5000/generated_pcaps/${this.filename}`;
       const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute("download", this.filename);
+      link.href = url;
+      link.download = this.filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     },
 
-    /**
-     * ## Saves the current clustering results in the selected file format (.json or .csv).
-     *
-     * Triggers a download of the results file from the backend.
-     * @returns {Promise<void>}
-     */
     async saveResults() {
-      this.error = null;
-      var file =
-        this.filename.substring(0, this.filename.length - 5) +
-        "_clusters." +
-        this.fileType;
-      const downloadUrl = `http://127.0.0.1:5000/save_results?file=${file}&type=${this.fileType}`;
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute(
-        "download",
-        this.filename.replace(/\.[^/.]+$/, "") + "_clusters." + this.fileType
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const payload = {
+          filename: this.filename,
+          results: this.clusters,
+          type: this.fileType,
+        };
+
+        const response = await fetch("http://127.0.0.1:5000/save-results", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || `Save failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (data.download_url) {
+          const link = document.createElement("a");
+          link.href = `http://127.0.0.1:5000${data.download_url}`;
+          link.download = data.saved_file;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } catch (err) {
+        this.error = err.message;
+        console.error(err);
+      }
     },
 
-    /**
-     * ## Fetches suggestions for the optimal number of clusters using the Elbow method.
-     *
-     * Updates `suggestedClusters`, `elbowData`, `clusterHierarchy`, and `mostImportantCluster`.
-     * @returns {Promise<void>}
-     */
     async askForClusters() {
-      this.error = null;
       try {
-        const params = new URLSearchParams({
-          file: this.filename,
-        });
+        const params = new URLSearchParams({ file: this.filename });
         const response = await fetch(
-          `http://127.0.0.1:5000/suggested_clusters?${params.toString()}`
+          `http://127.0.0.1:5000/suggested_clusters?${params}`
         );
         if (!response.ok) {
           const errText = await response.text();
           throw new Error(`API error: ${response.status} - ${errText}`);
         }
         const data = await response.json();
-        this.mostImportantCluster = data.mostImportantCluster;
         this.suggestedClusters = data.elbow_point;
         this.noOfclusters = this.suggestedClusters;
         this.elbowData = data.wcss_data;
+        this.mostImportantCluster = data.mostImportantCluster;
         this.clusterHierarchy = data.cluster_hierarchy;
       } catch (err) {
         this.error = err.message;
-      } finally {
-        this.loading = false;
-        this.networkGraphKey++;
       }
     },
 
-    /**
-     * ## Starts the Rule Based Analysis (Profiling) pipeline on the backend.
-     *
-     * Sends the filename and optionally selected IPs for focused analysis.
-     * Updates `cnnResults`, `cnnLoading`, and handles `cnnError`.
-     * @returns {Promise<void>}
-     */
-    async startCnnAnalysis() {
+    async startAnalysisWithIps({ selectedIps } = {}) {
       this.cnnLoading = true;
       this.cnnError = null;
       this.cnnResults = null;
 
-      const API_URL = "http://127.0.0.1:5000/run_pipeline";
+      if (selectedIps) this.selectedIps = selectedIps;
+
       const payload = {
         pcap_file_path: this.filename,
         model_name: this.filename.replace(/\.[^/.]+$/, ""),
@@ -629,7 +316,7 @@ export default {
       };
 
       try {
-        const response = await fetch(API_URL, {
+        const response = await fetch("http://127.0.0.1:5000/run_pipeline", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -641,74 +328,23 @@ export default {
         }
 
         const data = await response.json();
-        this.cnnResults = data; // Save API response
+        this.cnnResults = data;
       } catch (error) {
         this.cnnError = error.message;
       } finally {
         this.cnnLoading = false;
       }
     },
-    /**
-     * ## Saves the final roles/classification results in the selected file format (.json or .csv).
-     *
-     * Triggers a download of the final roles file from the backend.
-     * @returns {Promise<void>}
-     */
+
     async saveRoles() {
-      this.error = null;
-      var file = this.filename.substring(0, this.filename.length - 5);
-      const downloadUrl = `http://127.0.0.1:5000/save_roles?file=${file}&type=${this.fileType}`;
+      const file = this.filename.substring(0, this.filename.lastIndexOf("."));
+      const url = `http://127.0.0.1:5000/save_roles?file=${file}&type=${this.fileType}`;
       const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute(
-        "download",
-        this.filename.replace(/\.[^/.]+$/, "") + this.fileType
-      );
+      link.href = url;
+      link.download = `${file}.${this.fileType}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    },
-  },
-  /**
-   * Computed properties for derived data.
-   */
-  computed: {
-    /**
-     * ## Formats CNN classification results into a data structure suitable for the PieChart component.
-     * @returns {Array<{name: string, value: number}>} An array of objects with class name and count.
-     */
-    formattedCnnChartData() {
-      if (
-        !this.cnnResults ||
-        !this.cnnResults.rule_based_classification_summary
-      )
-        return [];
-      return this.cnnResults.rule_based_classification_summary.map((item) => ({
-        name: item.class_name,
-        value: item.count,
-      }));
-    },
-  },
-  /**
-   * Watchers for reactive changes.
-   */
-  watch: {
-    /**
-     * Watches the selected cluster (or clusters, expecting only the first one to be relevant).
-     * Populates `selectedIps` with the IPs belonging to the selected cluster category in the graph data.
-     * @param {Array<string>} newCluster The new value of selectedCluster (array of cluster names/indices).
-     * @returns {void}
-     */
-    selectedCluster(newCluster) {
-      this.selectedIps = [];
-
-      const clusterIndex = this.selectedCluster[0];
-
-      this.graphData.nodes.forEach((element) => {
-        if (element.category === clusterIndex) {
-          this.selectedIps.push(element.name);
-        }
-      });
     },
   },
 };
@@ -767,12 +403,10 @@ export default {
   font-size: 1.5rem;
   margin: 0;
 }
-
 .status-text {
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.9rem;
 }
-
 .status-chip {
   font-weight: 700;
   letter-spacing: 1px;
@@ -850,16 +484,10 @@ export default {
   border-radius: 0 0 20px 20px;
 }
 
-.timestamp-cell {
-  font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace;
-  font-size: 0.85rem;
-  color: #64748b;
-}
-
+.timestamp-cell,
 .length-cell {
   font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace;
   font-size: 0.85rem;
-  color: #059669;
 }
 
 .waiting-state {
@@ -867,18 +495,17 @@ export default {
   color: #64748b;
   border-radius: 0 0 20px 20px;
 }
-
 .waiting-title {
   color: #1e40af;
   font-weight: 700;
 }
-
 .waiting-subtitle {
   color: #64748b;
   font-weight: 500;
 }
 
-.raw-data {
+.raw-data,
+.message-content {
   background: #f8fafc;
   padding: 12px;
   border-radius: 8px;
@@ -888,13 +515,5 @@ export default {
   color: #1e293b;
   white-space: pre-wrap;
   word-break: break-all;
-}
-.message-content {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace;
-  font-size: 0.85rem;
-  color: #1e293b;
 }
 </style>
