@@ -40,7 +40,7 @@ This project provides a full-featured backend service for **network traffic anal
 ### **Developer-friendly**
 
 - Built with **Flask**, **Scapy**, **Pandas**, and custom analysis modules
-- Automatic Swagger UI available at: 👉 **`/apidocs/`**
+- Automatic Swagger UI available at: **`/apidocs/`**
 
 ---
 
