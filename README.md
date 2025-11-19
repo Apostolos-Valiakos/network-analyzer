@@ -63,8 +63,8 @@ server/
 ### 1. Clone the repository
 
 ```bash
-git clone <repo-url>
-cd <repo>
+git clone https://github.com/Apostolos-Valiakos/network-analyzer
+cd network-analyzer
 ```
 
 ### 2. Install dependencies
