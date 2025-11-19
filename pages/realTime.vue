@@ -1,16 +1,14 @@
 <template>
   <div class="futuristic-light-container">
-    <!-- Snackbar for all user notifications -->
     <v-snackbar v-model="snackbar" :color="snackbarType" timeout="3000">
       {{ snackbarText }}
       <template v-slot:actions>
-        <v-btn color="white" variant="text" @click="snackbar = false"
-          >Close</v-btn
-        >
+        <v-btn color="white" variant="text" @click="snackbar = false">
+          Close
+        </v-btn>
       </template>
     </v-snackbar>
 
-    <!-- Generate PCAP Button and Download Link -->
     <div class="realtime-view">
       <v-btn
         @click="stopCaptureAndDownload"
@@ -28,7 +26,6 @@
       </div>
     </div>
 
-    <!-- WebSocket Connection Status Card -->
     <v-card class="status-card mb-6" elevation="0">
       <v-card-text class="pa-4">
         <div class="d-flex align-center justify-space-between">
@@ -37,13 +34,14 @@
               :color="isConnected ? 'success' : 'error'"
               class="mr-3"
               size="28"
-              >{{ isConnected ? "mdi-link" : "mdi-link-off" }}</v-icon
             >
+              {{ isConnected ? "mdi-link" : "mdi-link-off" }}
+            </v-icon>
             <div class="text-h6 font-weight-bold">
               Connection Status:
-              <span :class="isConnected ? 'text-success' : 'text-error'">{{
-                isConnected ? "Connected" : "Disconnected"
-              }}</span>
+              <span :class="isConnected ? 'text-success' : 'text-error'">
+                {{ isConnected ? "Connected" : "Disconnected" }}
+              </span>
             </div>
           </div>
           <v-btn
@@ -60,7 +58,6 @@
       </v-card-text>
     </v-card>
 
-    <!-- Controls and Metrics -->
     <v-row>
       <v-col cols="12" md="6">
         <v-card class="data-card pa-4" elevation="0">
@@ -168,9 +165,7 @@
       </v-col>
     </v-row>
 
-    <!-- Packet Log + Network Graph Side-by-Side -->
     <v-row class="mt-6">
-      <!-- Packet Log -->
       <v-col cols="12" md="6">
         <v-card class="pa-4 data-card" elevation="0">
           <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
@@ -238,17 +233,17 @@ export default {
   data() {
     return {
       // Configuration
-      wsUrl: "ws://127.0.0.1:5001", // WebSocket Publisher
-      apiUrl: "http://127.0.0.1:5000", // Flask API Server
-      chunkSize: 1000, // Number of packets to send per HTTP chunk
+      wsUrl: "ws://127.0.0.1:5001",
+      apiUrl: "http://127.0.0.1:5000",
+      chunkSize: 1000,
 
       // State
-      client: null, // WebSocket client instance
+      client: null,
       isConnected: false,
       isCapturing: false,
       isGenerating: false,
-      rawPackets: [], // Stores ArrayBuffer/Uint8Array packets (Base64 is NOT stored here)
-      sessionId: null, // Manages the chunked upload session ID
+      rawPackets: [],
+      sessionId: null,
 
       // UI/Metrics
       snackbar: false,
@@ -256,8 +251,8 @@ export default {
       snackbarType: "info",
       packetsLastSecond: 0,
       packetsPerSecond: 0,
-      lastPackets: [], // For display log
-      totalDataSize: 0, // In bytes
+      lastPackets: [],
+      totalDataSize: 0,
       filename: null,
       downloadLink: null,
       reconnectInterval: null,
@@ -278,11 +273,9 @@ export default {
     },
   },
   mounted() {
-    //  // Start connection attempt on mount - currently commented out
     // this.connect();
   },
   beforeDestroy() {
-    // Clean up interval and close connection
     clearInterval(this.reconnectInterval);
     if (this.client) {
       this.client.close();
@@ -593,10 +586,9 @@ export default {
       const MAX_RETRIES = 3;
       let attempt = 0;
 
-      // The chunk already contains Base64 strings, so we send it directly
       const payload = {
         session_id: this.sessionId,
-        packets: chunk, // Chunk of Base64 strings
+        packets: chunk,
         is_final_chunk: isFinalChunk,
       };
 
@@ -633,7 +625,6 @@ export default {
               `Failed to process chunk ${chunkIndex + 1}: ${error.message}`
             );
           }
-          // Exponential backoff
           await new Promise((resolve) =>
             setTimeout(resolve, 1000 * Math.pow(2, attempt))
           );
@@ -690,7 +681,6 @@ export default {
         this.showSnackbar(`PCAP Generation Failed: ${error.message}`, "error");
       } finally {
         this.isGenerating = false;
-        // User must clear the buffer manually
       }
     },
     /**
@@ -708,7 +698,6 @@ export default {
 </script>
 
 <style scoped>
-/* Basic styling for the futuristic theme */
 .futuristic-light-container {
   max-width: 1200px;
   margin: 0 auto;
