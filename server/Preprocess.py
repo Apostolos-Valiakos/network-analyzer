@@ -122,7 +122,7 @@ class PacketProcessor:
         if packets is None:
             packets = get_cached_packets(self.pcap_file)
             if packets is None:
-                print(f"❌ Failed to load packets for {self.pcap_file}")
+                print(f"Failed to load packets for {self.pcap_file}")
                 return self.extracted_data, self.ip_roles
 
         for idx, pkt_dict in enumerate(packets):
@@ -130,10 +130,10 @@ class PacketProcessor:
                 self._process_packet(pkt_dict)
             except Exception as e:
                 # Catch-all safety net for unexpected parser errors
-                print(f"⚠️ Error on packet #{idx}, skipping. Details: {e}")
+                print(f"Error on packet #{idx}, skipping. Details: {e}")
                 continue
 
-        print(f"✅ Finished parsing {self.pcap_file}")
+        print(f"Finished parsing {self.pcap_file}")
         return self.extracted_data, self.ip_roles
 
 ##
@@ -154,7 +154,6 @@ class FeatureEngineer:
         self.ip_sequence_map = []
         self.feature_columns = ['timestamp', 'packet_len', 'protocol_encoded']
         
-        # 👇 CORRECTION: Use separate encoders for protocol features and the final y labels
         self.protocol_encoder = LabelEncoder()
         self.label_encoder = LabelEncoder()
 
@@ -514,12 +513,12 @@ def save_summary_results(rule_based_summary, pcap_file_path, model_name):
         
         # Save as CSV
         df_summary.to_csv(csv_file, index=False)
-        print(f"✅ Saved rule-based summary to {csv_file}")
+        print(f"Saved rule-based summary to {csv_file}")
         
         # Save as JSON
         with open(json_file, 'w') as f:
             json.dump(rule_based_summary, f, indent=4)
-        print(f"✅ Saved rule-based summary to {json_file}")
+        print(f"Saved rule-based summary to {json_file}")
         
     except Exception as e:
-        print(f"❌ Error saving summary results: {e}")
+        print(f"Error saving summary results: {e}")

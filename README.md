@@ -1,69 +1,199 @@
-# freflix
+# Network Traffic Analysis & PCAP Generation Service
 
-## Build Setup
+**Flask API for uploading, analyzing, generating, and processing PCAP files**
 
-```bash
-# install dependencies
-$ npm install
+This project provides a full-featured backend service for **network traffic analysis**, **PCAP ingestion & generation**, **role classification**, **UE session extraction**, **clustering**, and **automated packet-capture pipelines**. It exposes a REST API with Swagger documentation and integrates several analytical modules to process packet captures efficiently.
 
-# serve with hot reload at localhost:3000
-$ npm run dev
+---
 
-# build for production and launch server
-$ npm run build
-$ npm run start
+## Features
 
-# generate static project
-$ npm run generate
+### **PCAP Handling**
+
+- Upload PCAP files (`/analyze`)
+- Analyze saved/generated PCAPs
+- Stream packets in Base64 and assemble into PCAP (`/save-pcap`)
+- Download generated PCAP files
+
+### **Network Analysis**
+
+- Total packet statistics
+- IP protocol breakdown
+- Network conversation graph (JSON)
+- UE session extraction
+- Role assessment (rule-based + ML)
+- Machine Learning IP role classification pipeline
+
+### **Clustering & Anomaly Detection**
+
+- Agglomerative clustering on PCAPs
+- Elbow method for optimal cluster suggestion
+- Cluster hierarchy & importance scoring
+- Export clustering results to JSON/CSV
+
+### **Automated Pipeline**
+
+- Fully automated PCAP analysis (`/automated-analysis`)
+- Long-running WebSocket-based sniffing pipeline (`/start-analysis-from-websocket`)
+- Background capture + analysis + result export
+
+### **Developer-friendly**
+
+- Built with **Flask**, **Scapy**, **Pandas**, and custom analysis modules
+- Automatic Swagger UI available at: 👉 **`/apidocs/`**
+
+---
+
+## Project Structure
+
+```
+server/
+├── uploads/              # Temporary uploaded user files
+├── generated_pcaps/      # PCAP files created from streamed packets
+├── cluster_analysis/     # Stored clustering results (json/csv)
+├── results/              # ML pipeline results
+├── app.py                # Main Flask server
+└── analysis modules...   # pcap_analysis, ueAnalysis, etc.
 ```
 
-For detailed explanation on how things work, check out the [documentation](https://nuxtjs.org).
+---
 
-## Special Directories
+## Installation
 
-You can create the following extra directories, some of which have special behaviors. Only `pages` is required; you can delete them if you don't want to use their functionality.
+### 1. Clone the repository
 
-### `assets`
+```bash
+git clone <repo-url>
+cd <repo>
+```
 
-The assets directory contains your uncompiled assets such as Stylus or Sass files, images, or fonts.
+### 2. Install dependencies
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/assets).
+```bash
+pip install -r requirements.txt
+```
 
-### `components`
+### 3. Run the server
 
-The components directory contains your Vue.js components. Components make up the different parts of your page and can be reused and imported into your pages, layouts and even other components.
+```bash
+python app.py
+```
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/components).
+Server starts at:
 
-### `layouts`
+```
+http://127.0.0.1:5000
+```
 
-Layouts are a great help when you want to change the look and feel of your Nuxt app, whether you want to include a sidebar or have distinct layouts for mobile and desktop.
+Swagger Docs:
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/layouts).
+```
+http://127.0.0.1:5000/apidocs/
+```
 
+---
 
-### `pages`
+## Environment Variables
 
-This directory contains your application views and routes. Nuxt will read all the `*.vue` files inside this directory and setup Vue Router automatically.
+| Variable             | Description                   | Default                  |
+| -------------------- | ----------------------------- | ------------------------ |
+| `PCAP_OUTPUT_DIR`    | Directory for generated PCAPs | `server/generated_pcaps` |
+| `MAX_CONTENT_LENGTH` | Max upload size               | `1GB`                    |
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/get-started/routing).
+```bash
+export PCAP_OUTPUT_DIR="mydir/"
+```
 
-### `plugins`
+---
 
-The plugins directory contains JavaScript plugins that you want to run before instantiating the root Vue.js Application. This is the place to add Vue plugins and to inject functions or constants. Every time you need to use `Vue.use()`, you should create a file in `plugins/` and add its path to plugins in `nuxt.config.js`.
+## API Overview
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/plugins).
+### **Upload & Analyze PCAP**
 
-### `static`
+`POST /analyze` – Protocol analysis, conversation graph, UE sessions
 
-This directory contains your static files. Each file inside this directory is mapped to `/`.
+### **Streamed PCAP Assembly**
 
-Example: `/static/robots.txt` is mapped as `/robots.txt`.
+`POST /save-pcap` – Send Base64 packet chunks incrementally
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/static).
+### **Download Assembled PCAP**
 
-### `store`
+`GET /generated_pcaps/<filename>`
 
-This directory contains your Vuex store files. Creating a file in this directory automatically activates Vuex.
+### **Clustering**
 
-More information about the usage of this directory in [the documentation](https://nuxtjs.org/docs/2.x/directory-structure/store).
+`POST /clustering` – Run agglomerative clustering
+`GET /suggested_clusters` – Elbow method
+`POST /save-results` – Save clustering output
+
+### **Machine Learning Role Classification**
+
+`POST /run_pipeline`
+
+### **Automated end-to-end pipeline**
+
+`POST /automated-analysis`
+
+### **WebSocket Packet Capture**
+
+`POST /start-analysis-from-websocket`
+
+---
+
+## Example: Upload & Analyze
+
+```bash
+curl -X POST http://127.0.0.1:5000/analyze \
+  -F "file=@capture.pcap"
+```
+
+---
+
+## Dependencies / External Modules
+
+- `pcap_analysis` – Packet parsing & statistics
+- `ueAnalysis` – UE session extraction
+- `role_assessment` – Rule-based IP role detection
+- `Preprocess` – ML preprocessing
+- `agglomerative_clustering` – Clustering engine
+- `graph_builder` – Conversation graph
+- `connectToWebsocket` – WebSocket capture
+
+---
+
+# Vue Frontend – Capabilities Overview
+
+The frontend provides a clean, modern, and minimalistic interface for interacting with the network traffic analysis backend. It is built using Vue.js and TailwindCSS.
+
+## Frontend Capabilities
+
+### **1. PCAP File Upload**
+
+- Users can select and upload `.pcap` files directly from the browser.
+- Input validation ensures only valid PCAPs can be analyzed.
+
+### **2. Trigger Backend Network Analysis**
+
+- A single **Analyze** button sends the uploaded file to the `/analyze` endpoint.
+- Displays a loading state while the server processes the PCAP.
+
+### **3. Display of Analysis Results**
+
+Once the backend responds, the frontend displays:
+
+- **Total packets** processed
+- **IP protocol statistics** (TCP/UDP/ICMP breakdown, etc.)
+- **UE session list** extracted from the PCAP
+
+All results are shown in a clean, structured layout.
+
+### **4. Download Generated PCAP**
+
+- A **Download PCAP** button retrieves the newly assembled/generated PCAP created by the backend.
+- Uses a direct link to the `/generated_pcaps/<filename>` endpoint.
+
+### **5. Responsive & Accessible UI**
+
+- Fully responsive layout using Tailwind CSS
+- Dark mode theme (gray + purple accent)
+- Accessible buttons, clean spacing, readable typography
