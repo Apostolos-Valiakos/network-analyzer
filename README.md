@@ -140,15 +140,6 @@ export PCAP_OUTPUT_DIR="mydir/"
 
 ---
 
-## Example: Upload & Analyze
-
-```bash
-curl -X POST http://127.0.0.1:5000/analyze \
-  -F "file=@capture.pcap"
-```
-
----
-
 ## Dependencies / External Modules
 
 - `pcap_analysis` – Packet parsing & statistics
