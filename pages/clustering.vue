@@ -18,7 +18,7 @@
         to download the <b>.pcap</b> file
       </div>
       <p class="text-subtitle-1" v-if="e1 === 1">
-        Using the elbow method the suggested number of clusters is:
+        Using <b>graph modularity</b>, the suggested number of clusters is:
         <b class="text-primary">{{ suggestedClusters }}</b>
       </p>
     </v-card>
@@ -109,16 +109,18 @@ export default {
       noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       fileType: "json",
       suggestedClusters: null,
-      elbowData: [],
+      modularityData: [],
+      bestModularity: null,
       mostImportantCluster: null,
       clusterHierarchy: [],
       cnnResults: null,
       cnnLoading: false,
       cnnError: null,
+      clusters: [],
       headers: [
         { text: "Cluster", value: "cluster" },
         { text: "Score", value: "score" },
-        { text: "Total Packets", value: "total_packets" },
+        { text: "Traffic Score", value: "total_packets" },
         { text: "Unique IPs", value: "unique_ips" },
       ],
       cnnHeaders: [
@@ -143,7 +145,8 @@ export default {
         mostImportantCluster: this.mostImportantCluster,
         allIps: this.allIps,
         selectedCluster: this.selectedCluster,
-        elbowData: this.elbowData,
+        modularityData: this.modularityData,
+        bestModularity: this.bestModularity,
         clusterHierarchy: this.clusterHierarchy,
         headers: this.headers,
         fileType: this.fileType,
@@ -287,14 +290,20 @@ export default {
         const response = await fetch(
           `http://127.0.0.1:5000/suggested_clusters?${params}`
         );
+
         if (!response.ok) {
           const errText = await response.text();
           throw new Error(`API error: ${response.status} - ${errText}`);
         }
+
         const data = await response.json();
-        this.suggestedClusters = data.elbow_point;
-        this.noOfclusters = this.suggestedClusters;
-        this.elbowData = data.wcss_data;
+
+        this.suggestedClusters = data.best_k;
+        this.noOfclusters = data.best_k;
+
+        this.bestModularity = data.best_modularity;
+        this.modularityData = data.modularity_scores;
+
         this.mostImportantCluster = data.mostImportantCluster;
         this.clusterHierarchy = data.cluster_hierarchy;
       } catch (err) {
@@ -417,11 +426,8 @@ export default {
 .messages-card,
 .filter-card,
 .packets-card {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border: 2px solid rgba(59, 130, 246, 0.1);
+  border: 2px solid rgba(59, 130, 246);
   border-radius: 25px !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
-  backdrop-filter: blur(10px);
 }
 
 .card-header {

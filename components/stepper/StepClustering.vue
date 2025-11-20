@@ -8,7 +8,7 @@
       </h3>
 
       <p class="text-subtitle-1 mb-2">
-        Using the elbow method, the suggested number of clusters is:
+        Using the Graph Modularity Method, the suggested number of clusters is:
         <b class="text-primary">{{ suggestedClusters }}</b
         >.
       </p>
@@ -76,7 +76,6 @@
         Continue <v-icon end>mdi-arrow-right</v-icon>
       </v-btn>
     </div>
-
     <!-- ──────── HIERARCHY TABLE ──────── -->
     <v-card class="rounded-xl packets-card mb-8">
       <v-card-title class="card-header">
@@ -90,17 +89,39 @@
         class="packet-table"
         density="compact"
       >
-        <template v-slot:item.cluster="{ item }"
-          ><b>{{ item.cluster }}</b></template
-        >
+        <template v-slot:item.cluster="{ item }">
+          <b>{{ item.cluster }}</b>
+        </template>
         <template v-slot:item.score="{ item }">{{ item.score }}</template>
-        <template v-slot:item.total_packets="{ item }">{{
-          item.total_packets
-        }}</template>
-        <template v-slot:item.unique_ips="{ item }">{{
-          item.unique_ips
-        }}</template>
+        <template v-slot:item.total_packets="{ item }">
+          {{ item.traffic_score }}
+        </template>
+        <template v-slot:item.unique_ips="{ item }">
+          {{ item.unique_partners_sum }}
+        </template>
       </v-data-table>
+      <v-card-text class="text-caption mt-2">
+        <strong>Note:</strong> Each field in the table represents the following:
+        <ul class="mb-0 pl-4">
+          <li><b>Cluster:</b> The ID number of the cluster.</li>
+          <li>
+            <b>Score:</b> Overall importance of the cluster based on both
+            network connectivity and traffic. Higher values indicate more
+            central or active clusters.
+          </li>
+          <li>
+            <b>Total Packets:</b> The traffic volume component for the cluster,
+            calculated as the logarithm of the total packets sent and received.
+            This smooths out large differences so very active clusters do not
+            dominate the score.
+          </li>
+          <li>
+            <b>Unique IPs:</b> The sum of distinct IP addresses that the cluster
+            communicates with. It measures how connected the cluster is within
+            the network.
+          </li>
+        </ul>
+      </v-card-text>
     </v-card>
 
     <!-- ──────── SAVE RESULTS ──────── -->
@@ -124,22 +145,25 @@
     </v-card>
     <v-card class="pa-6 mt-8 rounded-xl connection-card">
       <h4 class="text-subtitle-1 font-weight-bold mb-4 text-primary">
-        <v-icon color="deep-purple-accent-4" class="mr-2"
-          >mdi-chart-line</v-icon
-        >
-        Elbow Method Visualization
+        <v-icon color="deep-purple-accent-4" class="mr-2">
+          mdi-chart-line
+        </v-icon>
+        Cluster Modularity Analysis
       </h4>
-      <ElbowChart v-if="elbowData.length > 1" :elbowData="elbowData" />
+      <ModularityChart
+        v-if="modularityData.length > 1"
+        :modularityData="modularityData"
+      />
     </v-card>
   </div>
 </template>
 
 <script>
 import NetworkGraph from "@/components/NetworkGraph.vue";
-import ElbowChart from "@/components/elbowChart.vue";
+import ModularityChart from "@/components/ModularityChart.vue";
 
 export default {
-  components: { NetworkGraph, ElbowChart },
+  components: { NetworkGraph, ModularityChart },
 
   props: {
     filename: String,
@@ -156,6 +180,9 @@ export default {
     clusterHierarchy: Array,
     headers: Array,
     fileType: String,
+    modularityData: Array,
+    best_k: Number,
+    best_modularity: Number,
   },
 
   emits: [

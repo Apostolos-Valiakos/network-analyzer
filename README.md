@@ -27,7 +27,7 @@ This project provides a full-featured backend service for **network traffic anal
 ### **Clustering & Anomaly Detection**
 
 - Agglomerative clustering on PCAPs
-- Elbow method for optimal cluster suggestion
+- Graph Modularity method for optimal cluster suggestion
 - Cluster hierarchy & importance scoring
 - Export clustering results to JSON/CSV
 
@@ -165,7 +165,7 @@ The frontend provides a clean, modern, and minimalistic interface for interactin
 
 ### **2. Trigger Backend Network Analysis**
 
-- A single **Analyze** button sends the uploaded file to the `/analyze` endpoint.
+- A single **Analyze** button sends the uploaded file to the `/automated-analysis` endpoint.
 - Displays a loading state while the server processes the PCAP.
 
 ### **3. Display of Analysis Results**

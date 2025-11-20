@@ -37,7 +37,15 @@ from pcap_analysis import initialize_analysis
 from ueAnalysis import initialize_analysis_for_ue
 from graph_builder import build_graph_json
 from role_assessment import analyze_packets_and_assign_roles_optimized
-from agglomerative_clustering import analyze_pcap, save_results
+from agglomerative_clustering import (
+    analyze_pcap_for_clustering,
+    extract_features,
+    suggest_clusters_modularity,
+    cluster_nodes,
+    compute_cluster_importance,
+    save_results
+)
+
 from Preprocess import run_ip_role_pipeline
 from connectToWebsocket import convert_tuple_keys_to_str, startWebSocketClient
 
@@ -56,7 +64,7 @@ swagger_template = {
         Supports:
         - File upload & analysis
         - Graph generation
-        - Clustering with elbow method
+        - Clustering with Graph Modularity method
         - Rule-based & ML role profiling
         - Streaming PCAP generation
         """,
@@ -466,12 +474,12 @@ def clustering_analysis():
         return jsonify({"error": "PCAP not found"}), 404
 
     try:
-        result = analyze_pcap(
+        result = analyze_pcap_for_clustering(
             str(filepath),
-            n_clusters=data.get("clusters", 4),
-            distance_threshold=data.get("distance_threshold"),
+            max_clusters=data.get("clusters", 10),
             anomaly_threshold=data.get("anomaly_threshold", 2)
         )
+
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -559,8 +567,8 @@ def get_clustering_result(filename: str):
 @app.route('/suggested_clusters', methods=['GET'])
 def suggested_clusters():
     """
-    Get elbow method cluster suggestion
-    ---
+    Get modularity-based cluster suggestion
+    --- 
     tags:
       - Clustering
     parameters:
@@ -570,12 +578,13 @@ def suggested_clusters():
         required: true
     responses:
       200:
-        description: Elbow analysis
+        description: Modularity analysis
         schema:
           type: object
           properties:
-            wcss_data: {type: array}
-            elbow_point: {type: integer}
+            best_k: {type: integer}
+            best_modularity: {type: number}
+            modularity_scores: {type: array}
             cluster_hierarchy: {type: array}
             mostImportantCluster: {type: integer}
     """
@@ -587,23 +596,21 @@ def suggested_clusters():
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
 
-    from agglomerative_clustering import (
-        extract_features, suggest_clusters_elbow,
-        cluster_nodes, compute_cluster_importance
+    result = analyze_pcap_for_clustering(
+        str(filepath),
+        max_clusters=10,
+        anomaly_threshold=2
     )
 
-    df = extract_features(str(filepath))
-    result = suggest_clusters_elbow(df, max_clusters=10)
-    df_clustered = cluster_nodes(df.copy(), n_clusters=result["elbow_point"] or 4)
-    hierarchy, most_important = compute_cluster_importance(df_clustered)
+    summary = result["clusterSummary"]
 
     return jsonify({
-        "wcss_data": result["wcss_data"],
-        "elbow_point": result["elbow_point"],
-        "cluster_hierarchy": hierarchy,
-        "mostImportantCluster": most_important
+        "best_k": summary["best_k"],
+        "best_modularity": summary["best_modularity"],
+        "modularity_scores": summary["modularity_scores"],   # NEW
+        "cluster_hierarchy": summary["cluster_hierarchy"],
+        "mostImportantCluster": summary["mostImportantCluster"],
     })
-
 
 @app.route('/run_pipeline', methods=['POST'])
 def run_pipeline_endpoint():
@@ -707,7 +714,7 @@ def automated_analysis():
       - General packet stats & protocol breakdown
       - UE session extraction
       - Network conversation graph
-      - Elbow method cluster suggestion
+      - Graph Modularity method cluster suggestion
       - Agglomerative clustering (4 clusters, anomaly_threshold=3)
       - ML-based IP role classification (`run_ip_role_pipeline`)
       
