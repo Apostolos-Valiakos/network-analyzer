@@ -2,15 +2,14 @@
   <v-container class="futuristic-light-container">
     <v-card class="data-card pa-8 mb-6">
       <h1 class="text-h4 text-md-h3 font-weight-black mb-4 primary--text">
-        <v-icon large color="primary" class="mr-3">mdi-chart-network</v-icon>
-        Network Traffic Analysis & Clustering (NET-AC)
+        Network Traffic Analysis & Clustering
       </h1>
       <p class="text-subtitle-1 grey--text text--darken-2 mb-6">
         Welcome to the cutting-edge front-end interface for the
         <strong class="primary--text text--darken-1"
-          >Network Traffic Analysis and PCAP Generation Service</strong
-        >
-        —a powerful toolkit developed by the
+          >Network Traffic Analysis and PCAP Generation Service
+        </strong>
+        a powerful toolkit developed by the
         <strong class="primary--text text--darken-1"
           >University of Thessaly</strong
         >
@@ -18,8 +17,8 @@
       </p>
       <p class="body-1">
         Our platform transforms raw network data (PCAP files) into actionable
-        insights, utilizing a sophisticated blend of data science, machine
-        learning, and advanced network protocol analysis.
+        insights, utilizing a sophisticated blend of data science and advanced
+        network protocol analysis.
       </p>
     </v-card>
 
@@ -70,8 +69,8 @@
                 class="pa-4 body-2 grey--text text--darken-1"
               >
                 Automatically classify and track user equipment (UE) sessions
-                and assign logical roles to IP addresses (e.g., Server, Client,
-                DNS).
+                and assign logical roles to IP addresses (e.g., 5G core, UE,
+                Network Functions).
               </v-expansion-panel-content>
             </v-expansion-panel>
 
@@ -146,9 +145,9 @@
                   >
                 </v-list-item-icon>
                 <v-list-item-content>
-                  <v-list-item-title class="body-2">{{
-                    sub
-                  }}</v-list-item-title>
+                  <v-list-item-title style="text-wrap: pretty" class="body-2">
+                    {{ sub }}
+                  </v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
             </v-list>
@@ -263,7 +262,7 @@ export default {
         icon: "mdi-account-search-outline",
         title: "Intelligent IP Role Assessment",
         description:
-          "We use both rule-based and Machine Learning (ML) models to classify the function of every observed IP address, giving context to your network map. This process helps rapidly differentiate between standard infrastructure (routers, DNS servers) and end-user devices.",
+          "We use a rule-based algorithm to classify the function of every observed IP address, giving context to your network map. This process helps rapidly differentiate between standard infrastructure (5G core, O-RAN components) and end-user devices.",
       },
       {
         icon: "mdi-cellphone-wireless",
