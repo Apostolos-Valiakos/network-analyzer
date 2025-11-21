@@ -12,9 +12,11 @@
 
     <!-- Navigation links -->
     <router-link to="/analyze" class="text-none">
-      <v-btn text>Analyze Network</v-btn>
+      <v-btn text>Analyze File</v-btn>
     </router-link>
-
+    <router-link to="/realTime" class="text-none">
+      <v-btn text>Real Time Analysis</v-btn>
+    </router-link>
     <router-link to="/about" class="text-none">
       <v-btn text>About</v-btn>
     </router-link>

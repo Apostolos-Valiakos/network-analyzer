@@ -3,23 +3,15 @@
     <v-container>
       <v-row>
         <!-- Column 1 -->
-        <v-col cols="12" sm="4" class="text-center">
+        <v-col cols="12" sm="6" class="text-center">
           <h4>Site</h4>
           <router-link to="/">Home</router-link><br />
           <router-link to="/about">About</router-link><br />
           <router-link to="/contact">Contact</router-link>
         </v-col>
 
-        <!-- Column 2 -->
-        <v-col cols="12" sm="4" class="text-center">
-          <h4>Resources</h4>
-          <router-link to="/blog">Blog</router-link><br />
-          <router-link to="/faq">FAQ</router-link><br />
-          <router-link to="/support">Support</router-link>
-        </v-col>
-
         <!-- Column 3 -->
-        <v-col cols="12" sm="4" class="text-center">
+        <v-col cols="12" sm="6" class="text-center">
           <h4>Legal</h4>
           <router-link to="/terms">Terms</router-link><br />
           <router-link to="/privacy">Privacy</router-link><br />
