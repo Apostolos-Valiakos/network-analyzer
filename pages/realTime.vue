@@ -52,22 +52,65 @@
             >Connect</v-btn
           >
         </div>
-        <div class="mt-2 text-caption text-medium-emphasis">
-          WebSocket Publisher: {{ wsUrl }}
-        </div>
+        <v-text-field
+          v-model="wsUrl"
+          label="WebSocket URL"
+          :disabled="isConnected"
+          density="compact"
+          variant="outlined"
+          class="mt-4"
+          prepend-icon="mdi-web"
+          hide-details
+        ></v-text-field>
       </v-card-text>
     </v-card>
-
     <v-row>
       <v-col cols="12" md="6">
         <v-card class="data-card pa-4" elevation="0">
           <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
             Capture Controls
           </v-card-title>
+
+          <div class="d-flex align-center mb-4 gap-3">
+            <v-btn
+              @click="getInterfaces"
+              :disabled="!isConnected"
+              color="info"
+              variant="flat"
+              prepend-icon="mdi-network-outline"
+              class="control-btn"
+            >
+              Get Interfaces
+            </v-btn>
+            <v-select
+              v-model="selectedInterface"
+              :items="availableInterfaces"
+              label="Select Interface"
+              density="compact"
+              variant="outlined"
+              :disabled="
+                !isConnected || isCapturing || availableInterfaces.length === 0
+              "
+              class="flex-grow-1"
+              hide-details
+              @update:model-value="setCaptureInterface"
+            ></v-select>
+          </div>
+          <div
+            v-if="currentInterface"
+            class="mb-4 text-caption text-medium-emphasis"
+          >
+            Current Server Interface: <strong>{{ currentInterface }}</strong>
+          </div>
+          <div v-else class="mb-4 text-caption text-warning">
+            Interface not set. Get interfaces and select one.
+          </div>
           <div class="controls-section">
             <v-btn
               @click="startCapture"
-              :disabled="!isConnected || isCapturing || isGenerating"
+              :disabled="
+                !isConnected || isCapturing || isGenerating || !currentInterface
+              "
               color="green"
               variant="flat"
               class="control-btn"
@@ -194,7 +237,6 @@
         </v-card>
       </v-col>
 
-      <!-- Network Graph -->
       <v-col cols="12" md="6">
         <v-card class="pa-4 data-card" elevation="0">
           <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
@@ -202,7 +244,6 @@
           </v-card-title>
 
           <v-card-text class="pa-4 text-center">
-            <!-- Skeleton while loading -->
             <v-skeleton-loader
               v-if="isGraphLoading"
               type="image"
@@ -211,7 +252,6 @@
               height="300"
             />
 
-            <!-- NetworkGraph rendered when ready -->
             <NetworkGraph
               v-if="graphData && !isGraphLoading"
               :graphData="graphData"
@@ -233,9 +273,14 @@ export default {
   data() {
     return {
       // Configuration
-      wsUrl: "ws://127.0.0.1:5001",
+      wsUrl: "ws://127.0.0.1:5001", // Default value, now user-editable
       apiUrl: "http://127.0.0.1:5000",
       chunkSize: 1000,
+
+      // Interface State
+      availableInterfaces: [], // List of interface names
+      selectedInterface: null, // User-selected interface name
+      currentInterface: null, // Interface currently configured on the server
 
       // State
       client: null,
@@ -386,7 +431,7 @@ export default {
       console.log(`Attempting to connect to ${this.wsUrl}...`);
       this.client = new WebSocket(this.wsUrl);
       this.isConnected = false;
-      this.showSnackbar("Connecting to WebSocket Publisher...", "info");
+      this.showSnackbar(`Connecting to ${this.wsUrl}...`, "info");
 
       this.client.onopen = () => {
         this.isConnected = true;
@@ -397,8 +442,8 @@ export default {
           clearInterval(this.reconnectInterval);
           this.reconnectInterval = null;
         }
-        // Send START_CAPTURE command immediately upon connection to resume sniffer
-        this.sendControlCommand("START_CAPTURE");
+        // NEW: Request interfaces immediately after connecting
+        this.getInterfaces();
       };
 
       this.client.onerror = (error) => {
@@ -442,7 +487,36 @@ export default {
             this.isCapturing = false;
             this.showSnackbar("Packet capture paused.", "warning");
           }
+          // NEW: Handle interface update from server
+          if (msgObj.current_interface) {
+            this.currentInterface = msgObj.current_interface;
+            this.selectedInterface = msgObj.current_interface;
+            // Show success message if the interface was just set
+            if (
+              msgObj.status &&
+              msgObj.status.includes("Capture interface set")
+            ) {
+              this.showSnackbar(msgObj.status, "success");
+            }
+          }
+          if (msgObj.type === "ERROR") {
+            this.showSnackbar(`Server Error: ${msgObj.message}`, "error");
+          }
           console.log("Status update:", msgObj.status);
+          return;
+        }
+
+        // NEW: Handle INTERFACE_LIST messages
+        if (msgObj.type === "INTERFACE_LIST" && msgObj.interfaces) {
+          const names = Object.keys(msgObj.interfaces);
+          this.availableInterfaces = names;
+          // Set the current interface if provided, otherwise default to the first
+          this.currentInterface = msgObj.current_interface || names[0];
+          this.selectedInterface = this.currentInterface; // Select it in the dropdown
+          this.showSnackbar(
+            `Found ${names.length} network interfaces.`,
+            "info"
+          );
           return;
         }
 
@@ -454,7 +528,6 @@ export default {
         ) {
           const base64Packet = msgObj.packet;
           try {
-            // ... (Packet processing logic remains the same)
             const binaryString = atob(base64Packet);
             const len = binaryString.length;
 
@@ -497,6 +570,53 @@ export default {
     },
 
     /**
+     * Sends the command to the server to list all available network interfaces.
+     * The response is handled in client.onmessage (INTERFACE_LIST).
+     * @returns {void}
+     */
+    getInterfaces() {
+      this.sendControlCommand("GET_INTERFACES");
+      this.showSnackbar("Requesting network interfaces...", "info");
+    },
+
+    /**
+     * Sends the selected interface name to the server for configuration.
+     * Requires capture to be stopped first.
+     * @returns {void}
+     */
+    setCaptureInterface() {
+      if (
+        !this.selectedInterface ||
+        this.selectedInterface === this.currentInterface
+      )
+        return;
+
+      if (this.isCapturing) {
+        this.showSnackbar(
+          "Please STOP the capture before changing the interface.",
+          "error"
+        );
+        // Revert the dropdown selection to the current interface
+        this.selectedInterface = this.currentInterface;
+        return;
+      }
+
+      // Send the SET_INTERFACE command with the selected interface name
+      if (this.client && this.client.readyState === WebSocket.OPEN) {
+        const payload = JSON.stringify({
+          command: "SET_INTERFACE",
+          interface: this.selectedInterface,
+        });
+        this.client.send(payload);
+        console.log(`Sent command: SET_INTERFACE to ${this.selectedInterface}`);
+        this.showSnackbar(
+          `Attempting to set interface to ${this.selectedInterface}...`,
+          "warning"
+        );
+      }
+    },
+
+    /**
      * Sends a control command (e.g., START_CAPTURE, STOP_CAPTURE) to the WebSocket server.
      * @param {string} command - The command string to send.
      * @returns {void}
@@ -519,6 +639,14 @@ export default {
      * @returns {void}
      */
     startCapture() {
+      // Prevent starting if no interface is set
+      if (!this.currentInterface) {
+        this.showSnackbar(
+          "Please select a network interface first.",
+          "warning"
+        );
+        return;
+      }
       this.sendControlCommand("START_CAPTURE");
     },
 
@@ -780,5 +908,10 @@ export default {
 }
 .font-mono {
   font-family: monospace;
+}
+
+/* NEW: Style for gap in interface controls */
+.gap-3 {
+  gap: 12px;
 }
 </style>
