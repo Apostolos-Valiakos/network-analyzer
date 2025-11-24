@@ -6,13 +6,13 @@
       </h1>
       <p class="text-subtitle-1 grey--text text--darken-2 mb-6">
         Welcome to the cutting-edge front-end interface for the
-        <strong class="primary--text text--darken-1"
-          >Network Traffic Analysis and PCAP Generation Service
+        <strong class="primary--text text--darken-1">
+          Network Traffic Analysis and PCAP Generation Service
         </strong>
         a powerful toolkit developed by the
-        <strong class="primary--text text--darken-1"
-          >University of Thessaly</strong
-        >
+        <strong class="primary--text text--darken-1">
+          University of Thessaly
+        </strong>
         for deep network forensics and intelligence.
       </p>
       <p class="body-1">
@@ -196,9 +196,9 @@
               </td>
               <td>{{ item.function }}</td>
               <td>
-                <span class="font-mono primary--text text--darken-1">{{
-                  item.technologies
-                }}</span>
+                <span class="font-mono primary--text text--darken-1">
+                  {{ item.technologies }}
+                </span>
               </td>
             </tr>
           </tbody>
@@ -314,7 +314,6 @@ export default {
 </script>
 
 <style scoped>
-/* The provided futuristic-light-container and other styles should be here */
 .futuristic-light-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -399,9 +398,8 @@ export default {
   font-family: monospace;
 }
 
-/* Additional styles for this component to match the theme */
 .primary--text {
-  color: #1e40af !important; /* Ensure primary color fits the theme */
+  color: #1e40af !important;
 }
 
 .transparent-list {
@@ -413,11 +411,11 @@ export default {
 }
 
 .transparent-expansion-panels .v-expansion-panel {
-  background-color: white !important; /* Match data-card background */
-  border: 1px solid #e2e8f0; /* Match data-card border */
+  background-color: white !important;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
-  box-shadow: none; /* Remove default shadow */
-  overflow: hidden; /* Ensure border-radius is applied */
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .transparent-expansion-panels .v-expansion-panel-header {
@@ -430,18 +428,18 @@ export default {
 }
 
 .transparent-table {
-  background-color: white !important; /* Match data-card */
+  background-color: white !important;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  overflow: hidden; /* For rounded corners */
+  overflow: hidden;
 }
 
 .transparent-table th,
 .transparent-table td {
-  border-bottom: 1px solid #f0f4f8 !important; /* Lighter divider */
+  border-bottom: 1px solid #f0f4f8 !important;
 }
 
 .transparent-table thead th {
-  background-color: #f7faff !important; /* Light header background */
+  background-color: #f7faff !important;
 }
 </style>

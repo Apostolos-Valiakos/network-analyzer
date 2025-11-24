@@ -43,7 +43,7 @@ from agglomerative_clustering import (
     suggest_clusters_modularity,
     cluster_nodes,
     compute_cluster_importance,
-    save_results
+    save_results,
 )
 
 from Preprocess import run_ip_role_pipeline
@@ -69,15 +69,12 @@ swagger_template = {
         - Streaming PCAP generation
         """,
         "version": "1.0.0",
-        "contact": {
-            "name": "Apostolos Valiakos",
-            "email": "avaliakos@uth.gr"
-        }
+        "contact": {"name": "Apostolos Valiakos", "email": "avaliakos@uth.gr"},
     },
     "host": "127.0.0.1:5000",
     "basePath": "/",
     "schemes": ["http"],
-    "securityDefinitions": {}
+    "securityDefinitions": {},
 }
 
 swagger_config = {
@@ -92,7 +89,7 @@ swagger_config = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/apidocs/"
+    "specs_route": "/apidocs/",
 }
 
 swagger = Swagger(app, template=swagger_template, config=swagger_config)
@@ -102,7 +99,7 @@ CONFIG = {
     "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024)),
 }
 
-UPLOAD_FOLDER = 'server/uploads'
+UPLOAD_FOLDER = "server/uploads"
 PCAP_GEN_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_pcaps")
 CLUSTERING_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "cluster_analysis")
 RESULTS_OUTPUT_DIR = os.path.join(os.getcwd(), "server", "results")
@@ -117,7 +114,9 @@ buffer_lock = Lock()
 logger = logging.getLogger(__name__)
 
 
-def save_streamed_packets_as_pcap(session_id: str, packets_base64: List[str], is_final_chunk: bool) -> Tuple[bool, str, Optional[str]]:
+def save_streamed_packets_as_pcap(
+    session_id: str, packets_base64: List[str], is_final_chunk: bool
+) -> Tuple[bool, str, Optional[str]]:
     """
     Buffer and assemble Base64-encoded packet chunks into a PCAP file.
 
@@ -131,15 +130,18 @@ def save_streamed_packets_as_pcap(session_id: str, packets_base64: List[str], is
 
         with buffer_lock:
             if session_id not in TEMP_PACKET_BUFFERS:
-                TEMP_PACKET_BUFFERS[session_id] = {'data': [], 'timestamp': datetime.now()}
-            TEMP_PACKET_BUFFERS[session_id]['data'].extend(raw_packets)
-            TEMP_PACKET_BUFFERS[session_id]['timestamp'] = datetime.now()
+                TEMP_PACKET_BUFFERS[session_id] = {
+                    "data": [],
+                    "timestamp": datetime.now(),
+                }
+            TEMP_PACKET_BUFFERS[session_id]["data"].extend(raw_packets)
+            TEMP_PACKET_BUFFERS[session_id]["timestamp"] = datetime.now()
 
         message = f"Chunk received. Buffer size: {len(TEMP_PACKET_BUFFERS[session_id]['data'])} packets."
         filename = None
 
         if is_final_chunk:
-            final_packets = TEMP_PACKET_BUFFERS[session_id]['data']
+            final_packets = TEMP_PACKET_BUFFERS[session_id]["data"]
             timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"capture_{timestamp_str}_{session_id[:6]}.pcap"
             filepath = Path(PCAP_GEN_OUTPUT_DIR) / filename
@@ -160,7 +162,7 @@ def save_streamed_packets_as_pcap(session_id: str, packets_base64: List[str], is
         return False, f"Server error: {e}", None
 
 
-@app.route('/analyze', methods=['POST'])
+@app.route("/analyze", methods=["POST"])
 def analyze():
     """
     Upload and analyze a PCAP file
@@ -197,44 +199,49 @@ def analyze():
       500:
         description: Analysis failed
     """
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
 
-    file = request.files['file']
+    file = request.files["file"]
     if not file.filename:
-        return jsonify({'error': 'No file selected'}), 400
-    if not file.filename.lower().endswith('.pcap'):
-        return jsonify({'error': 'File must be .pcap'}), 400
+        return jsonify({"error": "No file selected"}), 400
+    if not file.filename.lower().endswith(".pcap"):
+        return jsonify({"error": "File must be .pcap"}), 400
 
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
     # UE Session Analysis
     ue_sessions_json = initialize_analysis_for_ue(filepath)
-    with open(os.path.join(UPLOAD_FOLDER, 'ue_sessions.json'), 'w') as f:
+    with open(os.path.join(UPLOAD_FOLDER, "ue_sessions.json"), "w") as f:
         json.dump(ue_sessions_json, f, indent=2)
 
     # General Analysis
     analysis_result, error = initialize_analysis(filepath)
     if error:
-        return jsonify({'error': f'Analysis failed: {error}'}), 500
+        return jsonify({"error": f"Analysis failed: {error}"}), 500
 
     # Graph
-    graph_json = build_graph_json(analysis_result['conversations'])
-    with open(os.path.join(UPLOAD_FOLDER, 'conversations.json'), 'w') as f:
+    graph_json = build_graph_json(analysis_result["conversations"])
+    with open(os.path.join(UPLOAD_FOLDER, "conversations.json"), "w") as f:
         json.dump(graph_json, f, indent=2)
 
-    return jsonify({
-        'message': 'Analysis successful',
-        'analysis': {
-            'total_packets': analysis_result['total_packets'],
-            'ip_protocols': analysis_result['ip_protocols'],
-            'graph': graph_json
-        }
-    }), 200
+    return (
+        jsonify(
+            {
+                "message": "Analysis successful",
+                "analysis": {
+                    "total_packets": analysis_result["total_packets"],
+                    "ip_protocols": analysis_result["ip_protocols"],
+                    "graph": graph_json,
+                },
+            }
+        ),
+        200,
+    )
 
 
-@app.route('/conversations.json')
+@app.route("/conversations.json")
 def get_conversations():
     """
     Get network conversation graph (JSON)
@@ -251,10 +258,10 @@ def get_conversations():
       404:
         description: File not found
     """
-    return send_from_directory(UPLOAD_FOLDER, 'conversations.json')
+    return send_from_directory(UPLOAD_FOLDER, "conversations.json")
 
 
-@app.route('/ue_sessions')
+@app.route("/ue_sessions")
 def get_ue_sessions():
     """
     Get UE session analysis results
@@ -267,10 +274,10 @@ def get_ue_sessions():
       404:
         description: Not analyzed yet
     """
-    return send_from_directory(UPLOAD_FOLDER, 'ue_sessions.json')
+    return send_from_directory(UPLOAD_FOLDER, "ue_sessions.json")
 
 
-@app.route('/role_assessment')
+@app.route("/role_assessment")
 def get_role_assessment_data():
     """
     Run IP role assessment and return results
@@ -285,19 +292,19 @@ def get_role_assessment_data():
       500:
         description: IO error
     """
-    input_file = os.path.join(UPLOAD_FOLDER, 'all_packets.json')
-    output_file = os.path.join(UPLOAD_FOLDER, 'role_assessment.json')
+    input_file = os.path.join(UPLOAD_FOLDER, "all_packets.json")
+    output_file = os.path.join(UPLOAD_FOLDER, "role_assessment.json")
 
     if not os.path.exists(input_file):
-        return jsonify({'error': 'Run /analyze first'}), 404
+        return jsonify({"error": "Run /analyze first"}), 404
 
     roles = analyze_packets_and_assign_roles_optimized(input_file)
     try:
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(roles, f, indent=2)
-        return send_from_directory(UPLOAD_FOLDER, 'role_assessment.json')
+        return send_from_directory(UPLOAD_FOLDER, "role_assessment.json")
     except Exception as e:
-        return jsonify({'error': f'Write failed: {e}'}), 500
+        return jsonify({"error": f"Write failed: {e}"}), 500
 
 
 @app.route("/save-pcap", methods=["POST"])
@@ -355,7 +362,9 @@ def save_pcap_stream():
     if not session_id or not isinstance(packets, list):
         return jsonify({"error": "Missing session_id or packets"}), 400
 
-    success, msg, filename = save_streamed_packets_as_pcap(session_id, packets, is_final)
+    success, msg, filename = save_streamed_packets_as_pcap(
+        session_id, packets, is_final
+    )
     status = 200 if success else 500
     return jsonify({"success": success, "message": msg, "filename": filename}), status
 
@@ -389,7 +398,7 @@ def get_generated_pcap(filename: str):
     return send_file(str(safe_path), as_attachment=True)
 
 
-@app.route('/analyze-saved-pcap/<path:filename>', methods=['GET'])
+@app.route("/analyze-saved-pcap/<path:filename>", methods=["GET"])
 def analyze_saved_pcap(filename: str):
     """
     Analyze an existing PCAP file from generated_pcaps
@@ -409,24 +418,29 @@ def analyze_saved_pcap(filename: str):
     """
     filepath = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
     if not filepath.exists():
-        return jsonify({'error': 'File not found'}), 404
+        return jsonify({"error": "File not found"}), 404
 
     result, error = initialize_analysis(str(filepath))
     if error:
-        return jsonify({'error': error}), 500
+        return jsonify({"error": error}), 500
 
-    graph = build_graph_json(result['conversations'])
-    return jsonify({
-        'message': 'Analysis successful',
-        'analysis': {
-            'total_packets': result['total_packets'],
-            'ip_protocols': result['ip_protocols'],
-            'graph': graph
-        }
-    }), 200
+    graph = build_graph_json(result["conversations"])
+    return (
+        jsonify(
+            {
+                "message": "Analysis successful",
+                "analysis": {
+                    "total_packets": result["total_packets"],
+                    "ip_protocols": result["ip_protocols"],
+                    "graph": graph,
+                },
+            }
+        ),
+        200,
+    )
 
 
-@app.route('/clustering', methods=['POST'])
+@app.route("/clustering", methods=["POST"])
 def clustering_analysis():
     """
     Run agglomerative clustering on a PCAP
@@ -477,7 +491,7 @@ def clustering_analysis():
         result = analyze_pcap_for_clustering(
             str(filepath),
             max_clusters=data.get("clusters", 10),
-            anomaly_threshold=data.get("anomaly_threshold", 2)
+            anomaly_threshold=data.get("anomaly_threshold", 2),
         )
 
         return jsonify(result), 200
@@ -485,7 +499,7 @@ def clustering_analysis():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/save-results', methods=['POST'])
+@app.route("/save-results", methods=["POST"])
 def save_results_endpoint():
     """
     Save clustering results as JSON or CSV
@@ -531,16 +545,21 @@ def save_results_endpoint():
         csv_path, json_path = save_results(df, data["filename"], CLUSTERING_OUTPUT_DIR)
         target = csv_path if data.get("type", "json") == "csv" else json_path
         name = Path(target).name
-        return jsonify({
-            "message": "Saved",
-            "saved_file": name,
-            "download_url": f"/clustering-output/{name}"
-        }), 200
+        return (
+            jsonify(
+                {
+                    "message": "Saved",
+                    "saved_file": name,
+                    "download_url": f"/clustering-output/{name}",
+                }
+            ),
+            200,
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/clustering-output/<path:filename>', methods=['GET'])
+@app.route("/clustering-output/<path:filename>", methods=["GET"])
 def get_clustering_result(filename: str):
     """
     Download saved clustering result (JSON/CSV)
@@ -564,11 +583,11 @@ def get_clustering_result(filename: str):
     return send_file(str(safe), as_attachment=True)
 
 
-@app.route('/suggested_clusters', methods=['GET'])
+@app.route("/suggested_clusters", methods=["GET"])
 def suggested_clusters():
     """
     Get modularity-based cluster suggestion
-    --- 
+    ---
     tags:
       - Clustering
     parameters:
@@ -597,22 +616,23 @@ def suggested_clusters():
         return jsonify({"error": "File not found"}), 404
 
     result = analyze_pcap_for_clustering(
-        str(filepath),
-        max_clusters=10,
-        anomaly_threshold=2
+        str(filepath), max_clusters=10, anomaly_threshold=2
     )
 
     summary = result["clusterSummary"]
 
-    return jsonify({
-        "best_k": summary["best_k"],
-        "best_modularity": summary["best_modularity"],
-        "modularity_scores": summary["modularity_scores"],   # NEW
-        "cluster_hierarchy": summary["cluster_hierarchy"],
-        "mostImportantCluster": summary["mostImportantCluster"],
-    })
+    return jsonify(
+        {
+            "best_k": summary["best_k"],
+            "best_modularity": summary["best_modularity"],
+            "modularity_scores": summary["modularity_scores"],  # NEW
+            "cluster_hierarchy": summary["cluster_hierarchy"],
+            "mostImportantCluster": summary["mostImportantCluster"],
+        }
+    )
 
-@app.route('/run_pipeline', methods=['POST'])
+
+@app.route("/run_pipeline", methods=["POST"])
 def run_pipeline_endpoint():
     """
     Run ML-based IP role classification pipeline
@@ -646,8 +666,8 @@ def run_pipeline_endpoint():
         return jsonify({"error": "JSON required"}), 400
 
     data = request.get_json()
-    pcap_file = data.get('pcap_file_path')
-    model = data.get('model_name')
+    pcap_file = data.get("pcap_file_path")
+    model = data.get("model_name")
     if not pcap_file or not model:
         return jsonify({"error": "Missing pcap_file_path or model_name"}), 400
 
@@ -656,13 +676,13 @@ def run_pipeline_endpoint():
         return jsonify({"error": "PCAP not found"}), 404
 
     try:
-        report = run_ip_role_pipeline(str(full_path), model, data.get('selected_ips'))
-        return jsonify(report), 200 if report.get('status') == 'success' else 500
+        report = run_ip_role_pipeline(str(full_path), model, data.get("selected_ips"))
+        return jsonify(report), 200 if report.get("status") == "success" else 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/save_roles', methods=['GET'])
+@app.route("/save_roles", methods=["GET"])
 def save_roles_endpoint():
     """
     Download IP role classification results
@@ -701,7 +721,8 @@ def save_roles_endpoint():
 
     return send_file(str(path), as_attachment=True)
 
-@app.route('/automated-analysis', methods=['POST'])
+
+@app.route("/automated-analysis", methods=["POST"])
 def automated_analysis():
     """
     Fully Automated PCAP Analysis Pipeline
@@ -717,7 +738,7 @@ def automated_analysis():
       - Graph Modularity method cluster suggestion
       - Agglomerative clustering (4 clusters, anomaly_threshold=3)
       - ML-based IP role classification (`run_ip_role_pipeline`)
-      
+
       **All steps are executed server-side. No additional frontend calls needed.**
 
     consumes:
@@ -801,14 +822,14 @@ def automated_analysis():
               error: "ML pipeline failed: Model not found"
 
     """
-    if 'file' not in request.files:
-        return jsonify({'error': 'Missing file part'}), 400
+    if "file" not in request.files:
+        return jsonify({"error": "Missing file part"}), 400
 
-    file = request.files['file']
+    file = request.files["file"]
     if not file.filename:
-        return jsonify({'error': 'No file selected'}), 400
-    if not file.filename.lower().endswith('.pcap'):
-        return jsonify({'error': 'File must be .pcap'}), 400
+        return jsonify({"error": "No file selected"}), 400
+    if not file.filename.lower().endswith(".pcap"):
+        return jsonify({"error": "File must be .pcap"}), 400
 
     unique_name = file.filename
     pcap_path = Path(PCAP_GEN_OUTPUT_DIR) / unique_name
@@ -837,21 +858,27 @@ def automated_analysis():
         # )
         # print("Done clustering")
 
-        model_name = request.form.get('model_name', 'rule_based')
-        selected_ips_str = request.form.get('selected_ips', '')
-        selected_ips = [ip.strip() for ip in selected_ips_str.split(',') if ip.strip()] if selected_ips_str else None
+        model_name = request.form.get("model_name", "rule_based")
+        selected_ips_str = request.form.get("selected_ips", "")
+        selected_ips = (
+            [ip.strip() for ip in selected_ips_str.split(",") if ip.strip()]
+            if selected_ips_str
+            else None
+        )
         name_only = unique_name[:-5]
         report = run_ip_role_pipeline(str(pcap_path), model_name, selected_ips)
         print("Done pipeline")
-        if report.get('status') != 'success':
-            raise RuntimeError(f"Role pipeline failed: {report.get('message', 'Unknown')}")
+        if report.get("status") != "success":
+            raise RuntimeError(
+                f"Role pipeline failed: {report.get('message', 'Unknown')}"
+            )
 
         response = {
             "filename": unique_name,
-            "json": "http://127.0.0.1:5000/save_roles?file="+name_only+"&type=json",
-            "csv": "http://127.0.0.1:5000/save_roles?file="+name_only+"&type=csv",
+            "json": "http://127.0.0.1:5000/save_roles?file=" + name_only + "&type=json",
+            "csv": "http://127.0.0.1:5000/save_roles?file=" + name_only + "&type=csv",
             "analysis": {
-                "total_packets": analysis_result['total_packets'],
+                "total_packets": analysis_result["total_packets"],
                 # "ip_protocols": analysis_result['ip_protocols'],
                 # "graph": graph_json
             },
@@ -871,7 +898,8 @@ def automated_analysis():
             pcap_path.unlink(missing_ok=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/start-analysis-from-websocket', methods=['POST']) 
+
+@app.route("/start-analysis-from-websocket", methods=["POST"])
 def start_analysis_from_websocket():
     """
     Initiate Network Packet Capture and Automated Analysis Pipeline.
@@ -880,15 +908,15 @@ def start_analysis_from_websocket():
       - Automated Pipeline
     summary: Starts a packet capture for a specified duration and runs full analysis on the server.
     description: |
-      This endpoint immediately returns a 202 status, indicating that the 
-      long-running capture, PCAP generation, and automated analysis 
+      This endpoint immediately returns a 202 status, indicating that the
+      long-running capture, PCAP generation, and automated analysis
       pipeline have been successfully started in a background thread.
-      
+
       The client must monitor the WebSocket connection for the final analysis result.
-      
-    consumes: 
-      - application/json 
-    parameters: 
+
+    consumes:
+      - application/json
+    parameters:
       - name: body
         in: body
         required: true
@@ -938,36 +966,59 @@ def start_analysis_from_websocket():
                   type: string
                   example: Failed to initiate pipeline.
     """
-    
+
     data = request.json
-    
+
     if not data:
         return jsonify({"status": "Error", "message": "Missing request body."}), 400
-    if 'ws_url' not in data:
-        return jsonify({"status": "Error", "message": "Missing 'ws_url' in request body."}), 400
-    if 'seconds' not in data:
-        return jsonify({"status": "Error", "message": "Missing 'seconds' in request body."}), 400
+    if "ws_url" not in data:
+        return (
+            jsonify(
+                {"status": "Error", "message": "Missing 'ws_url' in request body."}
+            ),
+            400,
+        )
+    if "seconds" not in data:
+        return (
+            jsonify(
+                {"status": "Error", "message": "Missing 'seconds' in request body."}
+            ),
+            400,
+        )
 
-    ws_url = data['ws_url']
-    
+    ws_url = data["ws_url"]
+
     try:
-        capture_duration = int(data['seconds'])
+        capture_duration = int(data["seconds"])
         if capture_duration <= 0:
             raise ValueError("Duration must be a positive integer.")
     except ValueError as e:
-        return jsonify({"status": "Error", "message": f"Invalid 'seconds' parameter: {e}"}), 400
-
+        return (
+            jsonify(
+                {"status": "Error", "message": f"Invalid 'seconds' parameter: {e}"}
+            ),
+            400,
+        )
 
     # The startWebSocketClient function runs non-blocking code in a daemon thread.
-    success = startWebSocketClient(ws_url, capture_duration) # <-- Passed duration
-    
-    if success:
-        return jsonify({
-            "status": "Accepted",
-            "message": f"Packet capture for {capture_duration} seconds and analysis pipeline started in the background. Results will be logged to the server console."
-        }), 202
-    else:
-        return jsonify({"status": "Failed", "message": "Failed to initiate pipeline."}), 500
+    success = startWebSocketClient(ws_url, capture_duration)  # <-- Passed duration
 
-if __name__ == '__main__':
+    if success:
+        return (
+            jsonify(
+                {
+                    "status": "Accepted",
+                    "message": f"Packet capture for {capture_duration} seconds and analysis pipeline started in the background. Results will be logged to the server console.",
+                }
+            ),
+            202,
+        )
+    else:
+        return (
+            jsonify({"status": "Failed", "message": "Failed to initiate pipeline."}),
+            500,
+        )
+
+
+if __name__ == "__main__":
     app.run(debug=True, port=5000)
