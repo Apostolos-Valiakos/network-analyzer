@@ -7,6 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 # This avoids re-running tshark for the same file multiple times during a session.
 _packet_cache: Dict[str, Optional[List[Dict[str, Any]]]] = {}
 
+
 ##
 # Runs tshark on a PCAP file and loads the resulting JSON output into memory.
 # It handles errors from tshark execution and JSON decoding.
@@ -19,9 +20,7 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
     if pcap_file in _packet_cache:
         return _packet_cache[pcap_file]
 
-    cmd = [
-        "tshark", "-r", pcap_file, "-T", "json", "-V"
-    ]
+    cmd = ["tshark", "-r", pcap_file, "-T", "json", "-V"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         packets = json.loads(result.stdout)
@@ -40,6 +39,7 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
         _packet_cache[pcap_file] = None
         return None
 
+
 ##
 # Public function to get cached packets, loading them via tshark if they are not already cached.
 #
@@ -48,7 +48,8 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
 def get_cached_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
     """Public function to get cached packets, loading if necessary."""
     return _run_tshark_and_load_packets(pcap_file)
-    
+
+
 ##
 # Identifies the gNB and AMF IPs by finding the SCTP association initiation.
 # The gNB initiates the connection (SCTP INIT, chunk_type=1) to the AMF over the N2 interface.
@@ -63,8 +64,19 @@ def recognize_core_ips(pcap_file: str) -> Tuple[Optional[str], Optional[str]]:
     Optimized with tshark fields.
     """
     cmd = [
-        "tshark", "-r", pcap_file, "-Y", "sctp.chunk_type == 1",
-        "-T", "fields", "-e", "ip.src", "-e", "ip.dst", "-c", "1"
+        "tshark",
+        "-r",
+        pcap_file,
+        "-Y",
+        "sctp.chunk_type == 1",
+        "-T",
+        "fields",
+        "-e",
+        "ip.src",
+        "-e",
+        "ip.dst",
+        "-c",
+        "1",
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -76,6 +88,7 @@ def recognize_core_ips(pcap_file: str) -> Tuple[Optional[str], Optional[str]]:
         return None, None
     except Exception:
         return None, None
+
 
 ##
 # Reads the pcap file and returns the IP address of the gNB.
@@ -91,6 +104,7 @@ def get_gnb_ip(pcap_file: str) -> Optional[str]:
     gnb, _ = recognize_core_ips(pcap_file)
     return gnb
 
+
 ##
 # Reads the pcap file and returns the IP address of the AMF.
 # The AMF is identified as the responder (destination IP) of the SCTP INIT message.
@@ -104,6 +118,7 @@ def get_amf_ip(pcap_file: str) -> Optional[str]:
     """
     _, amf = recognize_core_ips(pcap_file)
     return amf
+
 
 ##
 # Runs tshark on the given pcap file, extracts unique destination IPs
@@ -125,10 +140,7 @@ def get_unique_rrc_ips(pcap_file: str) -> List[str]:
     excluded_ips = {ip for ip in (gnb_ip, amf_ip) if ip}
 
     # Use tshark to filter for RRC and extract destination IPs
-    cmd = [
-        "tshark", "-r", pcap_file, "-Y", "nr-rrc",
-        "-T", "fields", "-e", "ip.dst"
-    ]
+    cmd = ["tshark", "-r", pcap_file, "-Y", "nr-rrc", "-T", "fields", "-e", "ip.dst"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         ips = []
@@ -142,6 +154,7 @@ def get_unique_rrc_ips(pcap_file: str) -> List[str]:
         return sorted(list(set(ips)))
     except Exception:
         return []
+
 
 ##
 # Identifies O-RAN specific IPs (E2T, Redis, RIC Client, E2 Node)
@@ -160,13 +173,22 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
         "e2t_ip": None,
         "redis_ip": None,
         "ric_client_ip": None,
-        "e2_node_ip": None
+        "e2_node_ip": None,
     }
-    
+
     # 1. Collect for Redis (port 6379 - database server)
     cmd_redis = [
-        "tshark", "-r", pcap_file, "-Y", "tcp.dstport == 6379",
-        "-T", "fields", "-e", "ip.src", "-e", "ip.dst"
+        "tshark",
+        "-r",
+        pcap_file,
+        "-Y",
+        "tcp.dstport == 6379",
+        "-T",
+        "fields",
+        "-e",
+        "ip.src",
+        "-e",
+        "ip.dst",
     ]
     ric_client_candidates = set()
     try:
@@ -185,8 +207,17 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
 
     # 2. Collect for E2T (port 38000 - E2 Termination server)
     cmd_e2t = [
-        "tshark", "-r", pcap_file, "-Y", "tcp.dstport == 38000",
-        "-T", "fields", "-e", "ip.src", "-e", "ip.dst"
+        "tshark",
+        "-r",
+        pcap_file,
+        "-Y",
+        "tcp.dstport == 38000",
+        "-T",
+        "fields",
+        "-e",
+        "ip.src",
+        "-e",
+        "ip.dst",
     ]
     e2t_client_candidates = set()
     try:
@@ -202,7 +233,7 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
                 e2t_client_candidates.add(ip_src)
     except Exception:
         pass
-            
+
     # 3. Identify Near-RT RIC Component (RIC Client)
     # The RIC Client typically connects to *both* Redis and E2T.
     common_clients = ric_client_candidates.intersection(e2t_client_candidates)
@@ -212,17 +243,18 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
     elif len(ric_client_candidates) > 0:
         # Fallback: take any client connecting to Redis
         roles["ric_client_ip"] = sorted(list(ric_client_candidates))[0]
-            
+
     # 4. Identify E2 Node
     # An E2 Node is an E2T client that is NOT the established RIC Client.
     ric_ip = roles.get("ric_client_ip")
     final_e2_nodes = e2t_client_candidates - {ric_ip}
-    
+
     if len(final_e2_nodes) > 0:
         # Take the most likely E2 Node (first one found by IP sort order)
         roles["e2_node_ip"] = sorted(list(final_e2_nodes))[0]
-            
+
     return roles
+
 
 ##
 # Reads the pcap file and returns the IP address of the E2 Terminator (E2T).
@@ -238,6 +270,7 @@ def get_e2t_ip(pcap_file: str) -> Optional[str]:
     roles = recognize_oran_ips_roles(pcap_file)
     return roles.get("e2t_ip")
 
+
 ##
 # Reads the pcap file and returns the IP address of the Redis Database Server.
 # Redis is identified as the destination of TCP traffic on port 6379.
@@ -252,6 +285,7 @@ def get_redis_ip(pcap_file: str) -> Optional[str]:
     roles = recognize_oran_ips_roles(pcap_file)
     return roles.get("redis_ip")
 
+
 ##
 # Reads the pcap file and returns the IP address of the Near-RT RIC Component (client).
 # The RIC Client is identified as the IP connecting to both Redis (6379) and E2T (38000).
@@ -265,6 +299,7 @@ def get_ric_client_ip(pcap_file: str) -> Optional[str]:
     """
     roles = recognize_oran_ips_roles(pcap_file)
     return roles.get("ric_client_ip")
+
 
 ##
 # Reads the pcap file and returns the IP address of an E2 Node (gNB/O-CU/O-DU).

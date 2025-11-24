@@ -3,10 +3,11 @@ import os
 
 # Define the directory where PCAP files will be saved
 # Ensure this directory exists and your Flask app has write permissions
-PCAP_OUTPUT_DIR = "generated_pcaps" # Or any desired path, e.g., /tmp/pcaps
+PCAP_OUTPUT_DIR = "generated_pcaps"  # Or any desired path, e.g., /tmp/pcaps
 
 # Create the directory if it doesn't exist
 os.makedirs(PCAP_OUTPUT_DIR, exist_ok=True)
+
 
 ##
 # Saves the provided raw binary data as a .pcap file in the designated directory.
@@ -31,7 +32,7 @@ def save_pcap_data(raw_binary_data):
         file_path = os.path.join(PCAP_OUTPUT_DIR, filename)
 
         # Write the binary data to the file
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(raw_binary_data)
 
         message = f"PCAP file '{filename}' saved successfully."

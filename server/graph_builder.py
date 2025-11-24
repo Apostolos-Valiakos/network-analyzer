@@ -21,31 +21,20 @@ def build_graph_json(conversations):
     ip_to_index = {ip: idx for idx, ip in enumerate(unique_ips)}
 
     # Nodes list
-    nodes = [
-        {"name": ip, "value": 1, "category": 0}
-        for ip in unique_ips
-    ]
+    nodes = [{"name": ip, "value": 1, "category": 0} for ip in unique_ips]
 
     # Links list
     links = []
     for (ip1, ip2), counts in conversations.items():
         # Calculate the total traffic value (sum of all protocols in the conversation)
         value = sum(counts.values())
-        links.append({
-            "source": ip_to_index[ip1],
-            "target": ip_to_index[ip2],
-            "value": value
-        })
+        links.append(
+            {"source": ip_to_index[ip1], "target": ip_to_index[ip2], "value": value}
+        )
 
     return {
         "type": "force",
-        "categories": [
-            {
-                "name": "IP",
-                "keyword": {},
-                "base": "IP"
-            }
-        ],
+        "categories": [{"name": "IP", "keyword": {}, "base": "IP"}],
         "nodes": nodes,
-        "links": links
+        "links": links,
     }

@@ -1,8 +1,9 @@
 import pyshark
 import json
 from collections import defaultdict
-import asyncio # Import asyncio for event loop management
+import asyncio  # Import asyncio for event loop management
 from typing import List, Dict, Any
+
 
 ##
 # Initializes a pyshark capture for UE-specific analysis from the given filepath.
@@ -17,10 +18,10 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
     """
     Initializes a pyshark capture for UE-specific analysis from the given filepath.
     Ensures an asyncio event loop is available in the current thread for pyshark operations.
-    
+
     Args:
         filepath (str): The path to the PCAP file.
-        
+
     Returns:
         list: A list of dictionaries, where each dictionary contains extracted UE information.
     """
@@ -28,12 +29,12 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
     # pyshark uses asyncio internally, and Flask's request threads might not have one by default.
     try:
         loop = asyncio.get_event_loop()
-    except RuntimeError: # If no event loop is running, create a new one
+    except RuntimeError:  # If no event loop is running, create a new one
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
+
     packets_data = []
-    capture = None # Initialize capture to None for proper cleanup
+    capture = None  # Initialize capture to None for proper cleanup
 
     try:
         ##
@@ -42,15 +43,9 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
 
         # Parse all packets and extract fields into a structured dictionary format
         for pkt in capture:
-            pkt_info = {
-                "packet_number": pkt.number,
-                "layers": []
-            }
+            pkt_info = {"packet_number": pkt.number, "layers": []}
             for layer in pkt.layers:
-                layer_info = {
-                    "layer_name": layer.layer_name,
-                    "fields": {}
-                }
+                layer_info = {"layer_name": layer.layer_name, "fields": {}}
                 for field_name in layer.field_names:
                     try:
                         # Get the field value from the pyshark layer
@@ -61,7 +56,7 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
                         pass
                 pkt_info["layers"].append(layer_info)
             packets_data.append(pkt_info)
-            
+
     except Exception as e:
         print(f"Error during pyshark capture in initialize_analysis_for_ue: {e}")
         # Optionally, you might want to return an empty list or raise a custom exception here
@@ -69,15 +64,15 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
     finally:
         # Always ensure the capture object is closed to release system resources (TShark process)
         if capture:
-            capture.close() 
+            capture.close()
 
     # Export all parsed packets to a temporary file for debugging or external analysis
-    with open('./uploads/all_packets.json', 'w') as f:
+    with open("./uploads/all_packets.json", "w") as f:
         json.dump(packets_data, f, indent=2)
 
     # After parsing with pyshark, extract the specific UE information
-    ue_data = extract_ue_info(packets_data) 
-    return ue_data # Return the extracted UE data
+    ue_data = extract_ue_info(packets_data)
+    return ue_data  # Return the extracted UE data
 
 
 ##
@@ -92,10 +87,10 @@ def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Extracts specific UE-related information from a list of structured packet dictionaries.
     This function processes the already parsed packet data to find relevant UE fields.
-    
+
     Args:
         packets_data (list): A list of dictionaries, each representing a packet's layers and fields.
-        
+
     Returns:
         list: A list of dictionaries, where each dictionary represents a UE session found.
     """
@@ -103,7 +98,7 @@ def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     for pkt in packets_data:
         ue_info = {}
-        found_ue_ip = False # Flag to indicate if a UE IP address field has been found in the current packet
+        found_ue_ip = False  # Flag to indicate if a UE IP address field has been found in the current packet
 
         for layer in pkt["layers"]:
             fields = layer["fields"]
@@ -113,7 +108,7 @@ def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 found_ue_ip = any("ue_ip_addr_ipv4" in k for k in fields)
 
             if not found_ue_ip:
-                continue # If no UE IP trigger, move to the next layer or packet
+                continue  # If no UE IP trigger, move to the next layer or packet
 
             # Iterate through the fields of the current layer and extract common 5G UE-related fields
             # The .lower() is used for case-insensitive matching of field names.
@@ -146,5 +141,4 @@ def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             # add its original packet number and append it to the results list.
             ue_info["packet_number"] = pkt["packet_number"]
             ue_packets.append(ue_info)
-    return ue_packets # Return the complete list of extracted UE packets
-
+    return ue_packets  # Return the complete list of extracted UE packets

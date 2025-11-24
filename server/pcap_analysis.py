@@ -17,7 +17,9 @@ def load_pcap(filepath):
     except Exception as e:
         return None, str(e)
 
+
 from scapy.layers.inet import IP, IP_PROTOS
+
 
 ##
 # Analyzes the protocols associated with traffic sent by each IP address.
@@ -38,7 +40,8 @@ def analyze_protocols(packets):
 
         # Get all layer names after IP
         protocol_layers = [
-            layer.__name__ for layer in pkt.layers()
+            layer.__name__
+            for layer in pkt.layers()
             if layer not in (pkt.__class__, IP)  # Skip Ethernet/IP base
         ]
 
@@ -55,6 +58,7 @@ def analyze_protocols(packets):
 
     # Convert sets to sorted lists
     return {ip: sorted(protos) for ip, protos in ip_protocols.items()}
+
 
 ##
 # Identifies and counts packets exchanged between pairs of IP addresses.
@@ -78,17 +82,21 @@ def analyze_conversations(packets):
         # Create a canonical key for the conversation (IPs sorted alphabetically)
         key = tuple(sorted([src, dst]))
         if key not in conversations:
-            conversations[key] = {f'{key[0]}_to_{key[1]}': 0, f'{key[1]}_to_{key[0]}': 0}
+            conversations[key] = {
+                f"{key[0]}_to_{key[1]}": 0,
+                f"{key[1]}_to_{key[0]}": 0,
+            }
 
         # Count packets sent in the right direction
         if src < dst:
             # src is the first element in the sorted key
-            conversations[key][f'{src}_to_{dst}'] += 1
+            conversations[key][f"{src}_to_{dst}"] += 1
         else:
             # src is the second element in the sorted key
-            conversations[key][f'{src}_to_{dst}'] += 1
+            conversations[key][f"{src}_to_{dst}"] += 1
 
     return conversations
+
 
 ##
 # Orchestrates the PCAP analysis pipeline: loads the file, analyzes protocols,
@@ -108,11 +116,10 @@ def initialize_analysis(filepath):
     conversations = analyze_conversations(packets)
     # ue_sessions = analyze_ue_sessions(packets)
 
-
     result = {
-        'total_packets': total_packets,
-        'ip_protocols': ip_protocols,
-        'conversations': conversations,
+        "total_packets": total_packets,
+        "ip_protocols": ip_protocols,
+        "conversations": conversations,
         # 'ue_sessions': ue_sessions
     }
 

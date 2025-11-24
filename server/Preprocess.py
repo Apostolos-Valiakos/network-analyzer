@@ -2,38 +2,47 @@
 import glob
 import os
 import sys
-import time # Used for processing time calculation
+import time  # Used for processing time calculation
 import multiprocessing as mp
 import json
+
 # Libraries for packet capture parsing.
 try:
     from scapy.all import rdpcap, IP, SCTP
     from scapy.layers.l2 import Ether
     import pandas as pd
     import numpy as np
-#     import tensorflow as tf
-#     from tensorflow import keras
-#     from keras.models import Model
-#     from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
-#     from keras.optimizers import Adam
-#     from sklearn.model_selection import train_test_split
+
+    #     import tensorflow as tf
+    #     from tensorflow import keras
+    #     from keras.models import Model
+    #     from keras.layers import Input, Conv1D, LSTM, GRU, Dense, Dropout
+    #     from keras.optimizers import Adam
+    #     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import StandardScaler, LabelEncoder
     import pyshark
     from pyshark.capture.capture import TSharkCrashException
-    
+
     # Attempt to import rrc_utils, provide a fallback if it's not installed
     # Note: rrc_utils is imported inside the worker function as well for safety
     try:
-        from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles, get_cached_packets
+        from rrc_utils import (
+            get_unique_rrc_ips,
+            recognize_oran_ips_roles,
+            get_cached_packets,
+        )
     except ImportError:
         print("Warning: 'rrc_utils' not found.")
 
 except ImportError as e:
     print(f"Error importing a required library: {e}")
-    print("Please install the required libraries using: pip install scapy pandas numpy tensorflow scikit-learn pyshark")
+    print(
+        "Please install the required libraries using: pip install scapy pandas numpy tensorflow scikit-learn pyshark"
+    )
     sys.exit(1)
 
 # --- Class Definitions ---
+
 
 ##
 # Parses pcap files and extracts rule-based features for IP role assignment.
@@ -43,17 +52,24 @@ class PacketProcessor:
     Parses pcap files and extracts rule-based features for IP role assignment.
     This class handles Phase 1 of the pipeline using Scapy and Pyshark.
     """
+
     def __init__(self, pcap_file):
         self.pcap_file = pcap_file
         self.extracted_data = []
         self.ip_roles = {}
         self.role_rules = {
             # Expanded rules to include more specific keywords.
-            'gnB': ['PDUSessionResourceSetupResponse'],
-            '5G_Core': ['PDUSessionResourceSetupRequest'],
-            'UE': ['SomeRRCpacketThatShowsthisisAUE'],
-            'SMF': ['PFCP Session Modification Request','Session Establishment Request'],
-            'UPF': ['PFCP Session Modification Response','Session Establishment Response'],
+            "gnB": ["PDUSessionResourceSetupResponse"],
+            "5G_Core": ["PDUSessionResourceSetupRequest"],
+            "UE": ["SomeRRCpacketThatShowsthisisAUE"],
+            "SMF": [
+                "PFCP Session Modification Request",
+                "Session Establishment Request",
+            ],
+            "UPF": [
+                "PFCP Session Modification Response",
+                "Session Establishment Response",
+            ],
             # 'AMF': ['NGSetupRequest', 'InitialUEMessage', 'NgapPDUSessionResourceSetupRequest']
         }
 
@@ -79,13 +95,13 @@ class PacketProcessor:
             src_ip = ip_layer.get("ip.src")
             if src_ip not in self.ip_roles:
                 self.ip_roles[src_ip] = "Unidentified"
-            features['timestamp'] = 0
-            features['src_ip'] = src_ip
-            features['packet_len'] = int(frame_layer.get("frame.len", 0))
+            features["timestamp"] = 0
+            features["src_ip"] = src_ip
+            features["packet_len"] = int(frame_layer.get("frame.len", 0))
 
             # Determine the highest-level protocol (last in frame.protocols)
             protocols = frame_layer.get("frame.protocols", "").split(":")
-            features['protocol'] = protocols[-1] if protocols else "Unknown"
+            features["protocol"] = protocols[-1] if protocols else "Unknown"
 
             # Check if the IP's role is already determined. If so, return early for efficiency.
             if self.ip_roles.get(src_ip) in self.role_rules.keys():
@@ -98,7 +114,7 @@ class PacketProcessor:
                 for msg in msgs:
                     if msg.lower() in packet_string.lower():
                         self.ip_roles[src_ip] = role
-                        return # Role found, stop processing this packet
+                        return  # Role found, stop processing this packet
 
             self.extracted_data.append(features)
         except AttributeError:
@@ -136,6 +152,7 @@ class PacketProcessor:
         print(f"Finished parsing {self.pcap_file}")
         return self.extracted_data, self.ip_roles
 
+
 ##
 # Transforms raw packet data into a structured dataset for a deep learning model.
 # This class handles Phase 2 of the pipeline: creating time series sequences and normalizing features.
@@ -144,6 +161,7 @@ class FeatureEngineer:
     Transforms raw packet data into a structured dataset for a deep learning model.
     This class handles Phase 2 of the pipeline.
     """
+
     def __init__(self, raw_data, ip_roles):
         self.raw_data = raw_data
         self.ip_roles = ip_roles
@@ -152,8 +170,8 @@ class FeatureEngineer:
         self.processed_data = []
         self.labels = []
         self.ip_sequence_map = []
-        self.feature_columns = ['timestamp', 'packet_len', 'protocol_encoded']
-        
+        self.feature_columns = ["timestamp", "packet_len", "protocol_encoded"]
+
         self.protocol_encoder = LabelEncoder()
         self.label_encoder = LabelEncoder()
 
@@ -170,17 +188,17 @@ class FeatureEngineer:
             return
 
         # Group by source IP
-        grouped = self.df.groupby('src_ip')
-        
+        grouped = self.df.groupby("src_ip")
+
         for ip, group in grouped:
             if ip not in self.ip_roles:
                 continue
-            
+
             # Sort by timestamp to ensure correct sequence
-            group = group.sort_values('timestamp')
-            
+            group = group.sort_values("timestamp")
+
             for i in range(len(group) - self.sequence_length + 1):
-                sequence = group.iloc[i:i + self.sequence_length]
+                sequence = group.iloc[i : i + self.sequence_length]
                 sequence_features = sequence[self.feature_columns].values
                 self.processed_data.append(sequence_features)
                 self.labels.append(self.ip_roles[ip])
@@ -201,13 +219,15 @@ class FeatureEngineer:
 
         # Handle missing values
         self.df.fillna(0, inplace=True)
-        
+
         # Encode categorical features
-        self.df = self.df[self.df['protocol'].notna()]
-        self.df['protocol'] = self.df['protocol'].astype(str)
-        
+        self.df = self.df[self.df["protocol"].notna()]
+        self.df["protocol"] = self.df["protocol"].astype(str)
+
         # 👇 CORRECTION: Use the dedicated protocol_encoder
-        self.df['protocol_encoded'] = self.protocol_encoder.fit_transform(self.df['protocol'])
+        self.df["protocol_encoded"] = self.protocol_encoder.fit_transform(
+            self.df["protocol"]
+        )
 
         # Prepare time series sequences
         self._prepare_time_series()
@@ -215,34 +235,37 @@ class FeatureEngineer:
         if not self.processed_data:
             print("No valid sequences created. Please check data and sequence length.")
             return None, None, None, None
-        
+
         # Convert to numpy arrays
         X = np.array(self.processed_data)
         y = np.array(self.labels)
-        
+
         # 👇 CORRECTION: Fit the dedicated label_encoder on ALL possible IP roles (y labels)
         # This includes 'Unidentified' and all rule-based roles to prevent the KeyError/ValueError
         all_possible_roles = list(set(self.ip_roles.values()))
-        self.label_encoder.fit(all_possible_roles) 
-        
+        self.label_encoder.fit(all_possible_roles)
+
         # Encode labels
         y_encoded = self.label_encoder.transform(y)
         class_names = self.label_encoder.classes_
-        
+
         # Check if there is more than one class to train on
         if len(class_names) < 2:
-            print("Error: The dataset contains only a single class after rule-based labeling. Cannot train a classifier.")
+            print(
+                "Error: The dataset contains only a single class after rule-based labeling. Cannot train a classifier."
+            )
             return None, None, None, None
-            
+
         # Normalize numerical features
         num_features = X.shape[2]
         X_reshaped = X.reshape(-1, num_features)
         scaler = StandardScaler()
         X_reshaped = scaler.fit_transform(X_reshaped)
         X = X_reshaped.reshape(-1, self.sequence_length, num_features)
-        
+
         # Return the encoder too for completeness
-        return X, y_encoded, class_names, self.label_encoder 
+        return X, y_encoded, class_names, self.label_encoder
+
 
 # class HybridModel(Model):
 #     """
@@ -254,18 +277,18 @@ class FeatureEngineer:
 #         self.sequence_length = sequence_length
 #         self.num_features = num_features
 #         self.num_classes = num_classes
-#         
+#
 #         # CNN for spatial/packet-level feature extraction
 #         self.conv1d = Conv1D(filters=64, kernel_size=3, activation='relu')
 #         self.dropout1 = Dropout(0.2)
-#         
+#
 #         # LSTM for temporal dependency modeling
 #         self.lstm = LSTM(128, return_sequences=False)
 #         self.dropout2 = Dropout(0.2)
-#         
+#
 #         # Output layer
 #         self.dense = Dense(num_classes, activation='softmax')
-#     
+#
 #     def call(self, inputs):
 #         x = self.conv1d(inputs)
 #         x = self.dropout1(x)
@@ -281,7 +304,7 @@ class FeatureEngineer:
 #             "num_classes": self.num_classes
 #         })
 #         return config
-#     
+#
 #     @classmethod
 #     def from_config(cls, config):
 #         # Extract only the parameters expected by __init__
@@ -294,6 +317,7 @@ class FeatureEngineer:
 
 # --- Multiprocessing Implementation (Solution 3) ---
 
+
 ##
 # Multiprocessing-safe pipeline worker for PCAP analysis.
 # Runs the full analysis pipeline for a single PCAP file, applying rule-based
@@ -304,7 +328,12 @@ class FeatureEngineer:
 # @param [mp.Queue] result_queue The queue to push the final analysis report to.
 # @param [list[str]|None] selected_ips Optional list of IPs to filter the analysis to.
 # @return [None] Puts the final analysis report into `result_queue`.
-def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queue, selected_ips: list[str] = None):
+def _pipeline_worker(
+    pcap_file_path: str,
+    model_name: str,
+    result_queue: mp.Queue,
+    selected_ips: list[str] = None,
+):
     """
     Multiprocessing-safe pipeline worker for PCAP analysis.
     Handles:
@@ -324,14 +353,23 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 
     # Import rrc_utils safely inside the worker
     try:
-        from rrc_utils import get_unique_rrc_ips, recognize_oran_ips_roles, get_cached_packets
-        from Preprocess import PacketProcessor, FeatureEngineer  # Ensure these classes are visible
+        from rrc_utils import (
+            get_unique_rrc_ips,
+            recognize_oran_ips_roles,
+            get_cached_packets,
+        )
+        from Preprocess import (
+            PacketProcessor,
+            FeatureEngineer,
+        )  # Ensure these classes are visible
     except ImportError as e:
-        result_queue.put({
-            "status": "failed",
-            "message": f"Cannot import required modules: {e}",
-            "processing_time": 0,
-        })
+        result_queue.put(
+            {
+                "status": "failed",
+                "message": f"Cannot import required modules: {e}",
+                "processing_time": 0,
+            }
+        )
         return
 
     start_time = time.time()
@@ -339,11 +377,13 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     # --- Load packets ---
     packets = get_cached_packets(pcap_file_path)
     if packets is None:
-        result_queue.put({
-            "status": "failed",
-            "message": f"Failed to load packets from {pcap_file_path}.",
-            "processing_time": round(time.time() - start_time, 2),
-        })
+        result_queue.put(
+            {
+                "status": "failed",
+                "message": f"Failed to load packets from {pcap_file_path}.",
+                "processing_time": round(time.time() - start_time, 2),
+            }
+        )
         return
 
     # --- Phase 1: Packet Parsing & Rule-Based Classification ---
@@ -356,13 +396,15 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
         ip_roles = {ip: role for ip, role in ip_roles.items() if ip in selected_ips}
 
     if not raw_data:
-        result_queue.put({
-            "status": "failed",
-            "message": "No packets extracted after parsing. Check PCAP file.",
-            "total_classified": 0,
-            "processing_time": round(time.time() - start_time, 2),
-            "classification_summary": []
-        })
+        result_queue.put(
+            {
+                "status": "failed",
+                "message": "No packets extracted after parsing. Check PCAP file.",
+                "total_classified": 0,
+                "processing_time": round(time.time() - start_time, 2),
+                "classification_summary": [],
+            }
+        )
         return
 
     # Add UEs automatically
@@ -385,7 +427,12 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
                     final_role = "E2_NODE"
                 elif role_key == "ric_client_ip":
                     final_role = "NEAR_RT_RIC"
-                if ip_roles.get(ip_address) in ("Unidentified", None) or final_role in ("E2_NODE", "NEAR_RT_RIC", "E2T", "REDIS"):
+                if ip_roles.get(ip_address) in ("Unidentified", None) or final_role in (
+                    "E2_NODE",
+                    "NEAR_RT_RIC",
+                    "E2T",
+                    "REDIS",
+                ):
                     ip_roles[ip_address] = final_role
     except Exception as e:
         print(f"Warning: Failed to recognize ORAN roles: {e}")
@@ -400,12 +447,14 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
     for role, count in zip(unique_roles, counts):
         ips_for_role = [ip for ip, r in ip_roles.items() if r == role]
         percentage = round((count / len(ip_roles)) * 100, 1) if len(ip_roles) > 0 else 0
-        rule_based_summary.append({
-            "class_name": role,
-            "count": int(count),
-            "percentage": percentage,
-            "ips": ips_for_role
-        })
+        rule_based_summary.append(
+            {
+                "class_name": role,
+                "count": int(count),
+                "percentage": percentage,
+                "ips": ips_for_role,
+            }
+        )
 
     # Save summary results
     try:
@@ -413,7 +462,9 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
         results_dir = "./server/results"
         os.makedirs(results_dir, exist_ok=True)
         base_name = os.path.splitext(os.path.basename(pcap_file_path))[0]
-        pd.DataFrame(rule_based_summary).to_csv(f"{results_dir}/{base_name}.csv", index=False)
+        pd.DataFrame(rule_based_summary).to_csv(
+            f"{results_dir}/{base_name}.csv", index=False
+        )
         with open(f"{results_dir}/{base_name}.json", "w") as f:
             json.dump(rule_based_summary, f, indent=4)
     except Exception as e:
@@ -434,7 +485,7 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
         "rule_based_classification_summary": rule_based_summary,
         "classification_summary": [],  # No ML-based classification
         "ip_roles": ip_roles,
-        "saved_model_path_prefix": None
+        "saved_model_path_prefix": None,
     }
 
     result_queue.put(final_report)
@@ -448,24 +499,25 @@ def _pipeline_worker(pcap_file_path: str, model_name: str, result_queue: mp.Queu
 # @param [str] model_name A placeholder for the model name.
 # @param [list[str]|None] selected_ips Optional list of IPs to filter the analysis to.
 # @return [dict] The final analysis report from the worker process.
-def run_ip_role_pipeline(pcap_file_path: str, model_name: str, selected_ips: list[str] = None) -> dict:
+def run_ip_role_pipeline(
+    pcap_file_path: str, model_name: str, selected_ips: list[str] = None
+) -> dict:
     """
-    Public function that spawns a new process to run the pipeline 
+    Public function that spawns a new process to run the pipeline
     and waits for the result via a queue.
     """
     queue = mp.Queue()
-    
+
     process = mp.Process(
-        target=_pipeline_worker, 
-        args=(pcap_file_path, model_name, queue, selected_ips)
+        target=_pipeline_worker, args=(pcap_file_path, model_name, queue, selected_ips)
     )
     print(f"Spawning worker process for PCAP analysis: {pcap_file_path}...")
     process.start()
-    
+
     # Wait for the process to finish and get the result from the queue
     try:
-        analysis_report = queue.get(timeout=300) # Wait up to 5 minutes
-            
+        analysis_report = queue.get(timeout=300)  # Wait up to 5 minutes
+
     except mp.queues.Empty:
         # If timeout occurs, terminate the process and return a failure report
         process.terminate()
@@ -475,13 +527,14 @@ def run_ip_role_pipeline(pcap_file_path: str, model_name: str, selected_ips: lis
             "message": "Pipeline process timed out.",
             "total_classified": 0,
             "processing_time": 300.0,
-            "classification_summary": []
+            "classification_summary": [],
         }
-    
+
     # Ensure the process is fully terminated and cleaned up
     process.join()
-    
+
     return analysis_report
+
 
 ##
 # Creates a 'results' folder if it doesn't exist and saves the rule_based_summary
@@ -500,25 +553,25 @@ def save_summary_results(rule_based_summary, pcap_file_path, model_name):
         # Create results directory
         results_dir = "./server/results"
         os.makedirs(results_dir, exist_ok=True)
-        
+
         # Extract base filename from pcap_file_path
         pcap_basename = os.path.splitext(os.path.basename(pcap_file_path))[0]
-        
+
         # Define file paths
         csv_file = os.path.join(results_dir, f"{pcap_basename}.csv")
         json_file = os.path.join(results_dir, f"{pcap_basename}.json")
-        
+
         # Convert rule_based_summary to DataFrame
         df_summary = pd.DataFrame(rule_based_summary)
-        
+
         # Save as CSV
         df_summary.to_csv(csv_file, index=False)
         print(f"Saved rule-based summary to {csv_file}")
-        
+
         # Save as JSON
-        with open(json_file, 'w') as f:
+        with open(json_file, "w") as f:
             json.dump(rule_based_summary, f, indent=4)
         print(f"Saved rule-based summary to {json_file}")
-        
+
     except Exception as e:
         print(f"Error saving summary results: {e}")

@@ -11,6 +11,7 @@ from sklearn.cluster import AgglomerativeClustering
 import networkx as nx
 import community  # python-louvain
 
+
 # ----------------------------
 # 1. Parse PCAP and extract features
 # ----------------------------
@@ -23,15 +24,17 @@ import community  # python-louvain
 def extract_features(pcap_file):
     packets = rdpcap(pcap_file)
 
-    stats = defaultdict(lambda: {
-        "bytes_sent": 0,
-        "bytes_received": 0,
-        "packets_sent": 0,
-        "packets_received": 0,
-        "partners": set(),
-        "ports": set(),
-        "timestamps": []
-    })
+    stats = defaultdict(
+        lambda: {
+            "bytes_sent": 0,
+            "bytes_received": 0,
+            "packets_sent": 0,
+            "packets_received": 0,
+            "partners": set(),
+            "ports": set(),
+            "timestamps": [],
+        }
+    )
 
     for pkt in packets:
         if IP in pkt:
@@ -61,21 +64,24 @@ def extract_features(pcap_file):
         interarrivals = np.diff(timestamps) if len(timestamps) > 1 else [0]
         avg_interarrival = np.mean(interarrivals) if len(interarrivals) > 0 else 0
 
-        data.append({
-            "ip": ip,
-            "bytes_sent": s["bytes_sent"],
-            "bytes_received": s["bytes_received"],
-            "packets_sent": s["packets_sent"],
-            "packets_received": s["packets_received"],
-            "unique_partners": len(s["partners"]),
-            "unique_ports": len(s["ports"]),
-            "duration": durations,
-            "avg_interarrival": avg_interarrival,
-            "unique_partners_list": list(s["partners"])  # For graph modularity
-        })
+        data.append(
+            {
+                "ip": ip,
+                "bytes_sent": s["bytes_sent"],
+                "bytes_received": s["bytes_received"],
+                "packets_sent": s["packets_sent"],
+                "packets_received": s["packets_received"],
+                "unique_partners": len(s["partners"]),
+                "unique_ports": len(s["ports"]),
+                "duration": durations,
+                "avg_interarrival": avg_interarrival,
+                "unique_partners_list": list(s["partners"]),  # For graph modularity
+            }
+        )
 
     df = pd.DataFrame(data)
     return df
+
 
 # ----------------------------
 # 2. Perform Agglomerative Clustering
@@ -95,14 +101,13 @@ def cluster_nodes(df, n_clusters=None, distance_threshold=None):
     X_scaled = scaler.fit_transform(features)
 
     model = AgglomerativeClustering(
-        n_clusters=n_clusters,
-        distance_threshold=distance_threshold,
-        linkage="ward"
+        n_clusters=n_clusters, distance_threshold=distance_threshold, linkage="ward"
     )
     labels = model.fit_predict(X_scaled)
 
     df["cluster"] = labels
     return df
+
 
 # ----------------------------
 # 3. Detect anomalies
@@ -118,8 +123,11 @@ def detect_anomalies(df, threshold=2):
     for cluster_id, group in df.groupby("cluster"):
         is_anomaly = len(group) <= threshold
         for ip in group["ip"]:
-            anomalies.append({"ip": ip, "cluster": int(cluster_id), "anomaly": is_anomaly})
+            anomalies.append(
+                {"ip": ip, "cluster": int(cluster_id), "anomaly": is_anomaly}
+            )
     return anomalies
+
 
 # ----------------------------
 # 4. Build graph data for ECharts
@@ -131,35 +139,37 @@ def detect_anomalies(df, threshold=2):
 # @param [pandas.DataFrame] df The clustered DataFrame.
 # @return [dict] A dictionary containing 'categories', 'nodes', and 'links' for graph visualization.
 def build_graph_data(df):
-    categories = [{"name": f"Cluster {c}", "keyword": {}, "base": "IP"} for c in df["cluster"].unique()]
+    categories = [
+        {"name": f"Cluster {c}", "keyword": {}, "base": "IP"}
+        for c in df["cluster"].unique()
+    ]
 
     nodes = []
     ip_to_index = {}
     for idx, row in enumerate(df.itertuples(index=False)):
-        nodes.append({
-            "name": row.ip,
-            "value": 1,
-            "category": int(row.cluster)
-        })
+        nodes.append({"name": row.ip, "value": 1, "category": int(row.cluster)})
         ip_to_index[row.ip] = idx
 
     links = []
     for i, row1 in df.iterrows():
         for j, row2 in df.iterrows():
             if i < j and row1["cluster"] == row2["cluster"]:
-                links.append({
-                    "source": ip_to_index[row1["ip"]],
-                    "target": ip_to_index[row2["ip"]],
-                    "value": 1
-                })
+                links.append(
+                    {
+                        "source": ip_to_index[row1["ip"]],
+                        "target": ip_to_index[row2["ip"]],
+                        "value": 1,
+                    }
+                )
 
     graph_data = {
         "type": "force",
         "categories": categories,
         "nodes": nodes,
-        "links": links
+        "links": links,
     }
     return graph_data
+
 
 # ----------------------------
 # 5. Save results
@@ -183,6 +193,7 @@ def save_results(df, filename_base, upload_folder="./uploads"):
 
     return csv_path, json_path
 
+
 # ----------------------------
 # 6. Compute Cluster Importance
 # ----------------------------
@@ -199,23 +210,28 @@ def compute_cluster_importance(df):
         size = len(group)
         total_unique_partners = int(group["unique_partners"].sum())
         edge_density = total_unique_partners / max(size * size, 1)
-        total_packets = int(group["packets_sent"].sum() + group["packets_received"].sum())
+        total_packets = int(
+            group["packets_sent"].sum() + group["packets_received"].sum()
+        )
         traffic_score = np.log1p(total_packets)
         score = (edge_density * 0.7) + (traffic_score * 0.3)
 
-        importance.append({
-            "cluster": int(cluster_id),
-            "size": size,
-            "unique_partners_sum": total_unique_partners,
-            "edge_density": float(edge_density),
-            "traffic_score": float(traffic_score),
-            "score": float(score)
-        })
+        importance.append(
+            {
+                "cluster": int(cluster_id),
+                "size": size,
+                "unique_partners_sum": total_unique_partners,
+                "edge_density": float(edge_density),
+                "traffic_score": float(traffic_score),
+                "score": float(score),
+            }
+        )
 
     importance_sorted = sorted(importance, key=lambda x: x["score"], reverse=True)
     most_important = importance_sorted[0]["cluster"] if importance_sorted else None
 
     return importance_sorted, most_important
+
 
 # ----------------------------
 # 7. Compute modularity score for a given clustering
@@ -243,6 +259,7 @@ def compute_modularity(df, labels):
     partition = {ip: int(labels[i]) for i, ip in enumerate(ip_list)}
     return community.modularity(partition, G)
 
+
 # ----------------------------
 # 8. Suggest clusters using modularity
 # ----------------------------
@@ -256,7 +273,11 @@ def compute_modularity(df, labels):
 # @return [dict] Dictionary containing best cluster count, modularity score,
 #         cluster hierarchy with importance, and most important cluster.
 def suggest_clusters_modularity(df, max_clusters=10):
-    features = df.drop(columns=["ip", "unique_partners_list"]).select_dtypes(include="number").values
+    features = (
+        df.drop(columns=["ip", "unique_partners_list"])
+        .select_dtypes(include="number")
+        .values
+    )
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(features)
 
@@ -273,10 +294,7 @@ def suggest_clusters_modularity(df, max_clusters=10):
         mod_score = compute_modularity(df, labels)
 
         # collect all points for the chart
-        modularity_scores.append({
-            "k": k,
-            "modularity": float(round(mod_score, 4))
-        })
+        modularity_scores.append({"k": k, "modularity": float(round(mod_score, 4))})
 
         if mod_score > best_modularity:
             best_modularity = mod_score
@@ -289,9 +307,9 @@ def suggest_clusters_modularity(df, max_clusters=10):
     return {
         "best_k": best_k,
         "best_modularity": float(round(best_modularity, 4)),
-        "modularity_scores": modularity_scores,    # <-- NEW FIELD
+        "modularity_scores": modularity_scores,  # <-- NEW FIELD
         "cluster_hierarchy": importance_sorted,
-        "mostImportantCluster": most_important
+        "mostImportantCluster": most_important,
     }
 
 
@@ -313,10 +331,10 @@ def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2)
     df = cluster_nodes(df, n_clusters=cluster_result["best_k"])
     anomalies = detect_anomalies(df, threshold=anomaly_threshold)
     graph_data = build_graph_data(df)
-    save_results(df, os.path.basename(pcap_path), 'server/cluster_analysis')
+    save_results(df, os.path.basename(pcap_path), "server/cluster_analysis")
 
     return {
         "clusters": anomalies,
         "graphData": graph_data,
-        "clusterSummary": cluster_result
+        "clusterSummary": cluster_result,
     }
