@@ -97,7 +97,7 @@ export default {
 
   data() {
     return {
-      e1: 1,
+      e1: 2,
       filename: "",
       networkGraphKey: 0,
       loading: true,
@@ -124,10 +124,29 @@ export default {
         { text: "Unique IPs", value: "unique_ips" },
       ],
       cnnHeaders: [
-        { text: "Class Name", value: "class_name" },
-        { text: "Count", value: "count" },
-        { text: "Percentage (%)", value: "percentage" },
-        { text: "IP Addresses", value: "ips" },
+        {
+          text: "Role / Class Name",
+          value: "class_name",
+          align: "start",
+          width: "25%",
+        },
+        {
+          text: "Count",
+          value: "count",
+          sortable: true,
+          width: "15%",
+        },
+        {
+          text: "Distribution", // NEW FIELD
+          value: "percentage",
+          align: "center",
+          width: "20%",
+        },
+        {
+          text: "Assigned IP Addresses",
+          value: "ips",
+          sortable: false,
+        },
       ],
     };
   },

@@ -47,10 +47,10 @@
     </v-card>
 
     <div class="d-flex ga-4 mt-4">
-      <v-btn color="secondary" @click="$emit('prev')" class="control-btn">
+      <v-btn color="secondary" @click="$emit('prev')" class="mx-2 control-btn">
         <v-icon start>mdi-arrow-left</v-icon> Previous
       </v-btn>
-      <v-btn color="primary" @click="$emit('restart')" class="control-btn">
+      <v-btn color="primary" @click="$emit('restart')" class="mx-2 control-btn">
         <v-icon start>mdi-restart</v-icon> Start Over
       </v-btn>
     </div>

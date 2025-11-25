@@ -67,15 +67,54 @@
         <!-- Table -->
         <v-data-table
           :headers="cnnHeaders"
-          :items="cnnResults.rule_based_classification_summary"
+          :items="enhancedTableItems"
           class="packet-table elevation-2"
-          density="compact"
+          density="comfortable"
+          hover
         >
+          <template v-slot:item.class_name="{ item }">
+            <div class="d-flex align-center font-weight-bold">
+              <v-avatar size="24" color="primary" variant="tonal" class="mr-2">
+                <span class="text-caption">
+                  {{ item.class_name.charAt(0) }}
+                </span>
+              </v-avatar>
+              {{ item.class_name }}
+            </div>
+          </template>
+
+          <template v-slot:item.percentage="{ item }">
+            <div class="d-flex align-center" style="width: 100%">
+              <v-progress-linear
+                :model-value="item.percentage"
+                color="primary"
+                height="8"
+                rounded
+                striped
+                class="mr-2"
+              ></v-progress-linear>
+              <span class="text-caption text-medium-emphasis"
+                >{{ item.percentage }}%</span
+              >
+            </div>
+          </template>
+
           <template v-slot:item.ips="{ item }">
-            <ul v-if="item.ips?.length">
-              <li v-for="ip in item.ips" :key="ip">{{ ip }}</li>
-            </ul>
-            <div v-else>—</div>
+            <div v-if="item.ips?.length" class="py-2">
+              <v-chip
+                v-for="(ip, index) in item.ips"
+                :key="ip"
+                size="x-small"
+                color="primary"
+                variant="flat"
+                class="mr-1 mb-1 font-weight-bold"
+              >
+                {{ ip }}
+              </v-chip>
+            </div>
+            <div v-else class="text-grey text-caption font-italic">
+              No IPs assigned
+            </div>
           </template>
         </v-data-table>
 
@@ -98,7 +137,7 @@
     </v-card>
 
     <!-- Navigation -->
-    <div class="d-flex ga-4 mt-4">
+    <div class="d-flex ga-4 mt-4 mx-2">
       <v-btn color="secondary" @click="$emit('prev')" class="control-btn">
         <v-icon start>mdi-arrow-left</v-icon> Previous
       </v-btn>
@@ -106,7 +145,7 @@
         color="primary"
         @click="$emit('next')"
         :disabled="!cnnResults"
-        class="control-btn"
+        class="control-btn mx-2"
       >
         Continue <v-icon end>mdi-arrow-right</v-icon>
       </v-btn>
@@ -147,6 +186,19 @@ export default {
         total_classified: "Total Classified Items",
         processing_time: "Processing Time (s)",
       };
+    },
+    enhancedTableItems() {
+      if (!this.cnnResults?.rule_based_classification_summary) return [];
+
+      const total = this.cnnResults.rule_based_classification_summary.reduce(
+        (sum, item) => sum + item.count,
+        0
+      );
+
+      return this.cnnResults.rule_based_classification_summary.map((item) => ({
+        ...item,
+        percentage: total > 0 ? ((item.count / total) * 100).toFixed(1) : 0,
+      }));
     },
   },
 
