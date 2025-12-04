@@ -90,7 +90,6 @@ sw.*
 # Vim swap files
 *.swp
 package-lock.json
-package.json
 
 server/__pycache__
 server/generated_pcaps
@@ -101,3 +100,4 @@ server/results
 server/source
 server/make.bat
 server/Makefile
+uploads
