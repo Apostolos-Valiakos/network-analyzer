@@ -1,0 +1,12 @@
+Flask
+Flask-Cors
+flasgger
+scapy
+pandas
+numpy
+scikit-learn
+networkx
+python-louvain
+websocket-client
+requests
+pyshark
