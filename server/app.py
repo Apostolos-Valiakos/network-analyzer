@@ -51,7 +51,13 @@ from connectToWebsocket import convert_tuple_keys_to_str, startWebSocketClient
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+)
 
 swagger_template = {
     "swagger": "2.0",
@@ -1021,4 +1027,4 @@ def start_analysis_from_websocket():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", debug=True, port=5000)
