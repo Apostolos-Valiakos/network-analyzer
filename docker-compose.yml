@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  # The Python Backend
+  server:
+    build:
+      context: ./server  # Looks inside the 'server' folder for the Dockerfile
+    ports:
+      - "5000:5000"
+    container_name: network_analyzer_backend
+
+  # The Nuxt/Nginx Frontend
+  frontend:
+    build:
+      context: .         # Looks in the current root folder for the Dockerfile
+    ports:
+      - "80:80"
+    container_name: network_analyzer_frontend
+    depends_on:
+      - server           # Ensures backend starts before frontend
