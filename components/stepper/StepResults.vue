@@ -21,14 +21,18 @@
       ></v-select>
 
       <div class="d-flex flex-wrap ga-4">
-        <v-btn color="green" class="white--text control-btn" @click="saveRoles">
+        <v-btn
+          color="green"
+          class="white--text control-btn mx-1"
+          @click="saveRoles"
+        >
           <v-icon start>mdi-content-save</v-icon>
           Download Roles ({{ localFileType.toUpperCase() }})
         </v-btn>
 
         <v-btn
           color="blue"
-          class="white--text control-btn"
+          class="white--text control-btn mx-1"
           @click="downloadPcap"
         >
           <v-icon start>mdi-download</v-icon>

@@ -97,7 +97,7 @@ export default {
 
   data() {
     return {
-      e1: 2,
+      e1: 1,
       filename: "",
       networkGraphKey: 0,
       loading: true,
