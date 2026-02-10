@@ -1027,4 +1027,6 @@ def start_analysis_from_websocket():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5000)
+    # Avoid the Flask reloader in environments where forking is restricted.
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", debug=True, port=port, use_reloader=False)
