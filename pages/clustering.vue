@@ -9,7 +9,7 @@
       <p class="text-subtitle-1">
         Using our API like this:
         <b class="text-primary">
-          http://127.0.0.1:5000/generated_pcaps/{{ filename }}
+          {{ pcapUrlDisplay }}
         </b>
       </p>
       <div @click="downloadPcap" class="text-h6 font-weight-bold my-4">
@@ -108,6 +108,7 @@ export default {
       noOfclusters: 4,
       noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       fileType: "json",
+      apiBaseUrl: process.env.API_BASE_URL,
       suggestedClusters: null,
       modularityData: [],
       bestModularity: null,
@@ -150,8 +151,13 @@ export default {
       ],
     };
   },
-
   computed: {
+    pcapUrlDisplay() {
+      if (!this.filename) {
+        return `${this.apiBaseUrl}/generated_pcaps/`;
+      }
+      return `${this.apiBaseUrl}/generated_pcaps/${this.filename}`;
+    },
     clusteringProps() {
       return {
         filename: this.filename,
@@ -231,7 +237,7 @@ export default {
           anomaly_threshold: 3,
         };
 
-        const response = await fetch("http://127.0.0.1:5000/clustering", {
+        const response = await fetch(`${this.apiBaseUrl}/clustering`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -260,7 +266,7 @@ export default {
     },
 
     async downloadPcap() {
-      const url = `http://127.0.0.1:5000/generated_pcaps/${this.filename}`;
+      const url = `${this.apiBaseUrl}/generated_pcaps/${this.filename}`;
       const link = document.createElement("a");
       link.href = url;
       link.download = this.filename;
@@ -277,7 +283,7 @@ export default {
           type: this.fileType,
         };
 
-        const response = await fetch("http://127.0.0.1:5000/save-results", {
+        const response = await fetch(`${this.apiBaseUrl}/save-results`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -291,7 +297,7 @@ export default {
         const data = await response.json();
         if (data.download_url) {
           const link = document.createElement("a");
-          link.href = `http://127.0.0.1:5000${data.download_url}`;
+          link.href = `${this.apiBaseUrl}${data.download_url}`;
           link.download = data.saved_file;
           document.body.appendChild(link);
           link.click();
@@ -307,7 +313,7 @@ export default {
       try {
         const params = new URLSearchParams({ file: this.filename });
         const response = await fetch(
-          `http://127.0.0.1:5000/suggested_clusters?${params}`
+          `${this.apiBaseUrl}/suggested_clusters?${params}`
         );
 
         if (!response.ok) {
@@ -344,7 +350,7 @@ export default {
       };
 
       try {
-        const response = await fetch("http://127.0.0.1:5000/run_pipeline", {
+        const response = await fetch(`${this.apiBaseUrl}/run_pipeline`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -366,7 +372,7 @@ export default {
 
     async saveRoles() {
       const file = this.filename.substring(0, this.filename.lastIndexOf("."));
-      const url = `http://127.0.0.1:5000/save_roles?file=${file}&type=${this.fileType}`;
+      const url = `${this.apiBaseUrl}/save_roles?file=${file}&type=${this.fileType}`;
       const link = document.createElement("a");
       link.href = url;
       link.download = `${file}.${this.fileType}`;

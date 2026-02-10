@@ -5,6 +5,7 @@ import sys
 import time
 import multiprocessing as mp
 import json
+import csv
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -201,6 +202,13 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
         base = os.path.splitext(os.path.basename(pcap_file_path))[0]
         with open(f"{results_dir}/{base}.json", "w") as f:
             json.dump(summary, f, indent=4)
+        csv_path = os.path.join(results_dir, f"{base}.csv")
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["class_name", "count", "ips"])
+            for row in summary:
+                ips = ";".join(row.get("ips", []))
+                writer.writerow([row.get("class_name"), row.get("count"), ips])
 
         result_queue.put(
             {

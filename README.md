@@ -100,19 +100,79 @@ _The API will be available at `http://127.0.0.1:5000`._
 1. **Install Python Dependencies:**
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r server/requirements.txt
+```
 
+If you prefer not to use a virtual environment, you can install directly:
+
+```bash
+pip install -r server/requirements.txt
+```
+
+### System dependencies
+
+This project requires `tshark` for role classification and deep packet inspection.
+
+On macOS (Homebrew):
+
+```bash
+brew install wireshark
 ```
 
 2. **Run the Flask Server:**
 
 ```bash
-python app.py
-
+python3 server/app.py
 ```
 
-3. **Frontend Setup:**
-   (Assuming standard Vue setup)
+Or via npm:
+
+```bash
+npm run api
+```
+
+You can override the API port (default 5000) with:
+
+```bash
+PORT=5001 python3 server/app.py
+```
+
+### 4. Run the frontend (Nuxt)
+
+```bash
+npm install
+HOST=0.0.0.0 PORT=3000 npm run dev
+```
+
+The frontend uses these env vars (optional):
+
+```bash
+API_BASE_URL=http://127.0.0.1:5001
+WS_URL=ws://127.0.0.1:5001
+```
+
+Server starts at:
+
+```
+http://127.0.0.1:5000
+```
+
+Swagger Docs:
+
+```
+http://127.0.0.1:5000/apidocs/
+```
+
+---
+
+## Environment Variables
+
+| Variable             | Description                   | Default                  |
+| -------------------- | ----------------------------- | ------------------------ |
+| `PCAP_OUTPUT_DIR`    | Directory for generated PCAPs | `server/generated_pcaps` |
+| `MAX_CONTENT_LENGTH` | Max upload size               | `1GB`                    |
 
 ```bash
 npm install
