@@ -1,190 +1,157 @@
-# Network Traffic Analysis & PCAP Generation Service
+# Network Traffic Analysis & 5G/O-RAN Profiling Service
 
-**Flask API for uploading, analyzing, generating, and processing PCAP files**
+**A full-stack application for analyzing, clustering, and profiling 5G and O-RAN network traffic using machine learning and rule-based heuristics.**
 
-This project provides a full-featured backend service for **network traffic analysis**, **PCAP ingestion & generation**, **role classification**, **UE session extraction**, **clustering**, and **automated packet-capture pipelines**. It exposes a REST API with Swagger documentation and integrates several analytical modules to process packet captures efficiently.
-
----
-
-## Features
-
-### **PCAP Handling**
-
-- Upload PCAP files (`/analyze`)
-- Analyze saved/generated PCAPs
-- Stream packets in Base64 and assemble into PCAP (`/save-pcap`)
-- Download generated PCAP files
-
-### **Network Analysis**
-
-- Total packet statistics
-- IP protocol breakdown
-- Network conversation graph (JSON)
-- UE session extraction
-- Role assessment (rule-based + ML)
-- Machine Learning IP role classification pipeline
-
-### **Clustering & Anomaly Detection**
-
-- Agglomerative clustering on PCAPs
-- Graph Modularity method for optimal cluster suggestion
-- Cluster hierarchy & importance scoring
-- Export clustering results to JSON/CSV
-
-### **Automated Pipeline**
-
-- Fully automated PCAP analysis (`/automated-analysis`)
-- Long-running WebSocket-based sniffing pipeline (`/start-analysis-from-websocket`)
-- Background capture + analysis + result export
-
-### **Developer-friendly**
-
-- Built with **Flask**, **Scapy**, **Pandas**, and custom analysis modules
-- Automatic Swagger UI available at: **`/apidocs/`**
+This project provides a sophisticated backend for **Deep Packet Inspection (DPI)**, **Role Classification**, and **PCAP Generation**, paired with a modern **Vue.js + Vuetify** frontend for real-time visualization and interactive analysis.
 
 ---
 
-## Project Structure
+## Key Features
+
+### **1. Advanced 5G & O-RAN Analysis**
+
+Unlike generic analyzers, this tool is optimized for next-gen mobile networks:
+
+- **5G Core Identification:** Identifies AMF, SMF, UPF, and UDM using **HTTP/2 SBI (Service Based Interface)** signatures (e.g., `/namf`, `/nsmf`).
+- **O-RAN Component Detection:** Detects Near-RT RIC, E2 Nodes, and E2T traffic using **E2AP procedure codes** and specific ports (e.g., 38000 for E2T, 6379 for Redis).
+- **Control Plane Analysis:** Parses **NGAP** (gNB AMF) and **PFCP** (SMF UPF) signaling to map network topology.
+- **UE Session Extraction:** Extracts IMSI, GUTI, SUCI, and PDU Session IDs using `pyshark`.
+
+### **2. Frontend Visualization (Vue.js + Vuetify)**
+
+- **Real-Time Sniffer:**
+- Live packet capture via WebSocket (`ws://127.0.0.1:5001`).
+- Interactive interface selection and buffer management.
+- Live metrics: Packets/sec, total data size, and raw packet logs.
+
+- **Analysis Wizard:** A step-by-step interface for processing PCAPs:
+
+1. **Clustering:** Force-directed graph visualization with **Graph Modularity** optimization to suggest the ideal number of clusters ().
+2. **Profiling:** Rule-based and ML classification of IP roles.
+3. **Results:** Export roles and hierarchies to JSON or CSV.
+
+- **Network Graphs:** High-performance topology rendering using **Apache ECharts**.
+
+### **3. Machine Learning Pipeline**
+
+- **Feature Engineering:** Extracts packet length, protocol sequences, and timestamps.
+- **Role Classification:** Hybird approach using **DPI rules** (headers, ports) and **ML sequencing** to label nodes (e.g., "gNB", "Malicious", "Unknown").
+
+---
+
+## Architecture
+
+```text
+├── client/ (Vue.js)
+│   ├── views/
+│   │   ├── realTime.vue       # Live WebSocket capture & PCAP generation
+│   │   ├── clustering.vue     # Multi-step analysis wizard
+│   │   └── analyze.vue        # Quick static PCAP analysis
+│   ├── components/
+│   │   ├── NetworkGraph.vue   # ECharts topology visualizer
+│   │   ├── ModularityChart.vue# Elbow method visualization
+│   │   └── stepper/           # Wizard sub-components
+│   └── ...
+├── server/ (Flask)
+│   ├── app.py                 # API Entry point
+│   ├── rrc_utils.py           # 5G/O-RAN extraction logic (TShark wrappers)
+│   ├── Preprocess.py          # ML Feature extraction & Pipeline
+│   ├── role_assessment.py     # Rule-based heuristics
+│   ├── ueAnalysis.py          # UE identifier extraction
+│   └── pcap_generator_service.py # Packet reassembly service
+├── Dockerfile                 # Container configuration
+└── Makefile                   # Documentation build tools
 
 ```
-server/
-├── uploads/              # Temporary uploaded user files
-├── generated_pcaps/      # PCAP files created from streamed packets
-├── cluster_analysis/     # Stored clustering results (json/csv)
-├── results/              # ML pipeline results
-├── app.py                # Main Flask server
-└── analysis modules...   # pcap_analysis, ueAnalysis, etc.
-```
 
 ---
 
-## Installation
+## Installation & Setup
 
-### 1. Clone the repository
+### Prerequisites
+
+- **Python 3.10+**
+- **Wireshark/TShark:** Required for the backend to parse specific 5G fields.
+- _Ubuntu:_ `sudo apt install tshark`
+- _Windows:_ Install Wireshark and ensure `tshark` is in your PATH.
+
+### Option A: Running with Docker (Recommended)
+
+The project includes a `Dockerfile` for easy deployment.
+
+1. **Build the image:**
 
 ```bash
-git clone https://github.com/Apostolos-Valiakos/network-analyzer
-cd network-analyzer
+docker build -t network-analyzer .
+
 ```
 
-### 2. Install dependencies
+2. **Run the container:**
+
+```bash
+docker run -p 5000:5000 network-analyzer
+
+```
+
+_The API will be available at `http://127.0.0.1:5000`._
+
+### Option B: Local Development
+
+1. **Install Python Dependencies:**
 
 ```bash
 pip install -r requirements.txt
+
 ```
 
-### 3. Run the server
+2. **Run the Flask Server:**
 
 ```bash
 python app.py
-```
-
-Server starts at:
 
 ```
-http://127.0.0.1:5000
-```
 
-Swagger Docs:
-
-```
-http://127.0.0.1:5000/apidocs/
-```
-
----
-
-## Environment Variables
-
-| Variable             | Description                   | Default                  |
-| -------------------- | ----------------------------- | ------------------------ |
-| `PCAP_OUTPUT_DIR`    | Directory for generated PCAPs | `server/generated_pcaps` |
-| `MAX_CONTENT_LENGTH` | Max upload size               | `1GB`                    |
+3. **Frontend Setup:**
+   (Assuming standard Vue setup)
 
 ```bash
-export PCAP_OUTPUT_DIR="mydir/"
+npm install
+npm run dev
+
 ```
 
 ---
 
 ## API Overview
 
-### **Upload & Analyze PCAP**
+### **Core Analysis**
 
-`POST /analyze` – Protocol analysis, conversation graph, UE sessions
+- `POST /automated-analysis`: Upload a PCAP for full stack analysis (Stats, Graph, UE, Roles).
+- `POST /clustering`: Perform agglomerative clustering on network nodes.
+- `POST /run_pipeline`: Trigger the ML/Rule-based classification pipeline.
 
-### **Streamed PCAP Assembly**
+### **Real-Time & PCAP Generation**
 
-`POST /save-pcap` – Send Base64 packet chunks incrementally
+- `POST /save-pcap`: Stream Base64 packet chunks to build a PCAP file on the server.
+- `GET /generated_pcaps/<filename>`: Download the assembled PCAP.
 
-### **Download Assembled PCAP**
+### **Utilities**
 
-`GET /generated_pcaps/<filename>`
-
-### **Clustering**
-
-`POST /clustering` – Run agglomerative clustering
-`GET /suggested_clusters` – Elbow method
-`POST /save-results` – Save clustering output
-
-### **Machine Learning Role Classification**
-
-`POST /run_pipeline`
-
-### **Automated end-to-end pipeline**
-
-`POST /automated-analysis`
-
-### **WebSocket Packet Capture**
-
-`POST /start-analysis-from-websocket`
+- `GET /suggested_clusters`: Calculates the "Elbow" or modularity peak to suggest clusters.
+- `POST /save_roles`: Export identified network roles to CSV/JSON.
 
 ---
 
-## Dependencies / External Modules
+## Documentation
 
-- `pcap_analysis` – Packet parsing & statistics
-- `ueAnalysis` – UE session extraction
-- `role_assessment` – Rule-based IP role detection
-- `Preprocess` – ML preprocessing
-- `agglomerative_clustering` – Clustering engine
-- `graph_builder` – Conversation graph
-- `connectToWebsocket` – WebSocket capture
+The project uses Sphinx for documentation.
+
+```bash
+# Build documentation
+make html
+
+```
 
 ---
 
-# Vue Frontend – Capabilities Overview
-
-The frontend provides a clean, modern, and minimalistic interface for interacting with the network traffic analysis backend. It is built using Vue.js and TailwindCSS.
-
-## Frontend Capabilities
-
-### **1. PCAP File Upload**
-
-- Users can select and upload `.pcap` files directly from the browser.
-- Input validation ensures only valid PCAPs can be analyzed.
-
-### **2. Trigger Backend Network Analysis**
-
-- A single **Analyze** button sends the uploaded file to the `/automated-analysis` endpoint.
-- Displays a loading state while the server processes the PCAP.
-
-### **3. Display of Analysis Results**
-
-Once the backend responds, the frontend displays:
-
-- **Total packets** processed
-- **IP protocol statistics** (TCP/UDP/ICMP breakdown, etc.)
-- **UE session list** extracted from the PCAP
-
-All results are shown in a clean, structured layout.
-
-### **4. Download Generated PCAP**
-
-- A **Download PCAP** button retrieves the newly assembled/generated PCAP created by the backend.
-- Uses a direct link to the `/generated_pcaps/<filename>` endpoint.
-
-### **5. Responsive & Accessible UI**
-
-- Fully responsive layout using Tailwind CSS
-- Dark mode theme (gray + purple accent)
-- Accessible buttons, clean spacing, readable typography
+**2025 © UTH – XTRUST-6G**
