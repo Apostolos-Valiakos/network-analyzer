@@ -74,6 +74,7 @@ export default {
       clustering: null,
       suggested_clusters: null,
       response: null,
+      apiBaseUrl: process.env.API_BASE_URL,
 
       // Table
       ipProtocolHeaders: [
@@ -108,7 +109,7 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await fetch("http://127.0.0.1:5000/automated-analysis", {
+        const resp = await fetch(`${this.apiBaseUrl}/automated-analysis`, {
           method: "POST",
           body: form,
         });
@@ -144,7 +145,7 @@ export default {
       if (type === "json") this.savingJson = true;
       if (type === "csv") this.savingCsv = true;
 
-      const url = `http://127.0.0.1:5000/save_roles?file=${this.filename}&type=${type}`;
+      const url = `${this.apiBaseUrl}/save_roles?file=${this.filename}&type=${type}`;
 
       try {
         const resp = await fetch(url);

@@ -273,8 +273,8 @@ export default {
   data() {
     return {
       // Configuration
-      wsUrl: "ws://127.0.0.1:5001", // Default value, now user-editable
-      apiUrl: "http://127.0.0.1:5000",
+      wsUrl: process.env.WS_URL, // Default value, now user-editable
+      apiUrl: process.env.API_BASE_URL,
       chunkSize: 1000,
 
       // Interface State

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "api": "python3 server/app.py",
     "dev": "nuxt",
     "build": "nuxt build",
     "start": "nuxt start",

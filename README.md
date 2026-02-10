@@ -70,13 +70,57 @@ cd network-analyzer
 ### 2. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r server/requirements.txt
+```
+
+If you prefer not to use a virtual environment, you can install directly:
+
+```bash
+pip install -r server/requirements.txt
+```
+
+### System dependencies
+
+This project requires `tshark` for role classification and deep packet inspection.
+
+On macOS (Homebrew):
+
+```bash
+brew install wireshark
 ```
 
 ### 3. Run the server
 
 ```bash
-python app.py
+python3 server/app.py
+```
+
+Or via npm:
+
+```bash
+npm run api
+```
+
+You can override the API port (default 5000) with:
+
+```bash
+PORT=5001 python3 server/app.py
+```
+
+### 4. Run the frontend (Nuxt)
+
+```bash
+npm install
+HOST=0.0.0.0 PORT=3000 npm run dev
+```
+
+The frontend uses these env vars (optional):
+
+```bash
+API_BASE_URL=http://127.0.0.1:5001
+WS_URL=ws://127.0.0.1:5001
 ```
 
 Server starts at:
