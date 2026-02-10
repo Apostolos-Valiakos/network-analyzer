@@ -29,6 +29,16 @@
     </v-btn>
 
     <div v-if="analysis" class="mt-8">
+      <v-alert
+        v-if="loadedFromCache"
+        type="info"
+        dense
+        class="mb-4"
+        border="left"
+      >
+        Loaded previous results from this browser. Upload a new file to replace
+        them.
+      </v-alert>
       <!-- Packet Stats -->
       <v-card class="mb-6 pa-4" outlined>
         <h3>Total Packets: {{ analysis.total_packets }}</h3>
@@ -46,6 +56,9 @@
         <v-btn color="success" @click="saveRoles('csv')" :loading="savingCsv">
           Save Roles as CSV
         </v-btn>
+        <v-btn text class="ml-3" @click="clearCachedResults">
+          Clear cached results
+        </v-btn>
       </div>
     </div>
   </v-container>
@@ -60,6 +73,7 @@ export default {
 
   data() {
     return {
+      cacheKey: "analyze:latest",
       file: null,
       loading: false,
       savingJson: false,
@@ -75,6 +89,7 @@ export default {
       suggested_clusters: null,
       response: null,
       apiBaseUrl: process.env.API_BASE_URL,
+      loadedFromCache: false,
 
       // Table
       ipProtocolHeaders: [
@@ -100,6 +115,42 @@ export default {
   methods: {
     handleFile(f) {
       this.file = f;
+    },
+    loadCachedResults() {
+      try {
+        const raw = localStorage.getItem(this.cacheKey);
+        if (!raw) return;
+        const cached = JSON.parse(raw);
+        this.filename = cached.filename || null;
+        this.analysis = cached.analysis || null;
+        this.graphData = cached.graphData || null;
+        this.ueInfo = cached.ueInfo || null;
+        this.roles = cached.roles || null;
+        this.clustering = cached.clustering || null;
+        this.suggested_clusters = cached.suggested_clusters || null;
+        this.response = cached.response || null;
+        if (this.analysis) this.loadedFromCache = true;
+      } catch (e) {
+        localStorage.removeItem(this.cacheKey);
+      }
+    },
+    cacheResults(data) {
+      const payload = {
+        filename: data.filename,
+        analysis: data.analysis,
+        graphData: data.analysis?.graph || null,
+        ueInfo: data.ue_sessions || null,
+        roles: data.roles || null,
+        clustering: data.clustering || null,
+        suggested_clusters: data.suggested_clusters || null,
+        response: data,
+      };
+      localStorage.setItem(this.cacheKey, JSON.stringify(payload));
+      this.loadedFromCache = false;
+    },
+    clearCachedResults() {
+      localStorage.removeItem(this.cacheKey);
+      this.loadedFromCache = false;
     },
     async runFullAnalysis() {
       if (!this.file) return;
@@ -130,6 +181,7 @@ export default {
         this.clustering = data.clustering;
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
+        this.cacheResults(data);
         console.log(data);
         console.log(data.roles);
       } catch (err) {
@@ -170,6 +222,9 @@ export default {
         this.savingCsv = false;
       }
     },
+  },
+  mounted() {
+    this.loadCachedResults();
   },
 };
 </script>
