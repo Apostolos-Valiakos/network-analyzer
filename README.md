@@ -37,6 +37,13 @@ Unlike generic analyzers, this tool is optimized for next-gen mobile networks:
 - **Feature Engineering:** Extracts packet length, protocol sequences, and timestamps.
 - **Role Classification:** Hybird approach using **DPI rules** (headers, ports) and **ML sequencing** to label nodes (e.g., "gNB", "Malicious", "Unknown").
 
+### **4. Privacy Metrics**
+
+- **Privacy Metrics Dashboard:** New section in `analyze.vue` to compute and compare privacy metrics before/after anonymization.
+- **Supported Metrics:** Calculates **k-anonymity**, **l-diversity**, and **t-closeness** on selected identifier groups.
+- **Anonymization Controls:** Lets users apply **pseudonymization**, **generalization**, and **suppression** per selected columns.
+- **API Support:** Includes a dedicated `POST /privacy-metrics` endpoint for metric computation and transformed-record previews.
+
 ---
 
 ## Architecture
@@ -199,6 +206,7 @@ npm run dev
 
 - `GET /suggested_clusters`: Calculates the "Elbow" or modularity peak to suggest clusters.
 - `POST /save_roles`: Export identified network roles to CSV/JSON.
+- `POST /privacy-metrics`: Compute k-anonymity, l-diversity, and t-closeness after optional anonymization transforms.
 
 ---
 

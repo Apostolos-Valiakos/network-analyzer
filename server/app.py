@@ -48,7 +48,11 @@ from agglomerative_clustering import (
 
 from Preprocess import run_ip_role_pipeline
 from connectToWebsocket import convert_tuple_keys_to_str, startWebSocketClient
-from privacy_metrics import apply_transformations, compute_privacy_metrics
+from privacy_metrics import (
+    apply_transformations,
+    compute_privacy_metrics,
+    build_privacy_suggestions,
+)
 
 
 app = Flask(__name__)
@@ -789,9 +793,36 @@ def privacy_metrics_endpoint():
     pseudonymize = transforms.get("pseudonymize", []) or []
     generalize = transforms.get("generalize", []) or []
     suppress = transforms.get("suppress", []) or []
+    pseudonymization_mode = transforms.get("pseudonymization_mode", "deterministic")
+    generalize_profiles = transforms.get("generalize_profiles", {}) or {}
+    suppress_thresholds = transforms.get("suppress_thresholds", {}) or {}
 
-    transformed = apply_transformations(records, pseudonymize, generalize, suppress)
+    if not isinstance(generalize_profiles, dict):
+        return jsonify({"error": "generalize_profiles must be an object"}), 400
+    if not isinstance(suppress_thresholds, dict):
+        return jsonify({"error": "suppress_thresholds must be an object"}), 400
+
+    normalized_thresholds = {}
+    for key, value in suppress_thresholds.items():
+        try:
+            normalized_thresholds[key] = int(value)
+        except (TypeError, ValueError):
+            return jsonify({"error": f"Invalid suppression threshold for '{key}'"}), 400
+
+    if pseudonymization_mode not in ["deterministic", "per_run", "per_pilot"]:
+        return jsonify({"error": "Invalid pseudonymization_mode"}), 400
+
+    transformed = apply_transformations(
+        records,
+        pseudonymize,
+        generalize,
+        suppress,
+        pseudonymization_mode=pseudonymization_mode,
+        generalize_profiles=generalize_profiles,
+        suppress_thresholds=normalized_thresholds,
+    )
     metrics = compute_privacy_metrics(transformed, identifiers, sensitive_attribute)
+    suggestions = build_privacy_suggestions(metrics, identifiers, sensitive_attribute)
 
     return (
         jsonify(
@@ -800,9 +831,13 @@ def privacy_metrics_endpoint():
                 "records": transformed,
                 "applied_transformations": {
                     "pseudonymize": pseudonymize,
+                    "pseudonymization_mode": pseudonymization_mode,
                     "generalize": generalize,
                     "suppress": suppress,
+                    "generalize_profiles": generalize_profiles,
+                    "suppress_thresholds": normalized_thresholds,
                 },
+                "suggestions": suggestions,
             }
         ),
         200,
