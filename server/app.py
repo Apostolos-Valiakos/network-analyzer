@@ -48,6 +48,7 @@ from agglomerative_clustering import (
 
 from Preprocess import run_ip_role_pipeline
 from connectToWebsocket import convert_tuple_keys_to_str, startWebSocketClient
+from privacy_metrics import apply_transformations, compute_privacy_metrics
 
 
 app = Flask(__name__)
@@ -728,6 +729,86 @@ def save_roles_endpoint():
     return send_file(str(path), as_attachment=True)
 
 
+@app.route("/privacy-metrics", methods=["POST"])
+def privacy_metrics_endpoint():
+    """
+    Compute privacy metrics with optional anonymization transforms
+    ---
+    tags:
+      - Privacy
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required: [records, identifiers]
+          properties:
+            records:
+              type: array
+              items: {type: object}
+            identifiers:
+              type: array
+              items: {type: string}
+            sensitive_attribute:
+              type: string
+            transformations:
+              type: object
+              properties:
+                pseudonymize:
+                  type: array
+                  items: {type: string}
+                generalize:
+                  type: array
+                  items: {type: string}
+                suppress:
+                  type: array
+                  items: {type: string}
+    responses:
+      200:
+        description: Metrics computed
+      400:
+        description: Invalid input
+    """
+    if not request.is_json:
+        return jsonify({"error": "JSON required"}), 400
+
+    data = request.get_json()
+    records = data.get("records", [])
+    identifiers = data.get("identifiers", [])
+    sensitive_attribute = data.get("sensitive_attribute")
+    transforms = data.get("transformations", {})
+
+    if not isinstance(records, list) or not all(isinstance(r, dict) for r in records):
+        return jsonify({"error": "records must be a list of objects"}), 400
+    if not isinstance(identifiers, list):
+        return jsonify({"error": "identifiers must be a list"}), 400
+
+    pseudonymize = transforms.get("pseudonymize", []) or []
+    generalize = transforms.get("generalize", []) or []
+    suppress = transforms.get("suppress", []) or []
+
+    transformed = apply_transformations(records, pseudonymize, generalize, suppress)
+    metrics = compute_privacy_metrics(transformed, identifiers, sensitive_attribute)
+
+    return (
+        jsonify(
+            {
+                "metrics": metrics,
+                "records": transformed,
+                "applied_transformations": {
+                    "pseudonymize": pseudonymize,
+                    "generalize": generalize,
+                    "suppress": suppress,
+                },
+            }
+        ),
+        200,
+    )
+
+
 @app.route("/automated-analysis", methods=["POST"])
 def automated_analysis():
     """
@@ -885,9 +966,10 @@ def automated_analysis():
             "csv": "http://127.0.0.1:5000/save_roles?file=" + name_only + "&type=csv",
             "analysis": {
                 "total_packets": analysis_result["total_packets"],
-                # "ip_protocols": analysis_result['ip_protocols'],
+                "ip_protocols": analysis_result["ip_protocols"],
                 # "graph": graph_json
             },
+            "ip_roles": report.get("ip_roles", {}),
             # "ue_sessions": ue_sessions,
             # "clustering": clustering_result,
             # "suggested_clusters": {

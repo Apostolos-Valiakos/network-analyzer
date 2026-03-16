@@ -44,6 +44,129 @@
         <h3>Total Packets: {{ analysis.total_packets }}</h3>
       </v-card>
 
+      <v-card class="mb-6 pa-4" outlined>
+        <h3 class="text-h6 mb-2">Privacy Metrics & Pilot Relevance</h3>
+        <p class="mb-4 grey--text text--darken-1">
+          Select identifiers and sensitive attributes, then test
+          pseudonymization, generalization, and suppression to improve
+          k-anonymity, l-diversity, and t-closeness.
+        </p>
+
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="privacyIdentifiers"
+              :items="privacyColumns"
+              label="Identifiers (quasi-identifiers)"
+              multiple
+              chips
+              outlined
+              dense
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="privacySensitiveAttribute"
+              :items="privacyColumns"
+              label="Sensitive Attribute"
+              outlined
+              dense
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" md="4">
+            <v-select
+              v-model="privacyPseudonymize"
+              :items="privacyColumns"
+              label="Pseudonymize Columns"
+              multiple
+              chips
+              outlined
+              dense
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-select
+              v-model="privacyGeneralize"
+              :items="privacyColumns"
+              label="Generalize Columns"
+              multiple
+              chips
+              outlined
+              dense
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-select
+              v-model="privacySuppress"
+              :items="privacyColumns"
+              label="Suppress Columns"
+              multiple
+              chips
+              outlined
+              dense
+            />
+          </v-col>
+        </v-row>
+
+        <v-btn
+          color="primary"
+          class="mb-4"
+          :disabled="!canComputePrivacy"
+          :loading="privacyLoading"
+          @click="computePrivacyMetrics"
+        >
+          Compute Privacy Metrics
+        </v-btn>
+
+        <v-alert v-if="privacyError" type="error" dense class="mb-4">
+          {{ privacyError }}
+        </v-alert>
+
+        <v-row v-if="privacyOriginalMetrics && privacyTransformedMetrics">
+          <v-col cols="12" md="6">
+            <v-card outlined class="pa-3">
+              <h4 class="mb-2">Before Transformations</h4>
+              <div class="metric-line">
+                k-anonymity: {{ privacyOriginalMetrics.k_anonymity }}
+              </div>
+              <div class="metric-line">
+                l-diversity: {{ privacyOriginalMetrics.l_diversity }}
+              </div>
+              <div class="metric-line">
+                t-closeness: {{ privacyOriginalMetrics.t_closeness }}
+              </div>
+            </v-card>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-card outlined class="pa-3">
+              <h4 class="mb-2">After Transformations</h4>
+              <div class="metric-line">
+                k-anonymity: {{ privacyTransformedMetrics.k_anonymity }}
+              </div>
+              <div class="metric-line">
+                l-diversity: {{ privacyTransformedMetrics.l_diversity }}
+              </div>
+              <div class="metric-line">
+                t-closeness: {{ privacyTransformedMetrics.t_closeness }}
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
+
+        <div v-if="privacyTransformedRecords.length" class="mt-4">
+          <h4 class="mb-2">Transformed Records Preview</h4>
+          <v-data-table
+            :headers="privacyTableHeaders"
+            :items="privacyTransformedRecords"
+            dense
+            hide-default-footer
+          />
+        </div>
+      </v-card>
+
       <div class="mt-4">
         <v-btn
           color="success"
@@ -65,12 +188,7 @@
 </template>
 
 <script>
-import Assessments from "@/components/Assessments.vue";
-import NetworkGraph from "@/components/NetworkGraph.vue";
-
 export default {
-  components: { Assessments, NetworkGraph },
-
   data() {
     return {
       cacheKey: "analyze:latest",
@@ -90,6 +208,16 @@ export default {
       response: null,
       apiBaseUrl: process.env.API_BASE_URL,
       loadedFromCache: false,
+      privacyIdentifiers: [],
+      privacySensitiveAttribute: null,
+      privacyPseudonymize: [],
+      privacyGeneralize: [],
+      privacySuppress: [],
+      privacyLoading: false,
+      privacyError: "",
+      privacyOriginalMetrics: null,
+      privacyTransformedMetrics: null,
+      privacyTransformedRecords: [],
 
       // Table
       ipProtocolHeaders: [
@@ -109,6 +237,42 @@ export default {
           protocols,
         })
       );
+    },
+    privacyRecords() {
+      const ipRoles = this.response?.ip_roles || {};
+      const ipProtocols = this.analysis?.ip_protocols || {};
+      const allIps = new Set([
+        ...Object.keys(ipRoles),
+        ...Object.keys(ipProtocols),
+      ]);
+
+      return Array.from(allIps).map((ip) => {
+        const protocols = ipProtocols[ip] || [];
+        return {
+          ip,
+          role: ipRoles[ip] || "Unknown",
+          protocol_count: protocols.length,
+          protocols: protocols.join("|"),
+          pilot: "PUC#1",
+        };
+      });
+    },
+    privacyColumns() {
+      if (!this.privacyRecords.length) return [];
+      return Object.keys(this.privacyRecords[0]);
+    },
+    canComputePrivacy() {
+      return (
+        this.privacyRecords.length > 0 &&
+        this.privacyIdentifiers.length > 0 &&
+        !!this.privacySensitiveAttribute
+      );
+    },
+    privacyTableHeaders() {
+      return this.privacyColumns.map((col) => ({
+        text: col.replace(/_/g, " "),
+        value: col,
+      }));
     },
   },
 
@@ -140,7 +304,7 @@ export default {
         analysis: data.analysis,
         graphData: data.analysis?.graph || null,
         ueInfo: data.ue_sessions || null,
-        roles: data.roles || null,
+        roles: data.roles || data.ip_roles || null,
         clustering: data.clustering || null,
         suggested_clusters: data.suggested_clusters || null,
         response: data,
@@ -177,7 +341,7 @@ export default {
         this.analysis = data.analysis;
         this.graphData = data.analysis.graph;
         this.ueInfo = data.ue_sessions;
-        this.roles = data.roles;
+        this.roles = data.roles || data.ip_roles;
         this.clustering = data.clustering;
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
@@ -188,6 +352,49 @@ export default {
         alert(`Analysis failed: ${err.message}`);
       } finally {
         this.loading = false;
+      }
+    },
+    async callPrivacyMetrics(transformations) {
+      const resp = await fetch(`${this.apiBaseUrl}/privacy-metrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: this.privacyRecords,
+          identifiers: this.privacyIdentifiers,
+          sensitive_attribute: this.privacySensitiveAttribute,
+          transformations,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || "Privacy metrics failed");
+      }
+      return data;
+    },
+    async computePrivacyMetrics() {
+      if (!this.canComputePrivacy) return;
+      this.privacyLoading = true;
+      this.privacyError = "";
+
+      try {
+        const baseline = await this.callPrivacyMetrics({
+          pseudonymize: [],
+          generalize: [],
+          suppress: [],
+        });
+        const transformed = await this.callPrivacyMetrics({
+          pseudonymize: this.privacyPseudonymize,
+          generalize: this.privacyGeneralize,
+          suppress: this.privacySuppress,
+        });
+
+        this.privacyOriginalMetrics = baseline.metrics;
+        this.privacyTransformedMetrics = transformed.metrics;
+        this.privacyTransformedRecords = transformed.records.slice(0, 12);
+      } catch (err) {
+        this.privacyError = err.message;
+      } finally {
+        this.privacyLoading = false;
       }
     },
 
@@ -232,5 +439,10 @@ export default {
 <style scoped>
 .v-card {
   border-radius: 8px;
+}
+
+.metric-line {
+  font-size: 0.95rem;
+  margin-bottom: 4px;
 }
 </style>
