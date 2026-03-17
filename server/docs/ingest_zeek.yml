@@ -1,0 +1,27 @@
+tags:
+  - Continuous Monitoring
+summary: Ingest Zeek Flow Logs
+description: Receives JSON flow batches from the VM Zeek Agent and stores them in TimescaleDB.
+parameters:
+  - name: X-Internal-Token
+    in: header
+    type: string
+    required: true
+    description: Authentication token for the internal sensor.
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        flows:
+          type: array
+          items:
+            type: object
+responses:
+  200:
+    description: Batch inserted successfully or empty batch processed.
+  401:
+    description: Unauthorized. Missing or invalid internal token.
+  500:
+    description: Database insertion error.

@@ -1,0 +1,15 @@
+tags:
+  - PCAP Management
+summary: Download Generated PCAP
+description: Downloads a previously generated and saved PCAP file.
+parameters:
+  - name: filename
+    in: path
+    type: string
+    required: true
+    description: The name of the generated PCAP file to download.
+responses:
+  200:
+    description: The requested PCAP file as an attachment.
+  404:
+    description: File not found in the generated directory.

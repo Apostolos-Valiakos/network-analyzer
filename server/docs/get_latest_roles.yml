@@ -1,0 +1,22 @@
+tags:
+  - Continuous Monitoring
+summary: Get Latest Role Snapshot
+description: Retrieves the most recent role assessments from the continuous monitoring tables.
+parameters:
+  - name: limit
+    in: query
+    type: integer
+    required: false
+    default: 1000
+    description: Maximum number of records to return.
+  - name: format
+    in: query
+    type: string
+    required: false
+    default: csv
+    description: Response format (json or csv).
+responses:
+  200:
+    description: Returns the latest role assessments.
+  500:
+    description: Internal server error.

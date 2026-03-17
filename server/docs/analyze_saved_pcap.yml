@@ -1,0 +1,17 @@
+tags:
+  - Core Analysis
+summary: Analyze Saved PCAP
+description: Runs basic network analysis and graph building on a pre-existing PCAP file.
+parameters:
+  - name: filename
+    in: path
+    type: string
+    required: true
+    description: The name of the PCAP file to analyze.
+responses:
+  200:
+    description: Analysis successful, returning packet stats and conversation graph.
+  404:
+    description: PCAP file not found.
+  500:
+    description: Error occurred during analysis.

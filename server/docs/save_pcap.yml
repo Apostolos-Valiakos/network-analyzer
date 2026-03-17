@@ -1,0 +1,29 @@
+tags:
+  - PCAP Management
+summary: Save PCAP Stream
+description: Receives chunks of packets over a stream and appends them to a PCAP file.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Unique identifier for the current capture session.
+        packets:
+          type: array
+          items:
+            type: object
+          description: List of packet data payloads.
+        is_final_chunk:
+          type: boolean
+          description: Flag indicating if this is the last chunk of the stream.
+responses:
+  200:
+    description: Chunk processed successfully.
+  400:
+    description: Invalid JSON or missing required fields.
+  500:
+    description: Internal server error during processing.

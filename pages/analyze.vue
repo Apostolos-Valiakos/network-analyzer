@@ -78,8 +78,6 @@ export default {
       loading: false,
       savingJson: false,
       savingCsv: false,
-
-      // Results from backend
       filename: null,
       analysis: null,
       graphData: null,
@@ -88,7 +86,7 @@ export default {
       clustering: null,
       suggested_clusters: null,
       response: null,
-      apiBaseUrl: process.env.API_BASE_URL,
+      apiBaseUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5000",
       loadedFromCache: false,
 
       // Table

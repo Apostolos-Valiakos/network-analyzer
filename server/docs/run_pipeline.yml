@@ -1,0 +1,29 @@
+tags:
+  - Core Analysis
+summary: Run IP Role Pipeline
+description: Executes the IP role assessment pipeline on a specific PCAP file.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        pcap_file_path:
+          type: string
+          description: Name of the PCAP file in the generated directory.
+        model_name:
+          type: string
+          description: Name of the model to use (e.g., rule_based).
+        selected_ips:
+          type: array
+          items:
+            type: string
+          description: Optional list of specific IPs to analyze.
+responses:
+  200:
+    description: Pipeline executed successfully.
+  404:
+    description: PCAP file not found.
+  500:
+    description: Internal server error during execution.

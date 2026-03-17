@@ -1,144 +1,85 @@
 import pyshark
-import json
-from collections import defaultdict
-import asyncio  # Import asyncio for event loop management
+import asyncio
 from typing import List, Dict, Any
 
 
 ##
-# Initializes a pyshark capture for UE-specific analysis from the given filepath.
-#
-# It ensures an asyncio event loop is available in the current thread for pyshark operations,
-# then uses pyshark to read the PCAP file, structures the packet data into a list of dictionaries,
-# and finally calls `extract_ue_info` to filter and return the relevant UE data.
-#
-# @param [str] filepath The path to the PCAP file.
-# @return [List[Dict[str, Any]]] A list of dictionaries, where each dictionary contains extracted UE information.
+# Initializes a pyshark capture for UE-specific analysis.
+# REFACTOR: Removed "all_packets.json" write to improve performance.
+# REFACTOR: Improved Asyncio loop handling for Flask compatibility.
 def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
     """
-    Initializes a pyshark capture for UE-specific analysis from the given filepath.
-    Ensures an asyncio event loop is available in the current thread for pyshark operations.
-
-    Args:
-        filepath (str): The path to the PCAP file.
-
-    Returns:
-        list: A list of dictionaries, where each dictionary contains extracted UE information.
+    Extracts UE information (IMSI, GUTI, IPs) from a PCAP.
     """
-    # Ensure an asyncio event loop exists for the current thread.
-    # pyshark uses asyncio internally, and Flask's request threads might not have one by default.
+    # Fix for Pyshark in Flask: Create a new loop if the current one is closed/missing
     try:
         loop = asyncio.get_event_loop()
-    except RuntimeError:  # If no event loop is running, create a new one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    packets_data = []
-    capture = None  # Initialize capture to None for proper cleanup
+        if loop.is_closed():
+            asyncio.set_event_loop(asyncio.new_event_loop())
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     try:
-        ##
-        # Creates a pyshark file capture object.
-        capture = pyshark.FileCapture(filepath)
+        # KeepPacket=False saves RAM by not keeping packets in memory after parsing
+        capture = pyshark.FileCapture(filepath, keep_packets=False)
 
-        # Parse all packets and extract fields into a structured dictionary format
-        for pkt in capture:
-            pkt_info = {"packet_number": pkt.number, "layers": []}
-            for layer in pkt.layers:
-                layer_info = {"layer_name": layer.layer_name, "fields": {}}
-                for field_name in layer.field_names:
-                    try:
-                        # Get the field value from the pyshark layer
-                        layer_info["fields"][field_name] = layer.get_field(field_name)
-                    except AttributeError:
-                        # Some fields might not be present in all packets or layers,
-                        # gracefully skip if get_field raises an AttributeError.
-                        pass
-                pkt_info["layers"].append(layer_info)
-            packets_data.append(pkt_info)
+        all_ue_info = []
+
+        for packet in capture:
+            ue_info = extract_ue_info(packet)
+            if ue_info:
+                all_ue_info.append(ue_info)
+
+        capture.close()
+        return all_ue_info
 
     except Exception as e:
-        print(f"Error during pyshark capture in initialize_analysis_for_ue: {e}")
-        # Optionally, you might want to return an empty list or raise a custom exception here
+        print(f"UE Analysis Error: {e}")
         return []
-    finally:
-        # Always ensure the capture object is closed to release system resources (TShark process)
-        if capture:
-            capture.close()
-
-    # Export all parsed packets to a temporary file for debugging or external analysis
-    with open("./uploads/all_packets.json", "w") as f:
-        json.dump(packets_data, f, indent=2)
-
-    # After parsing with pyshark, extract the specific UE information
-    ue_data = extract_ue_info(packets_data)
-    return ue_data  # Return the extracted UE data
 
 
 ##
-# Extracts specific UE-related information from a list of structured packet dictionaries.
-#
-# This function processes the already parsed packet data (from pyshark) to find relevant UE fields
-# based on common 5G Core signaling protocols (like PFCP or GTPv2-C) fields.
-#
-# @param [List[Dict[str, Any]]] packets_data A list of dictionaries, each representing a packet's layers and fields.
-# @return [List[Dict[str, Any]]] A list of dictionaries, where each dictionary represents a UE session found.
-def extract_ue_info(packets_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Extracts specific UE-related information from a list of structured packet dictionaries.
-    This function processes the already parsed packet data to find relevant UE fields.
+# Extracts specific UE fields (IMSI, GUTI, PDU Session) from a packet.
+def extract_ue_info(packet):
+    ue_info = {}
+    found_info = False
 
-    Args:
-        packets_data (list): A list of dictionaries, each representing a packet's layers and fields.
+    try:
+        # Iterate over layers safely
+        for layer in packet.layers:
+            # Check for NGAP / NAS-5GS layers specifically
+            if layer.layer_name in ["ngap", "nas_5gs", "e2ap"]:
+                # Helper to safely get field values
+                def get_field(names):
+                    for name in names:
+                        if hasattr(layer, name):
+                            return getattr(layer, name)
+                    return None
 
-    Returns:
-        list: A list of dictionaries, where each dictionary represents a UE session found.
-    """
-    ue_packets = []
+                # Extract IDs
+                imsi = get_field(["e212.imsi", "nas_5gs.imsi", "imsi"])
+                if imsi:
+                    ue_info["imsi"] = imsi
+                    found_info = True
 
-    for pkt in packets_data:
-        ue_info = {}
-        found_ue_ip = False  # Flag to indicate if a UE IP address field has been found in the current packet
+                guti = get_field(["nas_5gs.5g_guti", "5g_guti", "guti"])
+                if guti:
+                    ue_info["guti"] = guti
+                    found_info = True
 
-        for layer in pkt["layers"]:
-            fields = layer["fields"]
+                pdu_id = get_field(["nas_5gs.pdu_session_id", "pdu_session_id"])
+                if pdu_id:
+                    ue_info["pdu_session_id"] = pdu_id
+                    found_info = True
 
-            # Check for 'ue_ip_addr_ipv4' as a primary indicator to process the packet for UE info
-            if not found_ue_ip:
-                found_ue_ip = any("ue_ip_addr_ipv4" in k for k in fields)
+    except Exception:
+        pass
 
-            if not found_ue_ip:
-                continue  # If no UE IP trigger, move to the next layer or packet
+    # Basic IP extraction if we found UE markers
+    if found_info and "IP" in packet:
+        ue_info["ip_src"] = packet.ip.src
+        ue_info["ip_dst"] = packet.ip.dst
+        ue_info["frame_number"] = packet.number
+        return ue_info
 
-            # Iterate through the fields of the current layer and extract common 5G UE-related fields
-            # The .lower() is used for case-insensitive matching of field names.
-            for key, value in fields.items():
-                if "ue_ip_addr_ipv4" in key:
-                    ue_info["ue_ip_addr_ipv4"] = value
-                if "node_id_ipv4" in key:
-                    ue_info["node_id_ipv4"] = value
-                if "s_nssai_sst_sst" in key:
-                    ue_info["s_nssai_sst_sst"] = value
-                if "s_nssai_sst_sd" in key:
-                    ue_info["s_nssai_sst_sd"] = value
-                if "imsi" in key.lower():
-                    ue_info["imsi"] = value
-                if "guti" in key.lower():
-                    ue_info["guti"] = value
-                if "mcc" in key.lower():
-                    ue_info["mcc"] = value
-                if "mnc" in key.lower():
-                    ue_info["mnc"] = value
-                if "apn" in key.lower():
-                    ue_info["apn"] = value
-                if "dnn" in key.lower():
-                    ue_info["dnn"] = value
-                if "pdu_session_type" in key.lower():
-                    ue_info["pdu_session_type"] = value
-
-        if found_ue_ip:
-            # If UE info was successfully identified and collected for this packet,
-            # add its original packet number and append it to the results list.
-            ue_info["packet_number"] = pkt["packet_number"]
-            ue_packets.append(ue_info)
-    return ue_packets  # Return the complete list of extracted UE packets
+    return None

@@ -1,0 +1,30 @@
+tags:
+  - Clustering
+summary: Save Clustering Results
+description: Saves the raw JSON results of a clustering operation to disk as either CSV or JSON.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        filename:
+          type: string
+          description: Base filename to save the results under.
+        results:
+          type: array
+          items:
+            type: object
+          description: The tabular data/results to save.
+        type:
+          type: string
+          default: json
+          description: Format to save the results (csv or json).
+responses:
+  200:
+    description: File saved successfully, returning download URLs.
+  400:
+    description: Missing filename parameter.
+  500:
+    description: Server error while saving the file.

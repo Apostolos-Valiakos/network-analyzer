@@ -1,0 +1,25 @@
+tags:
+  - Core Analysis
+summary: Automated PCAP Upload & Analysis
+description: Uploads a PCAP file, saves it, and runs the full automated analysis pipeline including ML role assessment and UE session extraction.
+consumes:
+  - multipart/form-data
+parameters:
+  - name: file
+    in: formData
+    type: file
+    required: true
+    description: The PCAP file to upload.
+  - name: model_name
+    in: formData
+    type: string
+    required: false
+    default: rule_based
+    description: The ML or rule-based model to use for role classification.
+responses:
+  200:
+    description: Full analysis report including roles, graph data, and file download links.
+  400:
+    description: Missing file part or no file selected.
+  500:
+    description: Pipeline processing failure.

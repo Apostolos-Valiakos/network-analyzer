@@ -10,3 +10,5 @@ python-louvain
 websocket-client
 requests
 pyshark
+flask-sqlalchemy 
+psycopg2-binary

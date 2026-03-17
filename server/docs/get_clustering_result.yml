@@ -1,0 +1,15 @@
+tags:
+  - Clustering
+summary: Download clustering result
+description: Retrieves a saved clustering output file (CSV or JSON) by its filename.
+parameters:
+  - name: filename
+    in: path
+    type: string
+    required: true
+    description: The name of the file to retrieve.
+responses:
+  200:
+    description: The requested file.
+  404:
+    description: File not found.

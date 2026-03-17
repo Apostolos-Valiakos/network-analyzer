@@ -1,0 +1,17 @@
+tags:
+  - Clustering
+summary: Get Suggested Clustering Parameters
+description: Runs an initial clustering pass up to 10 clusters to suggest the optimal 'k' based on modularity scores.
+parameters:
+  - name: file
+    in: query
+    type: string
+    required: true
+    description: The filename of the PCAP to analyze.
+responses:
+  200:
+    description: Summary containing the best 'k', modularity scores, and cluster hierarchy.
+  400:
+    description: File parameter is required.
+  404:
+    description: PCAP file not found.

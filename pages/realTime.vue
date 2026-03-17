@@ -19,7 +19,7 @@
         class="control-btn"
         prepend-icon="mdi-download"
       >
-        {{ isGenerating ? "Generating PCAP..." : "Generate PCAP" }}
+        {{ isGenerating ? "Finalizing PCAP..." : "Generate PCAP" }}
       </v-btn>
       <div v-if="downloadLink" class="mt-2">
         <a :href="downloadLink" :download="filename">Download PCAP</a>
@@ -49,8 +49,9 @@
             :disabled="isConnected"
             color="secondary"
             variant="tonal"
-            >Connect</v-btn
           >
+            Connect
+          </v-btn>
         </div>
         <v-text-field
           v-model="wsUrl"
@@ -64,13 +65,13 @@
         ></v-text-field>
       </v-card-text>
     </v-card>
+
     <v-row>
       <v-col cols="12" md="6">
         <v-card class="data-card pa-4" elevation="0">
           <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
             Capture Controls
           </v-card-title>
-
           <div class="d-flex align-center mb-4 gap-3">
             <v-btn
               @click="getInterfaces"
@@ -96,15 +97,7 @@
               @update:model-value="setCaptureInterface"
             ></v-select>
           </div>
-          <div
-            v-if="currentInterface"
-            class="mb-4 text-caption text-medium-emphasis"
-          >
-            Current Server Interface: <strong>{{ currentInterface }}</strong>
-          </div>
-          <div v-else class="mb-4 text-caption text-warning">
-            Interface not set. Get interfaces and select one.
-          </div>
+
           <div class="controls-section">
             <v-btn
               @click="startCapture"
@@ -116,9 +109,8 @@
               class="control-btn"
               prepend-icon="mdi-play-circle-outline"
             >
-              Start Capture
+              Start
             </v-btn>
-
             <v-btn
               @click="stopCapture"
               :disabled="!isConnected || !isCapturing || isGenerating"
@@ -127,9 +119,8 @@
               class="control-btn"
               prepend-icon="mdi-stop-circle-outline"
             >
-              Stop Capture
+              Stop
             </v-btn>
-
             <v-btn
               @click="clearPackets"
               :disabled="isCapturing || isGenerating"
@@ -138,23 +129,21 @@
               class="control-btn"
               prepend-icon="mdi-delete-outline"
             >
-              Clear Buffer ({{ rawPackets.length }})
+              Clear
             </v-btn>
-
             <v-btn
               @click="handleVisualizeNetwork"
-              :disabled="!rawPackets.length || isSendingPcap"
+              :disabled="!totalPacketsCaptured || isSendingPcap"
               color="purple"
               size="large"
               variant="flat"
               class="control-btn white--text"
               prepend-icon="mdi-network-outline"
             >
-              Visualize Network
+              Visualize
             </v-btn>
-
             <v-btn
-              :disabled="!rawPackets.length || isSendingPcap"
+              :disabled="!totalPacketsCaptured || isSendingPcap"
               @click="startClustering()"
               color="blue"
               size="large"
@@ -162,7 +151,7 @@
               class="control-btn mb-4"
               prepend-icon="mdi-chart-areaspline"
             >
-              Start Analysis
+              Analyze
             </v-btn>
           </div>
         </v-card>
@@ -170,37 +159,20 @@
 
       <v-col cols="12" md="6">
         <v-card class="data-card pa-4" elevation="0">
-          <v-card-title class="text-subtitle-1 font-weight-bold mb-3"
-            >Real-Time Metrics</v-card-title
-          >
+          <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
+            Real-Time Metrics
+          </v-card-title>
           <v-row dense>
             <v-col cols="6">
               <div class="metric-box">
                 <div class="metric-label">Packets Captured</div>
-                <div class="metric-value">{{ rawPackets.length }}</div>
-              </div>
-            </v-col>
-            <v-col cols="6">
-              <div class="metric-box">
-                <div class="metric-label">Packets/Sec (Avg)</div>
-                <div class="metric-value">{{ packetsPerSecond }}</div>
+                <div class="metric-value">{{ totalPacketsCaptured }}</div>
               </div>
             </v-col>
             <v-col cols="6">
               <div class="metric-box">
                 <div class="metric-label">Total Size (MB)</div>
                 <div class="metric-value">{{ totalDataSizeMb }}</div>
-              </div>
-            </v-col>
-            <v-col cols="6">
-              <div class="metric-box">
-                <div class="metric-label">Capture State</div>
-                <div
-                  class="metric-value"
-                  :class="isCapturing ? 'text-success' : 'text-warning'"
-                >
-                  {{ isCapturing ? "Active" : "Paused" }}
-                </div>
               </div>
             </v-col>
           </v-row>
@@ -221,37 +193,26 @@
               class="packet-item"
             >
               <v-list-item-title class="text-caption font-mono">
-                {{ packet.timestamp }} - Length: {{ packet.length }} bytes
+                {{ packet.timestamp }} - {{ packet.length }} bytes
               </v-list-item-title>
               <v-list-item-subtitle class="text-truncate text-monospace">
                 {{ packet.preview }}
               </v-list-item-subtitle>
             </v-list-item>
-            <v-list-item
-              v-if="!lastPackets.length"
-              class="text-center text-medium-emphasis"
-            >
-              <v-list-item-title>No packets captured yet.</v-list-item-title>
-            </v-list-item>
           </v-list>
         </v-card>
       </v-col>
-
       <v-col cols="12" md="6">
         <v-card class="pa-4 data-card" elevation="0">
           <v-card-title class="text-subtitle-1 font-weight-bold mb-3">
-            Network Graph
+            Network Graph (Preview)
           </v-card-title>
-
           <v-card-text class="pa-4 text-center">
             <v-skeleton-loader
               v-if="isGraphLoading"
               type="image"
-              class="mx-auto"
-              max-width="400"
               height="300"
             />
-
             <NetworkGraph
               v-if="graphData && !isGraphLoading"
               :graphData="graphData"
@@ -266,560 +227,309 @@
 
 <script>
 import NetworkGraph from "@/components/NetworkGraph.vue";
+
 export default {
-  components: {
-    NetworkGraph,
-  },
+  components: { NetworkGraph },
   data() {
     return {
-      // Configuration
-      wsUrl: process.env.WS_URL, // Default value, now user-editable
-      apiUrl: process.env.API_BASE_URL,
-      chunkSize: 1000,
-
-      // Interface State
-      availableInterfaces: [], // List of interface names
-      selectedInterface: null, // User-selected interface name
-      currentInterface: null, // Interface currently configured on the server
+      wsUrl: process.env.VUE_APP_WS_URL || "ws://127.0.0.1:5001",
+      apiUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5000",
+      chunkSize: 500,
 
       // State
       client: null,
       isConnected: false,
       isCapturing: false,
       isGenerating: false,
-      rawPackets: [],
+
+      // Buffers
+      visualizationBuffer: [],
+      uploadQueue: [],
       sessionId: null,
 
-      // UI/Metrics
+      // Real-time Graph State
+      liveNodes: new Set(),
+      liveLinks: [],
+
+      // Metrics
+      totalPacketsCaptured: 0,
+      totalBytesCaptured: 0,
+
+      // UI
+      availableInterfaces: [],
+      selectedInterface: null,
+      currentInterface: null,
       snackbar: false,
       snackbarText: "",
       snackbarType: "info",
-      packetsLastSecond: 0,
-      packetsPerSecond: 0,
       lastPackets: [],
-      totalDataSize: 0,
       filename: null,
       downloadLink: null,
-      reconnectInterval: null,
-
-      //Network Grpah
-      isSendingPcap: false,
       graphData: null,
       graphKey: 0,
       isGraphLoading: false,
+      isSendingPcap: false,
     };
   },
   computed: {
-    /**
-     * @returns {string} The total captured data size converted to megabytes (MB), fixed to 2 decimal places.
-     */
     totalDataSizeMb() {
-      return (this.totalDataSize / (1024 * 1024)).toFixed(2);
+      return (this.totalBytesCaptured / (1024 * 1024)).toFixed(2);
     },
-  },
-  mounted() {
-    // this.connect();
-  },
-  beforeDestroy() {
-    clearInterval(this.reconnectInterval);
-    if (this.client) {
-      this.client.close();
-    }
   },
   methods: {
-    /**
-     * @async
-     * Handles the entire workflow for network visualization:
-     * 1. Pauses live capture (if active).
-     * 2. Resets graph display and shows loading skeleton.
-     * 3. Calls `generatePcap` to create the PCAP file on the server.
-     * 4. Calls the Flask API to analyze the saved PCAP file and update `graphData`.
-     * 5. Resumes live capture afterwards.
-     * @returns {void}
-     */
-    async handleVisualizeNetwork() {
-      try {
-        // Pause live capture
-        if (this.isConnected) {
-          console.log("Pausing live capture...");
-          this.stopCaptureAndDownload();
-        }
-
-        // Reset graph and show skeleton
-        this.isGraphLoading = true;
-        this.graphData = null;
-        this.graphKey++;
-
-        // Generate PCAP from captured data
-        // NOTE: generatePcap sets the `this.filename` which is used below.
-        await this.generatePcap();
-
-        // Send file for analysis
-        const response = await fetch(
-          `${this.apiUrl}/analyze-saved-pcap/${this.filename}`
-        );
-        const data = await response.json();
-
-        if (response.ok) {
-          this.graphData = data.analysis.graph;
-          this.graphKey++;
-          this.showSnackbar("Network graph generated successfully!", "success");
-        } else {
-          this.showSnackbar(`Analysis failed: ${data.error}`, "error");
-          console.error("Analysis error:", data.error);
-        }
-      } catch (err) {
-        this.showSnackbar(`Visualization failed: ${err.message}`, "error");
-        console.error("Visualization error:", err);
-      } finally {
-        this.isGraphLoading = false;
-        // Resume capture automatically
-        if (this.isConnected) {
-          console.log("Resuming live capture...");
-          this.startCapture();
-        }
-      }
-    },
-    // --- Utility Methods ---
-    /**
-     * Displays a notification snackbar to the user.
-     * @param {string} text - The message to display.
-     * @param {string} [type='info'] - The type/color of the snackbar.
-     * @returns {void}
-     */
-    showSnackbar(text, type = "info") {
-      this.snackbarText = text;
-      this.snackbarType = type;
-      this.snackbar = true;
-    },
-
-    /**
-     * Generates a unique, readable session ID for file uploads.
-     * @returns {string} A unique ID string.
-     */
     generateUniqueId() {
       return (
-        "pcap_" +
+        "session_" +
         Math.random().toString(36).substring(2, 9) +
         Date.now().toString(36)
       );
     },
 
-    /**
-     * Updates the displayed packets per second metric based on the count from the last second.
-     * Resets the counter for the next interval.
-     * @returns {void}
-     */
-    updateMetrics() {
-      this.packetsPerSecond = this.packetsLastSecond;
-      this.packetsLastSecond = 0;
-    },
-
-    // --- WebSocket Connection ---
-    /**
-     * Establishes or re-establishes the WebSocket connection.
-     * Sets up event handlers for open, error, close, and message.
-     * Manages automatic reconnection attempts.
-     * @returns {void}
-     */
+    // --- WebSocket Logic ---
     connect() {
-      setInterval(this.updateMetrics, 1000);
-      if (this.client && this.client.readyState === WebSocket.OPEN) {
-        this.client.close();
-      }
-
-      console.log(`Attempting to connect to ${this.wsUrl}...`);
+      if (this.client) this.client.close();
       this.client = new WebSocket(this.wsUrl);
-      this.isConnected = false;
-      this.showSnackbar(`Connecting to ${this.wsUrl}...`, "info");
 
       this.client.onopen = () => {
         this.isConnected = true;
-        this.showSnackbar("Connected to WebSocket Publisher.", "success");
-        console.log("WebSocket connection established.");
-        // Stop any pending reconnect attempts
-        if (this.reconnectInterval) {
-          clearInterval(this.reconnectInterval);
-          this.reconnectInterval = null;
-        }
-        // NEW: Request interfaces immediately after connecting
+        this.showSnackbar("Connected to Sniffer", "success");
         this.getInterfaces();
       };
 
-      this.client.onerror = (error) => {
-        console.error("WebSocket Error:", error);
-        this.isConnected = false;
-        // Schedule a reconnect attempt if not already scheduled
-        if (!this.reconnectInterval) {
-          this.reconnectInterval = setInterval(() => this.connect(), 5000); // Attempt every 5 seconds
-        }
-      };
-
-      this.client.onclose = () => {
-        console.log("WebSocket connection closed.");
-        this.isConnected = false;
-        this.isCapturing = false;
-        this.showSnackbar("WebSocket Connection Closed.", "error");
-        // Schedule a reconnect attempt if not already scheduled
-        if (!this.reconnectInterval) {
-          this.reconnectInterval = setInterval(() => this.connect(), 5000);
-        }
-      };
-
       this.client.onmessage = (event) => {
-        let msgObj = null;
-        try {
-          msgObj = JSON.parse(event.data);
-        } catch (e) {
-          console.error(
-            "Failed to parse WebSocket message as JSON:",
-            event.data
-          );
-          return;
-        }
+        const msg = JSON.parse(event.data);
 
-        // Handle STATUS messages (control ACKs)
-        if (msgObj.type === "STATUS") {
-          if (msgObj.status === "CAPTURE_STARTED") {
+        if (msg.type === "STATUS") {
+          if (msg.status === "CAPTURE_STARTED") {
             this.isCapturing = true;
-            this.showSnackbar("Packet capture started.", "success");
-          } else if (msgObj.status === "CAPTURE_STOPPED") {
-            this.isCapturing = false;
-            this.showSnackbar("Packet capture paused.", "warning");
-          }
-          // NEW: Handle interface update from server
-          if (msgObj.current_interface) {
-            this.currentInterface = msgObj.current_interface;
-            this.selectedInterface = msgObj.current_interface;
-            // Show success message if the interface was just set
+            // NOTE: sessionId is now set in startCapture() to prevent race conditions.
+            // We only reset UI elements if they weren't already reset.
             if (
-              msgObj.status &&
-              msgObj.status.includes("Capture interface set")
+              this.totalPacketsCaptured > 0 &&
+              this.uploadQueue.length === 0
             ) {
-              this.showSnackbar(msgObj.status, "success");
+              // This implies a restart from another client or glitch, safe to sync
             }
           }
-          if (msgObj.type === "ERROR") {
-            this.showSnackbar(`Server Error: ${msgObj.message}`, "error");
-          }
-          console.log("Status update:", msgObj.status);
-          return;
-        }
-
-        // NEW: Handle INTERFACE_LIST messages
-        if (msgObj.type === "INTERFACE_LIST" && msgObj.interfaces) {
-          const names = Object.keys(msgObj.interfaces);
-          this.availableInterfaces = names;
-          // Set the current interface if provided, otherwise default to the first
-          this.currentInterface = msgObj.current_interface || names[0];
-          this.selectedInterface = this.currentInterface; // Select it in the dropdown
-          this.showSnackbar(
-            `Found ${names.length} network interfaces.`,
-            "info"
-          );
-          return;
-        }
-
-        // Handle PACKET_DATA messages
-        if (
-          msgObj.type === "PACKET_DATA" &&
-          msgObj.packet &&
-          typeof msgObj.packet === "string"
-        ) {
-          const base64Packet = msgObj.packet;
-          try {
-            const binaryString = atob(base64Packet);
-            const len = binaryString.length;
-
-            if (len < 4) {
-              console.warn(`Skipping tiny packet received (len: ${len})`);
-              return;
-            }
-
-            // Store the base64 packet string
-            this.rawPackets.push(base64Packet);
-
-            // Update metrics
-            this.packetsLastSecond++;
-            this.totalDataSize += len;
-
-            // Update log
-            const rawPacket = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              rawPacket[i] = binaryString.charCodeAt(i);
-            }
-            const preview = Array.from(rawPacket)
-              .slice(0, 16)
-              .map((byte) => byte.toString(16).padStart(2, "0"))
-              .join(" ");
-
-            this.lastPackets.unshift({
-              timestamp: new Date().toLocaleTimeString(),
-              length: len,
-              preview: preview + "...",
-            });
-
-            if (this.lastPackets.length > 10) {
-              this.lastPackets.pop();
-            }
-          } catch (error) {
-            console.error("Error decoding base64 packet:", error);
-          }
+          if (msg.current_interface)
+            this.currentInterface = msg.current_interface;
+        } else if (msg.type === "INTERFACE_LIST") {
+          this.availableInterfaces = Object.keys(msg.interfaces);
+          this.currentInterface =
+            msg.current_interface || this.availableInterfaces[0];
+          this.selectedInterface = this.currentInterface;
+        } else if (msg.type === "PACKET_DATA") {
+          this.processPacket(msg.packet);
         }
       };
     },
 
-    /**
-     * Sends the command to the server to list all available network interfaces.
-     * The response is handled in client.onmessage (INTERFACE_LIST).
-     * @returns {void}
-     */
+    processPacket(base64Packet) {
+      const len = Math.floor((base64Packet.length * 3) / 4);
+      this.totalPacketsCaptured++;
+      this.totalBytesCaptured += len;
+
+      // 1. Parse & Update Graph / DB Logs
+      this.parseAndLogPacket(base64Packet, len);
+
+      // 2. Buffer for PCAP
+      this.uploadQueue.push(base64Packet);
+      if (this.uploadQueue.length >= this.chunkSize) {
+        this.flushUploadQueue(false);
+      }
+
+      // 3. Update Log UI
+      if (this.lastPackets.length < 10 || this.totalPacketsCaptured % 5 === 0) {
+        this.lastPackets.unshift({
+          timestamp: new Date().toLocaleTimeString(),
+          length: len,
+          preview: "Data captured...",
+        });
+        if (this.lastPackets.length > 10) this.lastPackets.pop();
+      }
+    },
+
+    updateLiveGraph(srcIp, dstIp) {
+      this.liveNodes.add(srcIp);
+      this.liveNodes.add(dstIp);
+      this.liveLinks.push({ source: srcIp, target: dstIp });
+
+      if (this.totalPacketsCaptured % 5 !== 0) return;
+
+      const nodesArray = Array.from(this.liveNodes).map((ip) => ({
+        name: ip,
+        category: 0,
+        draggable: true,
+      }));
+
+      this.graphData = {
+        nodes: nodesArray,
+        links: this.liveLinks,
+        categories: [{ name: "Live Devices" }],
+      };
+    },
+
+    parseAndLogPacket(base64Str, size) {
+      try {
+        const binaryString = atob(base64Str);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        if (bytes[12] === 0x08 && bytes[13] === 0x00) {
+          const ipOffset = 14;
+          const protocolMap = { 6: "TCP", 17: "UDP", 1: "ICMP" };
+          const protocolNum = bytes[ipOffset + 9];
+          const protocol = protocolMap[protocolNum] || "Other";
+          const srcIp = `${bytes[ipOffset + 12]}.${bytes[ipOffset + 13]}.${
+            bytes[ipOffset + 14]
+          }.${bytes[ipOffset + 15]}`;
+          const dstIp = `${bytes[ipOffset + 16]}.${bytes[ipOffset + 17]}.${
+            bytes[ipOffset + 18]
+          }.${bytes[ipOffset + 19]}`;
+
+          this.updateLiveGraph(srcIp, dstIp);
+
+          // Only log if session ID exists
+          if (this.sessionId) {
+            fetch(`${this.apiUrl}/log-packet`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                session_id: this.sessionId,
+                src_ip: srcIp,
+                dst_ip: dstIp,
+                protocol: protocol,
+                size: size,
+              }),
+            }).catch((err) => console.error("Log error:", err));
+          }
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    },
+
+    async flushUploadQueue(isFinal = false) {
+      if (this.uploadQueue.length === 0 && !isFinal) return;
+
+      // SAFETY CHECK: Prevent 400 Errors
+      if (!this.sessionId) {
+        console.error("Skipping upload: No Session ID initialized yet.");
+        // We do NOT clear the queue here, so data is preserved until ID is ready
+        return;
+      }
+
+      const chunk = [...this.uploadQueue];
+      this.uploadQueue = [];
+
+      try {
+        const res = await fetch(`${this.apiUrl}/save-pcap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: this.sessionId,
+            packets: chunk,
+            is_final_chunk: isFinal,
+          }),
+        });
+        const data = await res.json();
+        if (isFinal && data.filename) {
+          this.filename = data.filename;
+          this.downloadLink = `${this.apiUrl}/generated_pcaps/${this.filename}`;
+          this.showSnackbar("PCAP Generated Successfully", "success");
+          this.isGenerating = false;
+        }
+      } catch (e) {
+        console.error("Upload failed", e);
+      }
+    },
+
+    stopCaptureAndDownload() {
+      this.sendControlCommand("STOP_CAPTURE");
+      this.isGenerating = true;
+      setTimeout(() => this.flushUploadQueue(true), 500);
+    },
+
+    async handleVisualizeNetwork() {
+      this.isGraphLoading = true;
+      if (!this.filename) await this.flushUploadQueue(true);
+
+      let retries = 0;
+      while (!this.filename && retries < 5) {
+        await new Promise((r) => setTimeout(r, 1000));
+        retries++;
+      }
+
+      const res = await fetch(
+        `${this.apiUrl}/analyze-saved-pcap/${this.filename}`
+      );
+      const data = await res.json();
+      this.graphData = data.analysis.graph;
+      this.isGraphLoading = false;
+    },
+
+    sendControlCommand(cmd) {
+      if (this.client) this.client.send(JSON.stringify({ command: cmd }));
+    },
     getInterfaces() {
       this.sendControlCommand("GET_INTERFACES");
-      this.showSnackbar("Requesting network interfaces...", "info");
     },
 
-    /**
-     * Sends the selected interface name to the server for configuration.
-     * Requires capture to be stopped first.
-     * @returns {void}
-     */
+    // CRITICAL FIX: Initialize Session ID immediately on user click
+    startCapture() {
+      this.sessionId = this.generateUniqueId();
+      this.totalPacketsCaptured = 0;
+      this.totalBytesCaptured = 0;
+      this.uploadQueue = [];
+      this.liveNodes.clear();
+      this.liveLinks = [];
+      this.graphData = null;
+
+      this.sendControlCommand("START_CAPTURE");
+    },
+
+    stopCapture() {
+      this.sendControlCommand("STOP_CAPTURE");
+    },
+    clearPackets() {
+      this.totalPacketsCaptured = 0;
+      this.lastPackets = [];
+      this.liveNodes.clear();
+      this.liveLinks = [];
+      this.graphData = null;
+    },
+    startClustering() {
+      this.$router.push({ name: "clustering", query: { id: this.filename } });
+    },
+    showSnackbar(text, type) {
+      this.snackbarText = text;
+      this.snackbarType = type;
+      this.snackbar = true;
+    },
     setCaptureInterface() {
       if (
         !this.selectedInterface ||
         this.selectedInterface === this.currentInterface
       )
         return;
-
       if (this.isCapturing) {
         this.showSnackbar(
           "Please STOP the capture before changing the interface.",
           "error"
         );
-        // Revert the dropdown selection to the current interface
         this.selectedInterface = this.currentInterface;
         return;
       }
-
-      // Send the SET_INTERFACE command with the selected interface name
       if (this.client && this.client.readyState === WebSocket.OPEN) {
-        const payload = JSON.stringify({
-          command: "SET_INTERFACE",
-          interface: this.selectedInterface,
-        });
-        this.client.send(payload);
-        console.log(`Sent command: SET_INTERFACE to ${this.selectedInterface}`);
-        this.showSnackbar(
-          `Attempting to set interface to ${this.selectedInterface}...`,
-          "warning"
+        this.client.send(
+          JSON.stringify({
+            command: "SET_INTERFACE",
+            interface: this.selectedInterface,
+          })
         );
       }
-    },
-
-    /**
-     * Sends a control command (e.g., START_CAPTURE, STOP_CAPTURE) to the WebSocket server.
-     * @param {string} command - The command string to send.
-     * @returns {void}
-     */
-    sendControlCommand(command) {
-      if (this.client && this.client.readyState === WebSocket.OPEN) {
-        const payload = JSON.stringify({ command, timestamp: Date.now() });
-        this.client.send(payload);
-        console.log(`Sent command: ${command}`);
-      } else {
-        this.showSnackbar(
-          "Cannot send command: WebSocket not connected.",
-          "error"
-        );
-      }
-    },
-
-    /**
-     * Initiates the packet capture by sending the START_CAPTURE command.
-     * @returns {void}
-     */
-    startCapture() {
-      // Prevent starting if no interface is set
-      if (!this.currentInterface) {
-        this.showSnackbar(
-          "Please select a network interface first.",
-          "warning"
-        );
-        return;
-      }
-      this.sendControlCommand("START_CAPTURE");
-    },
-
-    /**
-     * Pauses the packet capture by sending the STOP_CAPTURE command.
-     * @returns {void}
-     */
-    stopCapture() {
-      this.sendControlCommand("STOP_CAPTURE");
-    },
-
-    /**
-     * Clears all captured packet data and resets associated metrics/UI state.
-     * @returns {void}
-     */
-    clearPackets() {
-      this.rawPackets = [];
-      this.lastPackets = [];
-      this.totalDataSize = 0;
-      this.packetsPerSecond = 0;
-      this.packetsLastSecond = 0;
-      this.filename = null;
-      this.downloadLink = null;
-      this.showSnackbar("Packet buffer cleared.", "info");
-    },
-
-    /**
-     * Stops the live capture and initiates the PCAP file generation process.
-     * @returns {void}
-     */
-    stopCaptureAndDownload() {
-      if (this.rawPackets.length === 0) {
-        this.showSnackbar("No packets captured to generate PCAP.", "warning");
-        return;
-      }
-
-      this.stopCapture();
-      this.isGenerating = true;
-      this.showSnackbar(
-        "Packet capture stopped and initiating PCAP generation...",
-        "info"
-      );
-
-      // CRITICAL: Generate a new session ID for this job
-      this.sessionId = this.generateUniqueId();
-
-      // Allow a brief moment for the STOP_CAPTURE command to take effect on the sniffer
-      setTimeout(() => {
-        this.generatePcap();
-      }, 500);
-    },
-
-    /**
-     * @async
-     * Sends a chunk of Base64 encoded packets to the Flask API for PCAP assembly.
-     * Implements retry logic for robustness.
-     * @param {string[]} chunk - Array of Base64 packet strings.
-     * @param {number} chunkIndex - The 0-based index of the current chunk.
-     * @param {number} totalChunks - The total number of chunks expected.
-     * @param {boolean} isFinalChunk - True if this is the last chunk.
-     * @returns {Promise<object>} The JSON response data from the API.
-     * @throws {Error} If the API call fails after all retry attempts.
-     */
-    async sendPacketsToFlask(chunk, chunkIndex, totalChunks, isFinalChunk) {
-      const MAX_RETRIES = 3;
-      let attempt = 0;
-
-      const payload = {
-        session_id: this.sessionId,
-        packets: chunk,
-        is_final_chunk: isFinalChunk,
-      };
-
-      while (attempt < MAX_RETRIES) {
-        attempt++;
-        try {
-          console.log(
-            `Sending chunk ${
-              chunkIndex + 1
-            }/${totalChunks} (Attempt ${attempt})...`
-          );
-
-          const response = await fetch(`${this.apiUrl}/save-pcap`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await response.json();
-
-          if (response.ok && data.success) {
-            console.log(`Chunk ${chunkIndex + 1} processed successfully.`);
-            return data;
-          } else {
-            const errorMessage =
-              data.error || `Unknown error: ${response.status}`;
-            console.error(`API error (attempt ${attempt}): ${errorMessage}`);
-            throw new Error(errorMessage);
-          }
-        } catch (error) {
-          console.error(error);
-          if (attempt === MAX_RETRIES) {
-            throw new Error(
-              `Failed to process chunk ${chunkIndex + 1}: ${error.message}`
-            );
-          }
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * Math.pow(2, attempt))
-          );
-        }
-      }
-    },
-
-    /**
-     * @async
-     * Manages the chunked upload of all captured packets to the Flask API
-     * for assembly into a PCAP file. Sets the download link upon success.
-     * @returns {void}
-     */
-    async generatePcap() {
-      const packets = this.rawPackets; // Base64 strings
-      const totalPackets = packets.length;
-      console.log(`Generating PCAP from ${totalPackets} packets...`);
-
-      const totalChunks = Math.ceil(totalPackets / this.chunkSize);
-      let downloadData = null;
-
-      try {
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * this.chunkSize;
-          const end = start + this.chunkSize;
-          // Slice the array of Base64 strings
-          const chunk = packets.slice(start, end);
-          const isFinalChunk = i === totalChunks - 1;
-
-          const responseData = await this.sendPacketsToFlask(
-            chunk,
-            i,
-            totalChunks,
-            isFinalChunk
-          );
-
-          if (isFinalChunk) {
-            downloadData = responseData;
-          }
-        }
-
-        if (downloadData && downloadData.filename) {
-          this.filename = downloadData.filename;
-          this.downloadLink = `${this.apiUrl}/generated_pcaps/${this.filename}`;
-          this.showSnackbar(`PCAP file generated: ${this.filename}`, "success");
-        } else {
-          this.showSnackbar(
-            "PCAP generation completed, but no filename received.",
-            "warning"
-          );
-        }
-      } catch (error) {
-        console.error("PCAP Generation Failed:", error);
-        this.showSnackbar(`PCAP Generation Failed: ${error.message}`, "error");
-      } finally {
-        this.isGenerating = false;
-      }
-    },
-    /**
-     * Navigates the user to the 'clustering' route, passing the generated PCAP filename as a query parameter.
-     * @returns {void}
-     */
-    startClustering() {
-      this.$router.push({
-        name: "clustering",
-        query: { id: this.filename },
-      });
     },
   },
 };

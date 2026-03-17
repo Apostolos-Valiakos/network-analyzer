@@ -1,0 +1,9 @@
+tags:
+  - Continuous Monitoring
+summary: Get Latest Full Payload PCAP
+description: Proxies a request to the VM sensor to retrieve the most recent full payload PCAP.
+responses:
+  200:
+    description: A downloaded PCAP file containing full packet payloads.
+  500:
+    description: Failed to retrieve PCAP from sensor.

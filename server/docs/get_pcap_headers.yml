@@ -1,0 +1,20 @@
+tags:
+  - Continuous Monitoring
+summary: Get Timeframe PCAP (Headers Only)
+description: Proxies a request to the VM sensor to retrieve a PCAP containing only packet headers for a specified timeframe.
+parameters:
+  - name: start_time
+    in: query
+    type: string
+    required: true
+    description: Start timestamp for the PCAP capture.
+  - name: end_time
+    in: query
+    type: string
+    required: true
+    description: End timestamp for the PCAP capture.
+responses:
+  200:
+    description: A downloaded PCAP file containing packet headers.
+  500:
+    description: Failed to retrieve PCAP from sensor.

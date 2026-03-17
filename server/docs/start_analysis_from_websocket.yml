@@ -1,0 +1,24 @@
+tags:
+  - Streaming Analysis
+summary: Start WebSocket Analysis
+description: Starts a WebSocket client to capture network traffic for a given number of seconds.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        ws_url:
+          type: string
+          description: The WebSocket URL to connect to.
+        seconds:
+          type: integer
+          description: Duration in seconds to capture traffic.
+responses:
+  202:
+    description: Pipeline started successfully.
+  400:
+    description: Missing required parameters.
+  500:
+    description: Failed to start the WebSocket client.

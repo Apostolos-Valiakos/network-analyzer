@@ -1,0 +1,31 @@
+tags:
+  - Continuous Monitoring
+summary: Export Analytics Data
+description: Exports network flow statistics using strict Zeek dot notation headers.
+parameters:
+  - name: start_time
+    in: query
+    type: number
+    required: false
+    description: Start timestamp (Unix epoch float). Defaults to 0.
+  - name: end_time
+    in: query
+    type: number
+    required: false
+    description: End timestamp (Unix epoch float). Defaults to current time.
+  - name: limit
+    in: query
+    type: integer
+    required: false
+    description: Maximum number of records to return.
+  - name: format
+    in: query
+    type: string
+    required: false
+    default: csv
+    description: Response format (json or csv).
+responses:
+  200:
+    description: Returns the exported analytics data as a downloadable file.
+  400:
+    description: Request processing error.

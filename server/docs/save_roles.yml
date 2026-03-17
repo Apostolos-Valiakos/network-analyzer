@@ -1,0 +1,21 @@
+tags:
+  - Core Analysis
+summary: Download assigned IP roles
+description: Downloads the assigned roles for a specific analysis run in either JSON or CSV format.
+parameters:
+  - name: file
+    in: query
+    type: string
+    required: true
+    description: The base filename of the analysis run.
+  - name: type
+    in: query
+    type: string
+    required: false
+    default: json
+    description: The format to download the roles in (json or csv).
+responses:
+  200:
+    description: The requested roles file.
+  404:
+    description: File not found.
