@@ -39,6 +39,11 @@ from agglomerative_clustering import (
 from Preprocess import run_ip_role_pipeline
 from connectToWebsocket import startWebSocketClient
 from snapshot_scheduler import start_scheduler
+import faulthandler
+import requests
+
+
+faulthandler.enable()
 
 UPLOAD_FOLDER = "server/uploads"
 PCAP_GEN_OUTPUT_DIR = "server/generated_pcaps"
@@ -467,6 +472,9 @@ def ingest_zeek():
     if not flows:
         return jsonify({"status": "empty"}), 200
 
+    ABNORMAL_BYTES_THRESHOLD = 5000000  # 5 MB in a single flow
+    ABNORMAL_PKTS_THRESHOLD = 5000  # 5000 packets in a single flow
+
     conn = None
     try:
         conn = psycopg2.connect(app.config["SQLALCHEMY_DATABASE_URI"])
@@ -478,17 +486,54 @@ def ingest_zeek():
             # Standardize to UTC for DB storage
             dt_ts = datetime.utcfromtimestamp(raw_ts) if raw_ts else datetime.utcnow()
 
+            orig_bytes = data.get("orig_bytes", 0)
+            orig_pkts = data.get("orig_pkts", 0)
+            src_ip = data.get("id.orig_h")
+            dst_ip = data.get("id.resp_h")
+            conn_state = data.get("conn_state")
+
+            if orig_bytes > ABNORMAL_BYTES_THRESHOLD:
+                socketio.emit(
+                    "network_alert",
+                    {
+                        "level": "error",
+                        "title": "Massive Data Transfer",
+                        "message": f"IP {src_ip} sent {(orig_bytes/1024/1024):.2f} MB to {dst_ip}.",
+                    },
+                )
+
+            elif orig_pkts > ABNORMAL_PKTS_THRESHOLD:
+                socketio.emit(
+                    "network_alert",
+                    {
+                        "level": "warning",
+                        "title": "Packet Flood Detected",
+                        "message": f"IP {src_ip} sent {orig_pkts} packets to {dst_ip}.",
+                    },
+                )
+
+            elif conn_state == "REJ":
+                socketio.emit(
+                    "network_alert",
+                    {
+                        "level": "warning",
+                        "title": "Connection Rejected",
+                        "message": f"{src_ip} attempted to connect to a closed port on {dst_ip}.",
+                    },
+                )
+            # ------------------------------------
+
             batch.append(
                 (
                     dt_ts,
                     data.get("uid"),
-                    data.get("id.orig_h"),
-                    data.get("id.resp_h"),
+                    src_ip,  # Reusing extracted variable
+                    dst_ip,  # Reusing extracted variable
                     data.get("proto"),
-                    data.get("conn_state"),
-                    data.get("orig_bytes", 0),
+                    conn_state,  # Reusing extracted variable
+                    orig_bytes,  # Reusing extracted variable
                     data.get("resp_bytes", 0),
-                    data.get("orig_pkts", 0),
+                    orig_pkts,  # Reusing extracted variable
                     data.get("resp_pkts", 0),
                 )
             )
@@ -506,6 +551,7 @@ def ingest_zeek():
 
         return jsonify({"status": "success", "inserted": len(batch)}), 200
     except Exception as e:
+        print(f"🚨 INGEST ERROR: {str(e)}")
         if conn:
             conn.rollback()
         return jsonify({"error": str(e)}), 500
@@ -702,8 +748,80 @@ def export_network_statistics():
         return jsonify({"error": str(e)}), 400
 
 
+# Add glob to your imports at the top of app.py if it isn't there already
+import glob
+
+
+@app.route("/v1/analyze_live", methods=["POST"])
+def analyze_live():
+    """Auto-grabs the latest PCAP, analyzes it, and deletes it."""
+    results_dir = "server/results"
+
+    # Auto-grab the newest PCAP file
+    list_of_files = glob.glob(f"{results_dir}/*.pcap")
+    if not list_of_files:
+        return (
+            jsonify(
+                {
+                    "message": "No PCAP snapshots available. Wait for the scheduler to fetch one."
+                }
+            ),
+            404,
+        )
+
+    latest_file = max(list_of_files, key=os.path.getctime)
+
+    try:
+        # Run pipeline with an empty list for selected_ips (analyzes all)
+        from Preprocess import run_ip_role_pipeline
+
+        model_name = os.path.splitext(os.path.basename(latest_file))[0]
+
+        results = run_ip_role_pipeline(latest_file, model_name, selected_ips=None)
+
+        # Delete the file after the pipeline completes
+        if os.path.exists(latest_file):
+            os.remove(latest_file)
+
+        return jsonify(results), 200
+
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"message": f"Pipeline error: {str(e)}"}), 500
+
+
+@app.route("/v1/scan/start", methods=["POST"])
+def start_scan():
+    data = request.get_json()
+    vm_url = "http://127.0.0.1:5005/run-nmap-async"
+    headers = {
+        "X-Internal-Token": "my-super-secret-internal-token-123",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(vm_url, json=data, headers=headers, timeout=10)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        return jsonify({"error": f"Failed to reach VM: {str(e)}"}), 500
+
+
+@app.route("/v1/scan/results", methods=["GET"])
+def get_scan_results():
+    vm_url = "http://127.0.0.1:5005/get-nmap-results"
+    headers = {"X-Internal-Token": "my-super-secret-internal-token-123"}
+
+    try:
+        response = requests.get(vm_url, headers=headers, timeout=10)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        return jsonify({"error": f"Failed to reach VM: {str(e)}"}), 500
+
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
+    port = int(os.getenv("PORT", "5555"))
     start_scheduler(app)
     # app.run(host="0.0.0.0", debug=True, port=port, use_reloader=False)
     socketio.run(app, host="0.0.0.0", debug=True, port=port, use_reloader=False)

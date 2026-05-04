@@ -102,3 +102,4 @@ server/source
 server/make.bat
 server/Makefile
 uploads
+db_backup.sql

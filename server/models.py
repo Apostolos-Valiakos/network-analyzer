@@ -60,8 +60,8 @@ class FlowStatistic(db.Model):
 
     id_orig_h = db.Column(db.String(45), index=True)
     id_resp_h = db.Column(db.String(45), index=True)
-    proto = db.Column(db.String(10))  # Protocol (tcp, udp, icmp)
-    conn_state = db.Column(db.String(15))  # State (S0, SF, REJ, etc.)
+    proto = db.Column(db.String(45))  # Protocol (tcp, udp, icmp)
+    conn_state = db.Column(db.String(45))  # State (S0, SF, REJ, etc.)
 
     orig_bytes = db.Column(db.BigInteger, default=0)  # Bytes Out
     resp_bytes = db.Column(db.BigInteger, default=0)  # Bytes In

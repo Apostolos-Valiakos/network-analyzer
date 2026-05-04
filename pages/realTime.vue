@@ -233,7 +233,7 @@ export default {
   data() {
     return {
       wsUrl: process.env.VUE_APP_WS_URL || "ws://127.0.0.1:5001",
-      apiUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5000",
+      apiUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555",
       chunkSize: 500,
 
       // State

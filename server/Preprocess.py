@@ -174,55 +174,60 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
     Worker process to run the analysis in the background without blocking Flask.
     """
     try:
-        start_time = time.time()
+        from app import app
 
-        # 1. Load Packets (Optimized: reads from disk JSON if available)
-        packets = get_cached_packets(pcap_file_path)
-        if packets is None:
-            result_queue.put({"status": "failed", "message": "Failed to load packets."})
-            return
+        with app.app_context():
+            start_time = time.time()
 
-        # 2. Parse & Extract Roles
-        processor = PacketProcessor(pcap_file_path)
-        raw_data, ip_roles = processor.parse_pcap(packets=packets)
+            # 1. Load Packets (Optimized: reads from disk JSON if available)
+            packets = get_cached_packets(pcap_file_path)
+            if packets is None:
+                result_queue.put(
+                    {"status": "failed", "message": "Failed to load packets."}
+                )
+                return
 
-        # Filter if user selected specific IPs
-        if selected_ips:
-            raw_data = [d for d in raw_data if d["src_ip"] in selected_ips]
-            ip_roles = {k: v for k, v in ip_roles.items() if k in selected_ips}
+            # 2. Parse & Extract Roles
+            processor = PacketProcessor(pcap_file_path)
+            raw_data, ip_roles = processor.parse_pcap(packets=packets)
 
-        # 3. Feature Engineering (Optimized)
-        engineer = FeatureEngineer(raw_data, ip_roles)
-        X, y, classes, enc = engineer.run_preprocessing()
+            # Filter if user selected specific IPs
+            if selected_ips:
+                raw_data = [d for d in raw_data if d["src_ip"] in selected_ips]
+                ip_roles = {k: v for k, v in ip_roles.items() if k in selected_ips}
 
-        # 4. Generate Summary Report
-        summary = []
-        u_roles, counts = np.unique(list(ip_roles.values()), return_counts=True)
-        for r, c in zip(u_roles, counts):
-            summary.append(
+            # 3. Feature Engineering (Optimized)
+            engineer = FeatureEngineer(raw_data, ip_roles)
+            X, y, classes, enc = engineer.run_preprocessing()
+
+            # 4. Generate Summary Report
+            summary = []
+            u_roles, counts = np.unique(list(ip_roles.values()), return_counts=True)
+            for r, c in zip(u_roles, counts):
+                summary.append(
+                    {
+                        "class_name": r,
+                        "count": int(c),
+                        "ips": [ip for ip, role in ip_roles.items() if role == r],
+                    }
+                )
+
+            # Save result for frontend retrieval
+            results_dir = "./server/results"
+            os.makedirs(results_dir, exist_ok=True)
+            base = os.path.splitext(os.path.basename(pcap_file_path))[0]
+            with open(f"{results_dir}/{base}.json", "w") as f:
+                json.dump(summary, f, indent=4)
+
+            result_queue.put(
                 {
-                    "class_name": r,
-                    "count": int(c),
-                    "ips": [ip for ip, role in ip_roles.items() if role == r],
+                    "status": "success",
+                    "total_classified": len(ip_roles),
+                    "processing_time": round(time.time() - start_time, 2),
+                    "rule_based_classification_summary": summary,
+                    "ip_roles": ip_roles,
                 }
             )
-
-        # Save result for frontend retrieval
-        results_dir = "./server/results"
-        os.makedirs(results_dir, exist_ok=True)
-        base = os.path.splitext(os.path.basename(pcap_file_path))[0]
-        with open(f"{results_dir}/{base}.json", "w") as f:
-            json.dump(summary, f, indent=4)
-
-        result_queue.put(
-            {
-                "status": "success",
-                "total_classified": len(ip_roles),
-                "processing_time": round(time.time() - start_time, 2),
-                "rule_based_classification_summary": summary,
-                "ip_roles": ip_roles,
-            }
-        )
     except Exception as e:
         import traceback
 

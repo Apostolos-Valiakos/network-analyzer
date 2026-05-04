@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from scapy.all import rdpcap, IP, TCP, UDP
+from scapy.all import PcapReader, IP, TCP, UDP
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
 import networkx as nx
@@ -22,8 +22,6 @@ import community  # python-louvain
 # @return [pandas.DataFrame] A DataFrame where each row is an IP address and
 #         columns are the extracted features (bytes, packets, partners, ports, duration, etc.).
 def extract_features(pcap_file):
-    packets = rdpcap(pcap_file)
-
     stats = defaultdict(
         lambda: {
             "bytes_sent": 0,
@@ -36,25 +34,28 @@ def extract_features(pcap_file):
         }
     )
 
-    for pkt in packets:
-        if IP in pkt:
-            src = pkt[IP].src
-            dst = pkt[IP].dst
-            length = len(pkt)
+    # --- MEMORY SAFE FIX ---
+    # Stream the file one packet at a time instead of loading it all into RAM
+    with PcapReader(pcap_file) as packets:
+        for pkt in packets:
+            if IP in pkt:
+                src = pkt[IP].src
+                dst = pkt[IP].dst
+                length = len(pkt)
 
-            stats[src]["bytes_sent"] += length
-            stats[src]["packets_sent"] += 1
-            stats[src]["partners"].add(dst)
-            stats[src]["timestamps"].append(float(pkt.time))
+                stats[src]["bytes_sent"] += length
+                stats[src]["packets_sent"] += 1
+                stats[src]["partners"].add(dst)
+                stats[src]["timestamps"].append(float(pkt.time))
 
-            stats[dst]["bytes_received"] += length
-            stats[dst]["packets_received"] += 1
-            stats[dst]["partners"].add(src)
-            stats[dst]["timestamps"].append(float(pkt.time))
+                stats[dst]["bytes_received"] += length
+                stats[dst]["packets_received"] += 1
+                stats[dst]["partners"].add(src)
+                stats[dst]["timestamps"].append(float(pkt.time))
 
-            if TCP in pkt or UDP in pkt:
-                stats[src]["ports"].add(pkt.sport)
-                stats[dst]["ports"].add(pkt.dport)
+                if TCP in pkt or UDP in pkt:
+                    stats[src]["ports"].add(pkt.sport)
+                    stats[dst]["ports"].add(pkt.dport)
 
     # Build feature DataFrame
     data = []

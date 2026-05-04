@@ -108,7 +108,7 @@ export default {
       noOfclusters: 4,
       noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       fileType: "json",
-      apiBaseUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5000",
+      apiBaseUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555",
       suggestedClusters: null,
       modularityData: [],
       bestModularity: null,
