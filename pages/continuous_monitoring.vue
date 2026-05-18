@@ -542,7 +542,7 @@ export default {
   data() {
     return {
       socket: null,
-      apiUrl: process.env.VUE_APP_API_BASE_URL || "http://10.16.2.143:5555",
+      apiUrl: process.env.HOST_URL || "http://10.6.2.135:5555",
       startTime: this.getLocalISOString(new Date(Date.now() - 3600000)),
       endTime: this.getLocalISOString(new Date()),
       isLive: true,
@@ -840,16 +840,216 @@ export default {
       }
     },
     renderTrendChart() {
-      /* Truncated setup */
+      const dom = document.getElementById("trend-chart");
+      if (!dom) return;
+      if (!this.trendChart) this.trendChart = echarts.init(dom);
+
+      const outData = this.stats.map((s) => [
+        s.ts * 1000,
+        parseInt(s.orig_bytes) || 0,
+      ]);
+      const inData = this.stats.map((s) => [
+        s.ts * 1000,
+        parseInt(s.resp_bytes) || 0,
+      ]);
+
+      this.trendChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          formatter: (params) => {
+            if (!params || !params.length) return "";
+            let timeStr = new Date(params[0].value[0]).toLocaleTimeString();
+            let tooltip = `<div style="font-weight:bold; margin-bottom:4px;">${timeStr}</div>`;
+            params.forEach((p) => {
+              tooltip += `${p.marker} ${p.seriesName}: <b>${this.formatBytes(
+                p.value[1]
+              )}</b><br/>`;
+            });
+            return tooltip;
+          },
+        },
+        legend: { data: ["Bytes Out", "Bytes In"] },
+        xAxis: { type: "time", boundaryGap: false },
+        yAxis: {
+          type: "value",
+          axisLabel: { formatter: (val) => this.formatBytes(val) },
+        },
+        dataZoom: [
+          { type: "inside", xAxisIndex: 0, filterMode: "none" },
+          { type: "inside", yAxisIndex: 0, filterMode: "empty" },
+        ],
+        series: [
+          {
+            name: "Bytes Out",
+            type: "line",
+            data: outData,
+            smooth: true,
+            itemStyle: { color: "#3b82f6" },
+            areaStyle: { opacity: 0.1 },
+          },
+          {
+            name: "Bytes In",
+            type: "line",
+            data: inData,
+            smooth: true,
+            itemStyle: { color: "#10b981" },
+            areaStyle: { opacity: 0.1 },
+          },
+        ],
+      });
     },
+
     renderStateChart() {
-      /* Truncated setup */
+      const dom = document.getElementById("state-chart");
+      if (!dom) return;
+      if (!this.stateChart) this.stateChart = echarts.init(dom);
+
+      const stateCounts = {};
+      this.stats.forEach((s) => {
+        const state = s.conn_state || "Unknown";
+        stateCounts[state] = (stateCounts[state] || 0) + 1;
+      });
+
+      const data = Object.entries(stateCounts).map(([name, value]) => ({
+        name,
+        value,
+      }));
+
+      this.stateChart.setOption({
+        tooltip: { trigger: "item" },
+        legend: { bottom: "0" },
+        series: [
+          {
+            name: "Connection State",
+            type: "pie",
+            radius: ["40%", "70%"],
+            data: data,
+          },
+        ],
+      });
     },
+
     renderProtocolChart() {
-      /* Truncated setup */
+      const dom = document.getElementById("protocol-chart");
+      if (!dom) return;
+      if (!this.protoChart) this.protoChart = echarts.init(dom);
+
+      const protoCounts = {};
+      this.stats.forEach((s) => {
+        const p = s.proto || "unknown";
+        protoCounts[p] = (protoCounts[p] || 0) + 1;
+      });
+
+      const data = Object.entries(protoCounts).map(([name, value]) => ({
+        name: name.toUpperCase(),
+        value,
+      }));
+
+      this.protoChart.setOption({
+        tooltip: { trigger: "item" },
+        legend: { bottom: "0" },
+        series: [{ name: "Protocol", type: "pie", radius: "70%", data: data }],
+      });
     },
+
     renderTopTalkersChart() {
-      /* Truncated setup */
+      const dom = document.getElementById("top-talkers-chart");
+      if (!dom) return;
+      if (!this.topTalkersChart) this.topTalkersChart = echarts.init(dom);
+
+      const talkers = {};
+      this.stats.forEach((s) => {
+        const ip = s["id.orig_h"];
+        if (ip)
+          talkers[ip] = (talkers[ip] || 0) + (parseInt(s.orig_bytes) || 0);
+      });
+
+      const sorted = Object.entries(talkers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      this.topTalkersChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          formatter: (params) =>
+            `${params[0].name}: ${this.formatBytes(params[0].value)}`,
+        },
+        xAxis: { type: "value", show: false },
+        yAxis: { type: "category", data: sorted.map((i) => i[0]).reverse() },
+        series: [
+          {
+            data: sorted.map((i) => i[1]).reverse(),
+            type: "bar",
+            itemStyle: { color: "#8b5cf6", borderRadius: [0, 5, 5, 0] },
+          },
+        ],
+      });
+    },
+
+    renderConversationsChart() {
+      const dom = document.getElementById("conversations-chart");
+      if (!dom) return;
+      if (!this.conversationsChart) this.conversationsChart = echarts.init(dom);
+
+      const linksMap = new Map();
+      this.stats.forEach((s) => {
+        const src = s["id.orig_h"],
+          dst = s["id.resp_h"],
+          proto = s.proto ? s.proto.toUpperCase() : "UNKNOWN";
+        const bytes =
+          (parseInt(s.orig_bytes) || 0) + (parseInt(s.resp_bytes) || 0);
+        if (!src || !dst) return;
+
+        const linkId = `${src}-${dst}`;
+        if (!linksMap.has(linkId))
+          linksMap.set(linkId, {
+            source: src,
+            target: dst,
+            bytes: 0,
+            protocols: new Set(),
+          });
+        const linkData = linksMap.get(linkId);
+        linkData.bytes += bytes;
+        linkData.protocols.add(proto);
+      });
+
+      const sortedLinks = Array.from(linksMap.values())
+        .sort((a, b) => b.bytes - a.bytes)
+        .slice(0, 50);
+      const activeNodes = new Set();
+      sortedLinks.forEach((l) => {
+        activeNodes.add(l.source);
+        activeNodes.add(l.target);
+      });
+
+      const nodes = Array.from(activeNodes).map((ip) => ({
+        name: ip,
+        symbolSize: 22,
+        itemStyle: { color: "#3b82f6" },
+        label: { show: true },
+      }));
+      const links = sortedLinks.map((l) => ({
+        source: l.source,
+        target: l.target,
+        lineStyle: { width: Math.min(Math.max(l.bytes / 5000, 1), 6) },
+      }));
+
+      this.conversationsChart.setOption(
+        {
+          tooltip: { trigger: "item" },
+          series: [
+            {
+              type: "graph",
+              layout: "force",
+              data: nodes,
+              links: links,
+              roam: true,
+              force: { repulsion: 150, edgeLength: 80 },
+            },
+          ],
+        },
+        true
+      );
     },
     resizeCharts() {
       [

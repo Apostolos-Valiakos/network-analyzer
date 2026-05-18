@@ -23,6 +23,9 @@ FROM nginx:stable-alpine AS production-stage
 # Nuxt static generation outputs to '/dist' inside the '/app' directory
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 
+# Replace default nginx config with our hardened version
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

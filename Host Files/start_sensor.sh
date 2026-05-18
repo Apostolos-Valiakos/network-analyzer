@@ -15,7 +15,7 @@ rm -f conn.log
 echo -e "\n Starting Sensor Node on interface: $INTERFACE"
 
 # Define Host IP and Ports to ignore
-HOST_IP="10.16.1.216"
+HOST_IP="10.6.2.135"
 FILTER="not (host $HOST_IP and (port 5000 or port 5001))"
 
 echo -e "\n[*] Starting dumpcap (Ring Buffer)..."

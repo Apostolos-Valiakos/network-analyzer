@@ -1,6 +1,9 @@
 import pyshark
 import asyncio
+import logging
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 ##
@@ -20,8 +23,12 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
         asyncio.set_event_loop(asyncio.new_event_loop())
 
     try:
-        # KeepPacket=False saves RAM by not keeping packets in memory after parsing
-        capture = pyshark.FileCapture(filepath, keep_packets=False)
+        # keep_packets=False saves RAM; custom_parameters sets a per-packet tshark timeout
+        capture = pyshark.FileCapture(
+            filepath,
+            keep_packets=False,
+            custom_parameters={"-t": "ud"},  # use UTC timestamps
+        )
 
         all_ue_info = []
 
@@ -34,7 +41,7 @@ def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
         return all_ue_info
 
     except Exception as e:
-        print(f"UE Analysis Error: {e}")
+        logger.exception("UE analysis failed on %s", filepath)
         return []
 
 

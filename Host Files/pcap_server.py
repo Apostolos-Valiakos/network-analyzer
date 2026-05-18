@@ -1,13 +1,20 @@
+import logging
 import os
 import glob
 import io
 import subprocess
 from flask import Flask, request, send_file, jsonify
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 
 PCAP_DIR = "generated_pcaps"
-SECRET_TOKEN = "my-super-secret-internal-token-123" 
+SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 os.makedirs(PCAP_DIR, exist_ok=True)
 
 @app.before_request
@@ -39,25 +46,29 @@ def get_pcap():
     
     try:
         merge_cmd = ["mergecap", "-w", merged_filename] + pcap_files
-        subprocess.run(merge_cmd, check=True, capture_output=True)
-        
+        subprocess.run(merge_cmd, check=True, capture_output=True, timeout=30)
+
         cmd = ["editcap", "-A", start_dt, "-B", end_dt]
         if headers_only:
-            cmd.extend(["-s", "96"]) 
-        
+            cmd.extend(["-s", "96"])
+
         cmd.extend([merged_filename, out_filename])
-        subprocess.run(cmd, check=True, capture_output=True)
-        
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+
         with open(out_filename, 'rb') as f:
             return_data = io.BytesIO(f.read())
-        
+
         return send_file(return_data, as_attachment=True, download_name=out_filename)
-        
+
+    except subprocess.TimeoutExpired:
+        logger.warning("PCAP slice timed out for start=%s end=%s", start_time, end_time)
+        return jsonify({"error": "PCAP slicing timed out"}), 500
     except subprocess.CalledProcessError as e:
-        err_msg = e.stderr.decode() if e.stderr else str(e)
-        return jsonify({"error": "Slicing failed", "details": err_msg}), 500
+        logger.exception("PCAP slice failed")
+        return jsonify({"error": "Slicing failed"}), 500
     except Exception as e:
-        return jsonify({"error": "Unexpected Server Crash", "details": str(e)}), 500
+        logger.exception("Unexpected error in get_pcap")
+        return jsonify({"error": "Internal server error"}), 500
         
     finally:
         if os.path.exists(merged_filename):

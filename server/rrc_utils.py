@@ -1,8 +1,11 @@
 import subprocess
 import json
+import logging
 import os
 from typing import List, Tuple, Optional, Dict, Any
 from models import db, PcapFile, IpRole
+
+logger = logging.getLogger(__name__)
 
 
 ##
@@ -21,7 +24,7 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
 
     cmd = ["tshark", "-r", pcap_file, "-T", "json", "-V"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         packets = json.loads(result.stdout)
 
         with open(export_path, "w", encoding="utf-8") as f:
@@ -29,6 +32,9 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
 
         return packets
 
+    except subprocess.TimeoutExpired:
+        logger.warning("tshark timed out on %s", pcap_file)
+        return None
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
         return None
 
@@ -53,14 +59,14 @@ def get_comprehensive_ip_roles(pcap_file: str) -> Dict[str, str]:
         if pcap_record:
             stored_roles = IpRole.query.filter_by(pcap_id=pcap_record.id).all()
             if stored_roles:
-                print(f"Loading {len(stored_roles)} roles from Database...")
+                logger.info("Loaded %d roles from database cache", len(stored_roles))
                 return {r.ip_address: r.role for r in stored_roles}
     except Exception as e:
         # Expected in background threads without app context
-        print(f"Database lookup skipped (Background Context): {e}")
+        logger.debug("Database lookup skipped (no app context): %s", e)
 
     # --- 2. Single-Pass Deep Packet Inspection ---
-    print(f"Performing Single-Pass DPI on {pcap_file}...")
+    logger.info("Performing single-pass DPI on %s", pcap_file)
 
     # We extract ALL necessary fields in one go.
     # Fields: IP Src/Dst, Proto Codes, HTTP Headers, TCP Ports
@@ -107,7 +113,7 @@ def get_comprehensive_ip_roles(pcap_file: str) -> Dict[str, str]:
     all_seen_ips = set()
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         for line in proc.stdout.splitlines():
             if not line.strip():
                 continue
@@ -150,8 +156,10 @@ def get_comprehensive_ip_roles(pcap_file: str) -> Dict[str, str]:
                     identified_roles["e2t_ip_placeholder"] = dst  # Marker
                 e2t_candidates.add(src)
 
+    except subprocess.TimeoutExpired:
+        logger.warning("tshark DPI timed out on %s", pcap_file)
     except Exception as e:
-        print(f"DPI Error: {e}")
+        logger.exception("DPI error on %s", pcap_file)
 
     # --- 3. Resolve O-RAN Complex Roles ---
     # Redis & E2T Servers (Destinations)
@@ -197,9 +205,9 @@ def get_comprehensive_ip_roles(pcap_file: str) -> Dict[str, str]:
             if new_role_objects:
                 db.session.bulk_save_objects(new_role_objects)
                 db.session.commit()
-                print(f"Cached {len(new_role_objects)} roles to Database.")
+                logger.info("Cached %d roles to database", len(new_role_objects))
         except Exception as e:
-            print(f"Failed to cache roles: {e}")
+            logger.exception("Failed to cache roles to database")
             db.session.rollback()
 
     return identified_roles
@@ -232,8 +240,11 @@ def get_unique_rrc_ips(pcap_file: str) -> List[str]:
     # Keeping original logic for safety but can be optimized further.
     cmd = ["tshark", "-r", pcap_file, "-Y", "nr-rrc", "-T", "fields", "-e", "ip.dst"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         return sorted(list(set(result.stdout.splitlines())))
+    except subprocess.TimeoutExpired:
+        logger.warning("tshark rrc lookup timed out on %s", pcap_file)
+        return []
     except Exception:
         return []
 

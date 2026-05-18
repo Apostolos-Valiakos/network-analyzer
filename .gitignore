@@ -101,5 +101,9 @@ server/results
 server/source
 server/make.bat
 server/Makefile
+# tshark packet cache files (can be very large)
+server/**/*.packets.json
 uploads
 db_backup.sql
+.env.local
+.env.*.local

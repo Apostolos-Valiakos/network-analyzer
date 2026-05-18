@@ -1,5 +1,6 @@
 Flask
 Flask-Cors
+python-dotenv
 flasgger
 scapy
 pandas
@@ -10,5 +11,7 @@ python-louvain
 websocket-client
 requests
 pyshark
-flask-sqlalchemy 
+flask-sqlalchemy
 psycopg2-binary
+flask_jwt_extended
+flask-limiter

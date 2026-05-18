@@ -154,13 +154,6 @@ export default {
 
         this.loading = false;
         this.formSubmitted = true;
-        console.log("Data Transmitted:", {
-          name: this.name,
-          email: this.email,
-          message: this.message,
-        });
-
-        // Optionally clear form after submission
         this.resetForm();
       }
     },

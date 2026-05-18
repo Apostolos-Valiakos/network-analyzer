@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\student\\\\Desktop\\\\network analyzer\" -Recurse)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('rrc_utils.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('snapshot_scheduler.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import dotenv; print\\('python-dotenv available'\\)\")",
+      "Bash(python.exe -m pip install python-dotenv flask-limiter)",
+      "Bash(python.exe -c \"from dotenv import load_dotenv; print\\('python-dotenv OK'\\)\")"
+    ]
+  }
+}

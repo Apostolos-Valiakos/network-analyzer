@@ -5,8 +5,13 @@ Refactored for PostgreSQL Integration & Streaming Analysis.
 """
 
 import os
+import re
 import json
 import logging
+import ipaddress
+from dotenv import load_dotenv
+
+load_dotenv()  # Load variables from .env before any os.getenv() calls
 from pathlib import Path
 from datetime import datetime
 import csv
@@ -14,6 +19,8 @@ import io
 import subprocess
 import glob
 from flask_socketio import SocketIO, emit
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
@@ -58,8 +65,21 @@ for d in [
 ]:
     os.makedirs(d, exist_ok=True)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "super-secret-fallback-key")
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+if not app.config["JWT_SECRET_KEY"]:
+    raise RuntimeError("JWT_SECRET_KEY environment variable must be set")
+
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000",
+).split(",")
 
 swagger_template = {
     "swagger": "2.0",
@@ -82,14 +102,19 @@ swagger_template = {
 swagger = Swagger(app, template=swagger_template)
 
 jwt = JWTManager(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
-# CORS Setup
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
 CORS(
     app,
-    resources={r"/*": {"origins": "*"}},
-    supports_credentials=True,
+    resources={r"/*": {"origins": ALLOWED_ORIGINS}},
+    supports_credentials=False,
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+)
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["300 per minute"],
+    storage_uri="memory://",
 )
 
 # Database Setup (PostgreSQL)
@@ -119,9 +144,6 @@ with app.app_context():
         print(f"TimescaleDB warning (ensure it is installed on PG server): {e}")
         db.session.rollback()
 
-logger = logging.getLogger(__name__)
-
-
 def generate_csv_response(data_list, filename):
     """Converts a list of dicts to a CSV Flask response."""
     if not data_list:
@@ -136,10 +158,41 @@ def generate_csv_response(data_list, filename):
         output.getvalue(),
         200,
         {
-            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Type": "text/csv",
         },
     )
+
+
+def _is_safe_scan_param(value: str) -> bool:
+    """Returns True only if value is a valid IP, CIDR, or simple hostname.
+    Rejects shell metacharacters to prevent command injection."""
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        ipaddress.ip_network(value, strict=False)
+        return True
+    except ValueError:
+        pass
+    # Allow plain hostnames / simple alphanumeric values; reject shell metacharacters
+    return bool(re.match(r"^[a-zA-Z0-9_.\-/]+$", value))
+
+
+def _cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
+    """Deletes stale tshark .packets.json cache files older than max_age_seconds."""
+    now = datetime.now().timestamp()
+    for directory in [PCAP_GEN_OUTPUT_DIR, UPLOAD_FOLDER]:
+        for path in Path(directory).glob("*.packets.json"):
+            try:
+                if now - path.stat().st_mtime > max_age_seconds:
+                    path.unlink()
+                    logger.info("Removed stale tshark cache: %s", path.name)
+            except OSError:
+                pass
+
+
+# Run once at startup to clear any caches left from a previous run
+_cleanup_packet_caches()
 
 
 # ==========================
@@ -149,6 +202,7 @@ def generate_csv_response(data_list, filename):
 
 @app.route("/save-pcap", methods=["POST"])
 @swag_from("docs/save_pcap.yml")
+@limiter.limit("30 per minute")
 def save_pcap_stream():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
@@ -196,8 +250,9 @@ def save_pcap_stream():
         )
 
     except Exception as e:
+        logger.exception("save_pcap_stream failed")
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 @app.route("/generated_pcaps/<path:filename>", methods=["GET"])
@@ -244,6 +299,7 @@ def analyze_saved_pcap(filename: str):
 
 @app.route("/automated-analysis", methods=["POST"])
 @swag_from("docs/automated_analysis.yml")
+@limiter.limit("5 per minute")
 def automated_analysis():
     if "file" not in request.files:
         return jsonify({"error": "Missing file part"}), 400
@@ -252,7 +308,13 @@ def automated_analysis():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
+    safe_filename = Path(file.filename).name
+    if not safe_filename.lower().endswith(".pcap"):
+        return jsonify({"error": "Only .pcap files are accepted"}), 400
+
+    _cleanup_packet_caches()
+
+    unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
     pcap_path = Path(PCAP_GEN_OUTPUT_DIR) / unique_name
     file.save(str(pcap_path))
 
@@ -308,8 +370,9 @@ def automated_analysis():
         return jsonify(response), 200
 
     except Exception as e:
+        logger.exception("automated_analysis failed")
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ==========================
@@ -319,6 +382,7 @@ def automated_analysis():
 
 @app.route("/clustering", methods=["POST"])
 @swag_from("docs/clustering.yml")
+@limiter.limit("10 per minute")
 def clustering_analysis():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
@@ -330,15 +394,24 @@ def clustering_analysis():
     if not filepath.exists():
         return jsonify({"error": "PCAP not found"}), 404
 
+    max_clusters = data.get("clusters", 4)
+    if not isinstance(max_clusters, int) or not (2 <= max_clusters <= 20):
+        return jsonify({"error": "clusters must be an integer between 2 and 20"}), 400
+
+    anomaly_threshold = data.get("anomaly_threshold", 2)
+    if not isinstance(anomaly_threshold, (int, float)) or anomaly_threshold < 0:
+        return jsonify({"error": "anomaly_threshold must be a non-negative number"}), 400
+
     try:
         result = analyze_pcap_for_clustering(
             str(filepath),
-            max_clusters=data.get("clusters", 4),
-            anomaly_threshold=data.get("anomaly_threshold", 2),
+            max_clusters=max_clusters,
+            anomaly_threshold=anomaly_threshold,
         )
         return jsonify(result), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("clustering_analysis failed")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/suggested_clusters", methods=["GET"])
@@ -348,7 +421,7 @@ def suggested_clusters():
     if not filename:
         return jsonify({"error": "file required"}), 400
 
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / filename
+    filepath = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
 
@@ -394,7 +467,8 @@ def save_results_endpoint():
             200,
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("save_results_endpoint failed")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/clustering-output/<path:filename>")
@@ -405,12 +479,13 @@ def get_clustering_result(filename):
 
 @app.route("/run_pipeline", methods=["POST"])
 @swag_from("docs/run_pipeline.yml")
+@limiter.limit("10 per minute")
 def run_pipeline_endpoint():
     data = request.get_json()
     pcap_file = data.get("pcap_file_path")
     model = data.get("model_name")
 
-    full_path = Path(PCAP_GEN_OUTPUT_DIR) / pcap_file
+    full_path = Path(PCAP_GEN_OUTPUT_DIR) / Path(pcap_file).name
     if not full_path.exists():
         return jsonify({"error": "PCAP not found"}), 404
 
@@ -419,7 +494,8 @@ def run_pipeline_endpoint():
         status = 200 if report.get("status") == "success" else 500
         return jsonify(report), status
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.exception("run_pipeline_endpoint failed")
+        return jsonify({"status": "error", "message": "Internal server error"}), 500
 
 
 @app.route("/save_roles", methods=["GET"])
@@ -428,8 +504,11 @@ def save_roles_endpoint():
     file = request.args.get("file")
     ftype = request.args.get("type", "json").lower()
 
-    base = os.path.splitext(file)[0]
-    path = Path(RESULTS_OUTPUT_DIR) / f"{base}.{ftype}"
+    if ftype not in ("json", "csv"):
+        return jsonify({"error": "type must be json or csv"}), 400
+
+    safe_base = os.path.splitext(Path(file).name)[0]
+    path = Path(RESULTS_OUTPUT_DIR) / f"{safe_base}.{ftype}"
 
     if not path.exists():
         return jsonify({"error": "File not found"}), 404
@@ -439,14 +518,22 @@ def save_roles_endpoint():
 @app.route("/start-analysis-from-websocket", methods=["POST"])
 @swag_from("docs/start_analysis_from_websocket.yml")
 def start_analysis_from_websocket():
-    data = request.json
+    data = request.json or {}
     ws_url = data.get("ws_url")
     seconds = data.get("seconds")
 
-    if not ws_url or not seconds:
+    if not ws_url or seconds is None:
         return jsonify({"status": "Error", "message": "Missing parameters"}), 400
 
-    success = startWebSocketClient(ws_url, int(seconds))
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        return jsonify({"status": "Error", "message": "seconds must be an integer"}), 400
+
+    if not (1 <= seconds <= 3600):
+        return jsonify({"status": "Error", "message": "seconds must be between 1 and 3600"}), 400
+
+    success = startWebSocketClient(ws_url, seconds)
     if success:
         return jsonify({"status": "Accepted", "message": "Pipeline started."}), 202
     return jsonify({"status": "Failed", "message": "Failed to start."}), 500
@@ -456,9 +543,8 @@ def start_analysis_from_websocket():
 # CONTINUOUS MONITORING API ENDPOINTS
 # ==========================================
 
-# REMEMBER TO CHANGE THIS TO YOUR VM'S ACTUAL IP ADDRESS
 VM_URL = "http://127.0.0.1:5005/get-pcap"
-SECRET_TOKEN = "my-super-secret-internal-token-123"
+SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 
 
 @app.route("/v1/ingest/zeek", methods=["POST"])
@@ -551,10 +637,10 @@ def ingest_zeek():
 
         return jsonify({"status": "success", "inserted": len(batch)}), 200
     except Exception as e:
-        print(f"🚨 INGEST ERROR: {str(e)}")
+        logger.exception("ingest_zeek failed")
         if conn:
             conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
     finally:
         if conn:
             conn.close()
@@ -570,7 +656,9 @@ def get_network_statistics():
         limit = int(request.args.get("limit", 1000))
         resp_format = request.args.get("format", "csv").lower()
 
-        # FIXED: Query using UTC datetime objects to match the standardized DB storage
+        if not (1 <= limit <= 10000):
+            return jsonify({"error": "limit must be between 1 and 10000"}), 400
+
         start_dt = datetime.utcfromtimestamp(raw_start)
         end_dt = datetime.utcfromtimestamp(raw_end)
 
@@ -604,7 +692,8 @@ def get_network_statistics():
         return generate_csv_response(results, "network_statistics.csv")
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        logger.exception("get_network_statistics failed")
+        return jsonify({"error": "Internal server error"}), 400
 
 
 @app.route("/v1/network/roles/latest", methods=["GET"])
@@ -614,6 +703,9 @@ def get_latest_roles():
     try:
         limit = int(request.args.get("limit", 1000))
         resp_format = request.args.get("format", "csv").lower()
+
+        if not (1 <= limit <= 10000):
+            return jsonify({"error": "limit must be between 1 and 10000"}), 400
 
         latest_ts = db.session.query(db.func.max(RoleSnapshot.ts)).scalar()
 
@@ -639,7 +731,8 @@ def get_latest_roles():
         return generate_csv_response(results, "latest_roles.csv")
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("get_latest_roles failed")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/v1/network/pcap/headers", methods=["GET"])
@@ -695,9 +788,10 @@ def export_network_statistics():
         raw_end = float(request.args.get("end_time", datetime.utcnow().timestamp()))
         resp_format = request.args.get("format", "csv").lower()
 
-        # 1. Handle Optional Limit Parameter
         limit_arg = request.args.get("limit")
         limit = int(limit_arg) if limit_arg and limit_arg.strip() else None
+        if limit is not None and not (1 <= limit <= 10000):
+            return jsonify({"error": "limit must be between 1 and 10000"}), 400
 
         start_dt = datetime.utcfromtimestamp(raw_start)
         end_dt = datetime.utcfromtimestamp(raw_end)
@@ -745,7 +839,8 @@ def export_network_statistics():
         return generate_csv_response(results, f"{filename}.csv")
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        logger.exception("export_network_statistics failed")
+        return jsonify({"error": "Internal server error"}), 400
 
 
 # Add glob to your imports at the top of app.py if it isn't there already
@@ -753,6 +848,7 @@ import glob
 
 
 @app.route("/v1/analyze_live", methods=["POST"])
+@limiter.limit("5 per minute")
 def analyze_live():
     """Auto-grabs the latest PCAP, analyzes it, and deletes it."""
     results_dir = "server/results"
@@ -786,18 +882,25 @@ def analyze_live():
         return jsonify(results), 200
 
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        return jsonify({"message": f"Pipeline error: {str(e)}"}), 500
+        logger.exception("analyze_live failed")
+        return jsonify({"message": "Internal server error"}), 500
 
 
 @app.route("/v1/scan/start", methods=["POST"])
+@limiter.limit("5 per minute")
 def start_scan():
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    # Validate all string values to block shell metacharacters before they
+    # reach the Nmap command constructor on the VM.
+    for key, value in data.items():
+        if isinstance(value, str) and not _is_safe_scan_param(value):
+            logger.warning("start_scan: rejected unsafe param %s=%r", key, value)
+            return jsonify({"error": f"Invalid value for parameter '{key}'"}), 400
+
     vm_url = "http://127.0.0.1:5005/run-nmap-async"
     headers = {
-        "X-Internal-Token": "my-super-secret-internal-token-123",
+        "X-Internal-Token": os.getenv("SECRET_TOKEN", ""),
         "Content-Type": "application/json",
     }
 
@@ -805,19 +908,21 @@ def start_scan():
         response = requests.post(vm_url, json=data, headers=headers, timeout=10)
         return jsonify(response.json()), response.status_code
     except Exception as e:
-        return jsonify({"error": f"Failed to reach VM: {str(e)}"}), 500
+        logger.exception("start_scan: failed to reach VM")
+        return jsonify({"error": "Failed to reach VM"}), 500
 
 
 @app.route("/v1/scan/results", methods=["GET"])
 def get_scan_results():
     vm_url = "http://127.0.0.1:5005/get-nmap-results"
-    headers = {"X-Internal-Token": "my-super-secret-internal-token-123"}
+    headers = {"X-Internal-Token": os.getenv("SECRET_TOKEN", "")}
 
     try:
         response = requests.get(vm_url, headers=headers, timeout=10)
         return jsonify(response.json()), response.status_code
     except Exception as e:
-        return jsonify({"error": f"Failed to reach VM: {str(e)}"}), 500
+        logger.exception("get_scan_results: failed to reach VM")
+        return jsonify({"error": "Failed to reach VM"}), 500
 
 
 if __name__ == "__main__":

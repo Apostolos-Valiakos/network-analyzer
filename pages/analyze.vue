@@ -180,8 +180,6 @@ export default {
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
         this.cacheResults(data);
-        console.log(data);
-        console.log(data.roles);
       } catch (err) {
         alert(`Analysis failed: ${err.message}`);
       } finally {
