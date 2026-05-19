@@ -13,11 +13,12 @@ class User(db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationship: One user can upload many files
     pcaps = db.relationship("PcapFile", backref="uploader", lazy=True)
+    cluster_results = db.relationship("ClusterResult", backref="owner", lazy=True)
 
 
 class PcapFile(db.Model):
@@ -120,3 +121,13 @@ class UeSession(db.Model):
     suci = db.Column(db.String(100))
     ip_address = db.Column(db.String(45))
     details = db.Column(db.JSON)
+
+
+class ClusterResult(db.Model):
+    """Tracks clustering output files so ownership can be enforced."""
+
+    __tablename__ = "cluster_results"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    filename = db.Column(db.String(255), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

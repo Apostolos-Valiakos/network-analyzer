@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env before any os.getenv() calls
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import io
 import subprocess
@@ -21,18 +21,24 @@ import glob
 from flask_socketio import SocketIO, emit
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
 from flasgger import Swagger, swag_from
 import pandas as pd
-from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    JWTManager,
+    jwt_required,
+    get_jwt_identity,
+    create_access_token,
+)
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
 import socketio
 
-from models import db, PcapFile, FlowStatistic, RoleSnapshot, IpRole, UeSession
+from models import db, PcapFile, FlowStatistic, RoleSnapshot, IpRole, UeSession, User, ClusterResult
 
 from pcap_analysis import initialize_analysis
 from ueAnalysis import initialize_analysis_for_ue
@@ -75,6 +81,7 @@ app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 if not app.config["JWT_SECRET_KEY"]:
     raise RuntimeError("JWT_SECRET_KEY environment variable must be set")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=8)
 
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
@@ -96,7 +103,6 @@ swagger_template = {
             "description": 'JWT Authorization header using the Bearer scheme. Example: "Bearer {token}"',
         }
     },
-    "security": [{"Bearer": []}],
 }
 
 swagger = Swagger(app, template=swagger_template)
@@ -116,6 +122,14 @@ limiter = Limiter(
     default_limits=["300 per minute"],
     storage_uri="memory://",
 )
+
+@app.before_request
+def handle_preflight():
+    """Return 200 immediately for CORS preflight requests so @jwt_required()
+    never sees them — Flask-CORS adds the required headers via after_request."""
+    if request.method == "OPTIONS":
+        from flask import Response as _Response
+        return _Response(status=200)
 
 # Database Setup (PostgreSQL)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
@@ -143,6 +157,32 @@ with app.app_context():
     except Exception as e:
         print(f"TimescaleDB warning (ensure it is installed on PG server): {e}")
         db.session.rollback()
+
+    # Migrate pre-existing tables to add columns added after initial creation
+    try:
+        db.session.execute(db.text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE users ALTER COLUMN password_hash TYPE VARCHAR(256)"
+        ))
+        db.session.commit()
+    except Exception as e:
+        logger.warning("Schema migration warning: %s", e)
+        db.session.rollback()
+
+    # Seed first admin from env vars if no admin exists yet
+    _admin_username = os.getenv("ADMIN_USERNAME")
+    _admin_password = os.getenv("ADMIN_PASSWORD")
+    if _admin_username and _admin_password:
+        if not User.query.filter_by(is_admin=True).first():
+            db.session.add(User(
+                username=_admin_username,
+                password_hash=generate_password_hash(_admin_password),
+                is_admin=True,
+            ))
+            db.session.commit()
+            logger.info("Seeded admin user: %s", _admin_username)
 
 def generate_csv_response(data_list, filename):
     """Converts a list of dicts to a CSV Flask response."""
@@ -195,14 +235,109 @@ def _cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
 _cleanup_packet_caches()
 
 
+def _current_user_id() -> int:
+    return int(get_jwt_identity())
+
+
+def _check_pcap_ownership(filename: str, user_id: int):
+    """Returns (pcap, None) or (None, (response, status_code))."""
+    safe_name = Path(filename).name
+    pcap = PcapFile.query.filter_by(filename=safe_name).first()
+    if not pcap:
+        return None, (jsonify({"error": "File not found"}), 404)
+    if pcap.user_id != user_id:
+        return None, (jsonify({"error": "Access denied"}), 403)
+    return pcap, None
+
+
+# ==========================
+#      AUTHENTICATION
+# ==========================
+
+
+@app.route("/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
+def login():
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+    user = User.query.filter_by(username=username).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Invalid credentials"}), 401
+    token = create_access_token(identity=str(user.id))
+    return jsonify({"access_token": token, "is_admin": user.is_admin}), 200
+
+
+@app.route("/auth/register", methods=["POST"])
+@jwt_required()
+def register():
+    current = User.query.get(_current_user_id())
+    if not current or not current.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already exists"}), 409
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_admin=bool(data.get("is_admin", False)),
+    )
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"id": user.id, "username": user.username, "is_admin": user.is_admin}), 201
+
+
+@app.route("/auth/users", methods=["GET"])
+@jwt_required()
+def list_users():
+    current = User.query.get(_current_user_id())
+    if not current or not current.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    users = User.query.order_by(User.created_at.asc()).all()
+    return jsonify([
+        {
+            "id": u.id,
+            "username": u.username,
+            "is_admin": u.is_admin,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]), 200
+
+
+@app.route("/auth/users/<int:user_id>", methods=["DELETE"])
+@jwt_required()
+def delete_user(user_id):
+    current = User.query.get(_current_user_id())
+    if not current or not current.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    if user_id == current.id:
+        return jsonify({"error": "Cannot delete your own account"}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": "User deleted"}), 200
+
+
 # ==========================
 #      PCAP MANAGEMENT
 # ==========================
 
 
 @app.route("/save-pcap", methods=["POST"])
-@swag_from("docs/save_pcap.yml")
+@jwt_required()
 @limiter.limit("30 per minute")
+@swag_from("docs/save_pcap.yml")
 def save_pcap_stream():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
@@ -228,6 +363,7 @@ def save_pcap_stream():
                 original_filename=session_id,
                 file_path=file_path,
                 status="PROCESSING",
+                user_id=_current_user_id(),
             )
             db.session.add(pcap_record)
 
@@ -256,9 +392,13 @@ def save_pcap_stream():
 
 
 @app.route("/generated_pcaps/<path:filename>", methods=["GET"])
+@jwt_required()
 @swag_from("docs/get_generated_pcap.yml")
 def get_generated_pcap(filename: str):
-    safe_path = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
+    pcap, err = _check_pcap_ownership(Path(filename).name, _current_user_id())
+    if err:
+        return err
+    safe_path = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
     if not safe_path.exists():
         return jsonify({"error": "File not found"}), 404
     return send_file(str(safe_path), as_attachment=True)
@@ -270,9 +410,13 @@ def get_generated_pcap(filename: str):
 
 
 @app.route("/analyze-saved-pcap/<path:filename>", methods=["GET"])
+@jwt_required()
 @swag_from("docs/analyze_saved_pcap.yml")
 def analyze_saved_pcap(filename: str):
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
+    pcap, err = _check_pcap_ownership(Path(filename).name, _current_user_id())
+    if err:
+        return err
+    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
 
@@ -298,8 +442,9 @@ def analyze_saved_pcap(filename: str):
 
 
 @app.route("/automated-analysis", methods=["POST"])
-@swag_from("docs/automated_analysis.yml")
+@jwt_required()
 @limiter.limit("5 per minute")
+@swag_from("docs/automated_analysis.yml")
 def automated_analysis():
     if "file" not in request.files:
         return jsonify({"error": "Missing file part"}), 400
@@ -325,6 +470,7 @@ def automated_analysis():
             file_path=str(pcap_path),
             file_size=os.path.getsize(pcap_path),
             status="PROCESSING",
+            user_id=_current_user_id(),
         )
         db.session.add(pcap_record)
         db.session.commit()
@@ -381,8 +527,9 @@ def automated_analysis():
 
 
 @app.route("/clustering", methods=["POST"])
-@swag_from("docs/clustering.yml")
+@jwt_required()
 @limiter.limit("10 per minute")
+@swag_from("docs/clustering.yml")
 def clustering_analysis():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
@@ -390,7 +537,10 @@ def clustering_analysis():
     data = request.get_json()
     filename = data.get("file")
 
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
+    pcap, err = _check_pcap_ownership(filename, _current_user_id())
+    if err:
+        return err
+    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
     if not filepath.exists():
         return jsonify({"error": "PCAP not found"}), 404
 
@@ -415,13 +565,17 @@ def clustering_analysis():
 
 
 @app.route("/suggested_clusters", methods=["GET"])
+@jwt_required()
 @swag_from("docs/suggested_clusters.yml")
 def suggested_clusters():
     filename = request.args.get("file")
     if not filename:
         return jsonify({"error": "file required"}), 400
 
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / Path(filename).name
+    pcap, err = _check_pcap_ownership(filename, _current_user_id())
+    if err:
+        return err
+    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
 
@@ -442,6 +596,7 @@ def suggested_clusters():
 
 
 @app.route("/save-results", methods=["POST"])
+@jwt_required()
 @swag_from("docs/save_results.yml")
 def save_results_endpoint():
     data = request.get_json()
@@ -456,6 +611,13 @@ def save_results_endpoint():
         target = csv_path if data.get("type", "json") == "csv" else json_path
         name = Path(target).name
 
+        uid = _current_user_id()
+        for path in [csv_path, json_path]:
+            fname = Path(path).name
+            if not ClusterResult.query.filter_by(filename=fname).first():
+                db.session.add(ClusterResult(user_id=uid, filename=fname))
+        db.session.commit()
+
         return (
             jsonify(
                 {
@@ -468,24 +630,36 @@ def save_results_endpoint():
         )
     except Exception as e:
         logger.exception("save_results_endpoint failed")
+        db.session.rollback()
         return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/clustering-output/<path:filename>")
+@jwt_required()
 @swag_from("docs/get_clustering_result.yml")
 def get_clustering_result(filename):
-    return send_from_directory(CLUSTERING_OUTPUT_DIR, filename)
+    safe_name = Path(filename).name
+    result = ClusterResult.query.filter_by(filename=safe_name).first()
+    if not result:
+        return jsonify({"error": "File not found"}), 404
+    if result.user_id != _current_user_id():
+        return jsonify({"error": "Access denied"}), 403
+    return send_from_directory(CLUSTERING_OUTPUT_DIR, safe_name)
 
 
 @app.route("/run_pipeline", methods=["POST"])
-@swag_from("docs/run_pipeline.yml")
+@jwt_required()
 @limiter.limit("10 per minute")
+@swag_from("docs/run_pipeline.yml")
 def run_pipeline_endpoint():
     data = request.get_json()
     pcap_file = data.get("pcap_file_path")
     model = data.get("model_name")
 
-    full_path = Path(PCAP_GEN_OUTPUT_DIR) / Path(pcap_file).name
+    pcap, err = _check_pcap_ownership(pcap_file, _current_user_id())
+    if err:
+        return err
+    full_path = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
     if not full_path.exists():
         return jsonify({"error": "PCAP not found"}), 404
 
@@ -499,6 +673,7 @@ def run_pipeline_endpoint():
 
 
 @app.route("/save_roles", methods=["GET"])
+@jwt_required()
 @swag_from("docs/save_roles.yml")
 def save_roles_endpoint():
     file = request.args.get("file")
@@ -508,14 +683,19 @@ def save_roles_endpoint():
         return jsonify({"error": "type must be json or csv"}), 400
 
     safe_base = os.path.splitext(Path(file).name)[0]
-    path = Path(RESULTS_OUTPUT_DIR) / f"{safe_base}.{ftype}"
 
+    _, err = _check_pcap_ownership(f"{safe_base}.pcap", _current_user_id())
+    if err:
+        return err
+
+    path = Path(RESULTS_OUTPUT_DIR) / f"{safe_base}.{ftype}"
     if not path.exists():
         return jsonify({"error": "File not found"}), 404
     return send_file(str(path), as_attachment=True)
 
 
 @app.route("/start-analysis-from-websocket", methods=["POST"])
+@jwt_required()
 @swag_from("docs/start_analysis_from_websocket.yml")
 def start_analysis_from_websocket():
     data = request.json or {}
@@ -647,6 +827,7 @@ def ingest_zeek():
 
 
 @app.route("/v1/network/statistics", methods=["GET"])
+@jwt_required()
 @swag_from("docs/get_network_statistics.yml")
 def get_network_statistics():
     """Endpoint 1: Get Network Statistics (Grafana/Zeek Aligned)"""
@@ -697,6 +878,7 @@ def get_network_statistics():
 
 
 @app.route("/v1/network/roles/latest", methods=["GET"])
+@jwt_required()
 @swag_from("docs/get_latest_roles.yml")
 def get_latest_roles():
     """Endpoint 2: Get Latest Role Snapshot"""
@@ -736,6 +918,7 @@ def get_latest_roles():
 
 
 @app.route("/v1/network/pcap/headers", methods=["GET"])
+@jwt_required()
 @swag_from("docs/get_pcap_headers.yml")
 def get_pcap_headers_only():
     """Endpoint 3: Get Timeframe PCAP (Headers Only / No Payload)"""
@@ -762,6 +945,7 @@ def get_pcap_headers_only():
 
 
 @app.route("/v1/network/pcap/latest/full", methods=["GET"])
+@jwt_required()
 @swag_from("docs/get_latest_full_pcap.yml")
 def get_latest_full_pcap():
     """Endpoint 4: Get Full Payload PCAP (Latest Snapshot)"""
@@ -780,6 +964,7 @@ def get_latest_full_pcap():
 
 
 @app.route("/v1/network/export", methods=["GET"])
+@jwt_required()
 @swag_from("docs/export_network_statistics.yml")
 def export_network_statistics():
     """Endpoint 5: Export Analytics Data (CSV/JSON) with Zeek dot notation"""
@@ -848,6 +1033,7 @@ import glob
 
 
 @app.route("/v1/analyze_live", methods=["POST"])
+@jwt_required()
 @limiter.limit("5 per minute")
 def analyze_live():
     """Auto-grabs the latest PCAP, analyzes it, and deletes it."""
@@ -887,6 +1073,7 @@ def analyze_live():
 
 
 @app.route("/v1/scan/start", methods=["POST"])
+@jwt_required()
 @limiter.limit("5 per minute")
 def start_scan():
     data = request.get_json() or {}
@@ -913,6 +1100,7 @@ def start_scan():
 
 
 @app.route("/v1/scan/results", methods=["GET"])
+@jwt_required()
 def get_scan_results():
     vm_url = "http://127.0.0.1:5005/get-nmap-results"
     headers = {"X-Internal-Token": os.getenv("SECRET_TOKEN", "")}
