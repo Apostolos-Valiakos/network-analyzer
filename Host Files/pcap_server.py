@@ -13,8 +13,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# ─── Configuration ────────────────────────────────────────────────────────────
+# Edit this value before deploying to the sensor machine.
+
+# Shared secret — must match INTERNAL_TOKEN in the backend .env file.
+SECRET_TOKEN = "change_me_internal_token"
+# ──────────────────────────────────────────────────────────────────────────────
+
 PCAP_DIR = "generated_pcaps"
-SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 os.makedirs(PCAP_DIR, exist_ok=True)
 
 @app.before_request
@@ -63,10 +69,10 @@ def get_pcap():
     except subprocess.TimeoutExpired:
         logger.warning("PCAP slice timed out for start=%s end=%s", start_time, end_time)
         return jsonify({"error": "PCAP slicing timed out"}), 500
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         logger.exception("PCAP slice failed")
         return jsonify({"error": "Slicing failed"}), 500
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error in get_pcap")
         return jsonify({"error": "Internal server error"}), 500
         

@@ -1,7 +1,17 @@
 #!/bin/bash
 
+# ─── Configuration ────────────────────────────────────────────────────────────
+# Edit these values before deploying to the sensor machine.
+
+# IP address of this sensor VM (used to exclude its own management traffic).
+HOST_IP="10.6.2.135"
+
+# Ports used by pcap_server.py and zeek_agent.py — excluded from capture.
+SENSOR_PORTS="5000 or port 5001 or port 5005"
+# ──────────────────────────────────────────────────────────────────────────────
+
 if [ -z "$1" ]; then
-    echo -e "\n❌ Error: No network interface provided. (e.g., ./start_sensor.sh enp0s3)\n"
+    echo -e "\n Error: No network interface provided. (e.g., ./start_sensor.sh enp0s3)\n"
     exit 1
 fi
 
@@ -14,9 +24,7 @@ rm -f conn.log
 
 echo -e "\n Starting Sensor Node on interface: $INTERFACE"
 
-# Define Host IP and Ports to ignore
-HOST_IP="10.6.2.135"
-FILTER="not (host $HOST_IP and (port 5000 or port 5001))"
+FILTER="not (host $HOST_IP and (port $SENSOR_PORTS))"
 
 echo -e "\n[*] Starting dumpcap (Ring Buffer)..."
 sudo dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
