@@ -7,7 +7,7 @@ export default {
   // Global page headers: https://go.nuxtjs.dev/config-head
   head: {
     titleTemplate: "%s - by UTH",
-    title: "Network Analyzer",
+    title: "Privacy Enhanced Network Profiler",
     htmlAttrs: {
       lang: "en",
     },
@@ -24,7 +24,11 @@ export default {
   css: [],
 
   // Plugins to run before rendering page: https://go.nuxtjs.dev/config-plugins
-  plugins: [],
+  plugins: ["~/plugins/auth.js", "~/plugins/api.js", "~/plugins/theme.js"],
+
+  router: {
+    middleware: ["auth"],
+  },
 
   // Auto import components: https://go.nuxtjs.dev/config-components
   components: true,
@@ -44,16 +48,25 @@ export default {
   vuetify: {
     customVariables: ["~/assets/variables.scss"],
     theme: {
-      dark: false,
+      dark: true,
       themes: {
-        lighten1: {
-          primary: colors.blue.darken2,
-          accent: colors.grey.darken3,
-          secondary: colors.amber.darken3,
-          info: colors.teal.lighten1,
-          warning: colors.amber.base,
-          error: colors.deepOrange.accent4,
-          success: colors.green.accent3,
+        dark: {
+          primary: "#38bdf8",
+          accent: "#38bdf8",
+          secondary: "#94a3b8",
+          info: "#38bdf8",
+          warning: "#fbbf24",
+          error: "#f87171",
+          success: "#34d399",
+        },
+        light: {
+          primary: "#0284c7",
+          accent: "#0284c7",
+          secondary: "#64748b",
+          info: "#0284c7",
+          warning: "#d97706",
+          error: "#dc2626",
+          success: "#059669",
         },
       },
     },

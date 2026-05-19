@@ -63,17 +63,24 @@
 
 <style scoped>
 .footer {
-  background-color: #f5f5f5;
-  color: #333;
+  background-color: var(--app-bg);
+  color: var(--text-muted);
   padding: 2em 1em;
+  border-top: 1px solid var(--border);
+}
+
+h4 {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
 }
 
 a {
-  color: inherit;
+  color: var(--text-muted);
   text-decoration: none;
 }
 
 a:hover {
-  text-decoration: underline;
+  color: var(--metric-value);
+  text-decoration: none;
 }
 </style>
