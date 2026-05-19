@@ -1,15 +1,21 @@
 <template>
-  <v-container class="futuristic-light-container">
+  <v-container class="page-container">
+    <div class="d-flex align-center mb-6">
+      <v-icon size="32" color="primary" class="mr-3">mdi-email-outline</v-icon>
+      <div>
+        <h1 class="text-h5 font-weight-bold mb-0">Contact Us</h1>
+        <p class="text-caption mb-0 text-dim">Get in touch with the team</p>
+      </div>
+    </div>
     <v-row>
       <v-col cols="12" md="8">
-        <v-card class="data-card pa-6">
-          <h2 class="text-h5 mb-4 font-weight-bold">Contact Us</h2>
+        <v-card class="themed-card pa-6">
           <v-form ref="form" v-model="valid" lazy-validation>
-            <div class="realtime-view mb-6">
+            <div class="themed-highlight mb-6">
               <v-icon :color="formStatusColor" large class="mb-2">{{
                 formStatusIcon
               }}</v-icon>
-              <p class="font-weight-medium" :class="`text--${formStatusColor}`">
+              <p class="font-weight-medium" :class="`${formStatusColor}--text`">
                 Status: {{ formStatusText }}
               </p>
             </div>
@@ -72,28 +78,23 @@
       </v-col>
 
       <v-col cols="12" md="4">
-        <v-card class="data-card pa-5">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">
+        <v-card class="themed-accent-card pa-5">
+          <h3 class="text-subtitle-1 font-weight-bold mb-4 primary--text">
+            <v-icon color="primary" small class="mr-1">mdi-access-point</v-icon>
             Direct Access Points
           </h3>
-          <div class="packet-list">
-            <div class="packet-item">
-              <v-icon small color="blue-grey darken-1" class="mr-2">
-                mdi-email-outline
-              </v-icon>
+          <div class="contact-list">
+            <div class="contact-item">
+              <v-icon small color="primary" class="mr-2">mdi-email-outline</v-icon>
               <span class="font-mono text-body-2">avaliakos@uth.gr</span>
             </div>
-            <div class="packet-item">
-              <v-icon small color="blue-grey darken-1" class="mr-2">
-                mdi-phone-outline
-              </v-icon>
+            <div class="contact-item">
+              <v-icon small color="primary" class="mr-2">mdi-phone-outline</v-icon>
               <span class="font-mono text-body-2">+1 (555) 123-4567</span>
             </div>
-            <div class="packet-item">
-              <v-icon small color="blue-grey darken-1" class="mr-2"
-                >mdi-map-marker-outline</v-icon
-              >
-              <span class="font-mono text-body-2"> Gaiopolis, Larisa </span>
+            <div class="contact-item">
+              <v-icon small color="primary" class="mr-2">mdi-map-marker-outline</v-icon>
+              <span class="font-mono text-body-2">Gaiopolis, Larisa</span>
             </div>
           </div>
         </v-card>
@@ -166,98 +167,52 @@ export default {
 </script>
 
 <style scoped>
-/* NOTE: The provided styles are inserted here.
- * For production, consider moving them to a global stylesheet or SCSS module
- * to avoid duplication if used across multiple components.
- */
-.futuristic-light-container {
+.page-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #f0f4f8;
-  font-family: "Inter", sans-serif;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
-.realtime-view {
+.themed-card {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+}
+
+.themed-accent-card {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--accent-border) !important;
+  border-radius: 16px !important;
+}
+
+.themed-highlight {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 24px;
   padding: 16px;
-  border: 1px dashed #3b82f644;
+  border: 1px dashed var(--highlight-border);
   border-radius: 16px;
+  background: var(--highlight-bg);
 }
 
-.status-card {
-  border: 1px solid #d1e5ff;
-  background-color: #f7faff !important;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.05);
-}
-
-.data-card {
-  border: 1px solid #e2e8f0;
-  background-color: white !important;
-  border-radius: 16px;
-}
-
-.controls-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.control-btn {
-  border-radius: 16px !important;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0.5px;
-}
-
-.metric-box {
-  background-color: #f7faff;
-  border: 1px solid #e0f2fe;
-  padding: 12px;
+.contact-list {
   border-radius: 12px;
-  margin-bottom: 8px;
+  padding: 4px 0;
 }
 
-.metric-label {
-  font-size: 0.8rem;
-  color: #64748b;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.metric-value {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #1e40af;
-}
-
-.packet-list {
-  background-color: #f7faff;
-  border-radius: 12px;
-  padding: 8px;
-}
-
-.packet-item {
-  border-bottom: 1px solid #e0f2fe;
-  padding: 8px 0;
+.contact-item {
   display: flex;
   align-items: center;
-}
-.packet-item:last-child {
-  border-bottom: none;
-}
-.font-mono {
-  font-family: monospace;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--packet-item-border);
 }
 
-/* NEW: Style for gap in interface controls */
-.gap-3 {
-  gap: 12px;
+.contact-item:last-child {
+  border-bottom: none;
+}
+
+.font-mono {
+  font-family: monospace;
+  color: var(--text-secondary);
 }
 </style>

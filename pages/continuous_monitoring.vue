@@ -1,5 +1,5 @@
 <template>
-  <v-container class="futuristic-light-container" fluid>
+  <v-container class="dark-page-container" fluid>
     <v-snackbar v-model="snackbar" :color="snackbarType" timeout="3000">
       {{ snackbarText }}
       <template v-slot:actions>
@@ -724,7 +724,7 @@ export default {
         : { targets: this.analyzedIps, profile: this.scanProfile };
 
       try {
-        const response = await fetch(`${this.apiUrl}/v1/scan/start`, {
+        const response = await this.$apiFetch(`${this.apiUrl}/v1/scan/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -745,7 +745,7 @@ export default {
 
       this.scanInterval = setInterval(async () => {
         try {
-          const res = await fetch(`${this.apiUrl}/v1/scan/results`);
+          const res = await this.$apiFetch(`${this.apiUrl}/v1/scan/results`);
           const data = await res.json();
 
           if (data.status === "completed") {
@@ -771,10 +771,13 @@ export default {
       this.cnnLoading = true;
       this.cnnError = null;
       try {
-        const response = await fetch(`${this.apiUrl}/v1/analyze_live`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
+        const response = await this.$apiFetch(
+          `${this.apiUrl}/v1/analyze_live`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
         const data = await response.json();
         if (!response.ok)
           throw new Error(data.message || "Failed to analyze live PCAP.");
@@ -800,10 +803,24 @@ export default {
     renderConversationsChart() {
       /* Removed large echarts init for brevity */
     },
-    downloadAnalytics(format) {
+    async downloadAnalytics(format) {
       let url = `${this.apiUrl}/v1/network/export?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}&format=${format}`;
       if (this.exportLimit) url += `&limit=${this.exportLimit}`;
-      window.open(url, "_blank");
+      try {
+        const res = await this.$apiFetch(url);
+        if (!res.ok) throw new Error("Export failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = `network_analytics.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
     },
     getLocalISOString(date) {
       const offset = date.getTimezoneOffset() * 60000;
@@ -827,7 +844,7 @@ export default {
     async fetchStatistics(showLoader = true) {
       if (showLoader) this.loading = true;
       try {
-        const res = await fetch(
+        const res = await this.$apiFetch(
           `${this.apiUrl}/v1/network/statistics?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}&format=json&limit=5000`
         );
         if (!res.ok) throw new Error("Failed to fetch");
@@ -1062,29 +1079,57 @@ export default {
         if (c) c.resize();
       });
     },
-    downloadHeadersPcap() {
-      window.open(
-        `${this.apiUrl}/v1/network/pcap/headers?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}`,
-        "_blank"
-      );
+    async downloadHeadersPcap() {
+      const url = `${this.apiUrl}/v1/network/pcap/headers?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}`;
+      try {
+        const res = await this.$apiFetch(url);
+        if (!res.ok) throw new Error("Download failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = `headers_${this.startTimestamp}.pcap`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
     },
-    downloadFullPcap() {
-      window.open(`${this.apiUrl}/v1/network/pcap/latest/full`, "_blank");
+    async downloadFullPcap() {
+      try {
+        const res = await this.$apiFetch(
+          `${this.apiUrl}/v1/network/pcap/latest/full`
+        );
+        if (!res.ok) throw new Error("Download failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = "latest_full.pcap";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
     },
   },
 };
 </script>
 
 <style scoped>
-.futuristic-light-container {
+.dark-page-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  padding: 16px;
 }
 .status-card {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  background: var(--status-card-bg) !important;
 }
 .connection-card {
-  border: 2px solid rgba(59, 130, 246, 0.5);
+  border: 1px solid var(--connection-border) !important;
 }
 .control-btn {
   border-radius: 12px !important;
@@ -1092,12 +1137,12 @@ export default {
   letter-spacing: 0.5px;
 }
 .waiting-state {
-  background: rgba(248, 250, 252, 0.8);
-  color: #64748b;
-  border: 2px dashed #cbd5e1;
+  background: var(--waiting-bg);
+  color: var(--text-muted);
+  border: 1px dashed var(--waiting-border);
 }
 .waiting-title {
-  color: #1e40af;
+  color: var(--waiting-title);
   font-weight: 700;
 }
 .packet-table :deep(.v-data-table__wrapper) {
@@ -1105,6 +1150,7 @@ export default {
 }
 .blink-text {
   animation: blinker 1.5s linear infinite;
+  color: var(--blink-color);
 }
 @keyframes blinker {
   50% {

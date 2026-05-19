@@ -1,34 +1,40 @@
 <template>
-  <v-container class="pa-4">
-    <div>
-      <h1 class="text-h5 mb-4">Upload PCAP for Full Analysis</h1>
-      <h5 class="text-disabled mb-2 grey--text">
-        The file is saved and fully analyzed in one step (stats, UE, clustering,
-        ML roles).
-      </h5>
+  <v-container class="pa-6" style="max-width: 960px">
+    <div class="d-flex align-center mb-6">
+      <v-icon size="32" color="primary" class="mr-3">mdi-file-upload-outline</v-icon>
+      <div>
+        <h1 class="text-h5 font-weight-bold mb-0">Upload PCAP for Full Analysis</h1>
+        <p class="text-caption mb-0 text-dim">
+          Saved and fully analyzed in one step — stats, UE, clustering, ML roles.
+        </p>
+      </div>
     </div>
 
-    <v-file-input
-      v-model="file"
-      label="Select .pcap file"
-      filled
-      prepend-icon="mdi-file"
-      show-size
-      accept=".pcap"
-      @change="handleFile"
-    ></v-file-input>
+    <v-card class="themed-card rounded-xl pa-5 mb-6">
+      <v-file-input
+        v-model="file"
+        label="Select .pcap file"
+        outlined
+        dense
+        prepend-inner-icon="mdi-file-outline"
+        show-size
+        accept=".pcap"
+        hide-details
+        @change="handleFile"
+      />
+      <v-btn
+        :disabled="!file"
+        :loading="loading"
+        color="primary"
+        class="mt-4"
+        @click="runFullAnalysis"
+      >
+        <v-icon left>mdi-play-circle-outline</v-icon>
+        Analyse
+      </v-btn>
+    </v-card>
 
-    <v-btn
-      :disabled="!file"
-      :loading="loading"
-      color="primary"
-      class="mt-4"
-      @click="runFullAnalysis"
-    >
-      Analyse
-    </v-btn>
-
-    <div v-if="analysis" class="mt-8">
+    <div v-if="analysis">
       <v-alert
         v-if="loadedFromCache"
         type="info"
@@ -39,24 +45,29 @@
         Loaded previous results from this browser. Upload a new file to replace
         them.
       </v-alert>
-      <!-- Packet Stats -->
-      <v-card class="mb-6 pa-4" outlined>
-        <h3>Total Packets: {{ analysis.total_packets }}</h3>
+
+      <v-card class="themed-accent-card rounded-xl pa-5 mb-5">
+        <div class="d-flex align-center">
+          <v-icon color="primary" class="mr-3">mdi-package-variant</v-icon>
+          <span class="text-h6 font-weight-bold">Total Packets: <span class="primary--text">{{ analysis.total_packets }}</span></span>
+        </div>
       </v-card>
 
-      <div class="mt-4">
+      <div class="d-flex flex-wrap btn-gap">
         <v-btn
           color="success"
-          class="mr-3"
           @click="saveRoles('json')"
           :loading="savingJson"
         >
+          <v-icon left>mdi-code-json</v-icon>
           Save Roles as JSON
         </v-btn>
         <v-btn color="success" @click="saveRoles('csv')" :loading="savingCsv">
+          <v-icon left>mdi-table</v-icon>
           Save Roles as CSV
         </v-btn>
-        <v-btn text class="ml-3" @click="clearCachedResults">
+        <v-btn text @click="clearCachedResults">
+          <v-icon left>mdi-trash-can-outline</v-icon>
           Clear cached results
         </v-btn>
       </div>
@@ -158,7 +169,7 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await fetch(`${this.apiBaseUrl}/automated-analysis`, {
+        const resp = await this.$apiFetch(`${this.apiBaseUrl}/automated-analysis`, {
           method: "POST",
           body: form,
         });
@@ -196,7 +207,7 @@ export default {
       const url = `${this.apiBaseUrl}/save_roles?file=${this.filename}&type=${type}`;
 
       try {
-        const resp = await fetch(url);
+        const resp = await this.$apiFetch(url);
         if (!resp.ok) {
           const err = await resp.json();
           throw new Error(err.error || "Save failed");
@@ -226,7 +237,11 @@ export default {
 </script>
 
 <style scoped>
-.v-card {
-  border-radius: 8px;
+.themed-card {
+  border: 1px solid var(--border) !important;
 }
+.themed-accent-card {
+  border: 1px solid var(--accent-border) !important;
+}
+.btn-gap { gap: 12px; }
 </style>

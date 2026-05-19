@@ -1,152 +1,84 @@
 <template>
-  <v-container class="futuristic-light-container">
-    <v-card class="data-card pa-8 mb-6">
-      <h1 class="text-h4 text-md-h3 font-weight-black mb-4 primary--text">
-        Network Traffic Analysis & Clustering
-      </h1>
-      <p class="text-subtitle-1 grey--text text--darken-2 mb-6">
-        Welcome to the cutting-edge front-end interface for the
-        <strong class="primary--text text--darken-1">
-          Network Traffic Analysis and PCAP Generation Service
-        </strong>
-        a powerful toolkit developed by the
-        <strong class="primary--text text--darken-1">
-          University of Thessaly
-        </strong>
-        for deep network forensics and intelligence.
+  <v-container class="page-container">
+    <!-- Hero -->
+    <v-card class="themed-card pa-8 mb-6">
+      <div
+        class="d-flex align-start align-sm-center flex-column flex-sm-row mb-6"
+      >
+        <v-img
+          src="/6g_logo.png"
+          alt="Logo"
+          contain
+          max-width="72"
+          class="mb-4 mb-sm-0 mr-sm-6 flex-grow-0"
+        />
+        <div>
+          <h1 class="text-h4 text-md-h3 font-weight-black primary--text mb-1">
+            Network Analyzer
+          </h1>
+          <p class="text-subtitle-1 text-fade mb-0">
+            5G / 6G Network Traffic Analysis &amp; Intelligence Platform
+          </p>
+        </div>
+      </div>
+
+      <p class="body-1 text-fade mb-4">
+        An open-source research platform developed at the
+        <strong class="primary--text">University of Thessaly</strong> for deep
+        inspection and classification of 5G and 6G network traffic. The system
+        ingests raw PCAP captures or a live
+        <strong class="primary--text">Zeek</strong> telemetry stream, applies
+        unsupervised machine-learning clustering and rule-based role assessment,
+        and delivers interactive dashboards for researchers, security analysts,
+        and network engineers.
       </p>
-      <p class="body-1">
-        Our platform transforms raw network data (PCAP files) into actionable
-        insights, utilizing a sophisticated blend of data science and advanced
-        network protocol analysis.
-      </p>
+
+      <v-btn
+        small
+        outlined
+        color="primary"
+        :href="apiDocsUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <v-icon left small>mdi-book-open-variant</v-icon>
+        Browse API Documentation
+      </v-btn>
     </v-card>
 
-    <v-row class="mb-6">
-      <v-col cols="12">
-        <v-card class="status-card pa-6">
-          <h2 class="text-h5 font-weight-bold mb-4 primary--text">
-            <v-icon color="primary" class="mr-2">mdi-cogs</v-icon>
-            Core Mission: Data to Insight
-          </h2>
-
-          <div class="realtime-view pa-4 mb-4">
-            <v-icon large color="blue darken-2" class="mb-2">
-              mdi-lightbulb-on-outline</v-icon
-            >
-            <p class="font-weight-medium text-body-1 text--primary">
-              Our goal is to provide researchers, security analysts, and network
-              engineers with the tools to efficiently:
-            </p>
-          </div>
-
-          <v-expansion-panels
-            flat
-            multiple
-            class="transparent-expansion-panels mission-panels"
-          >
-            <v-expansion-panel class="mb-2 data-card">
-              <v-expansion-panel-header
-                class="font-weight-medium text-subtitle-1 grey--text text--darken-3"
-              >
-                Deconstruct Network Traffic
-              </v-expansion-panel-header>
-              <v-expansion-panel-content
-                class="pa-4 body-2 grey--text text--darken-1"
-              >
-                Move beyond simple packet counting to understand true network
-                behavior.
-              </v-expansion-panel-content>
-            </v-expansion-panel>
-
-            <v-expansion-panel class="mb-2 data-card">
-              <v-expansion-panel-header
-                class="font-weight-medium text-subtitle-1 grey--text text--darken-3"
-              >
-                Identify Key Entities
-              </v-expansion-panel-header>
-              <v-expansion-panel-content
-                class="pa-4 body-2 grey--text text--darken-1"
-              >
-                Automatically classify and track user equipment (UE) sessions
-                and assign logical roles to IP addresses (e.g., 5G core, UE,
-                Network Functions).
-              </v-expansion-panel-content>
-            </v-expansion-panel>
-
-            <v-expansion-panel class="mb-2 data-card">
-              <v-expansion-panel-header
-                class="font-weight-medium text-subtitle-1 grey--text text--darken-3"
-              >
-                Reveal Hidden Patterns
-              </v-expansion-panel-header>
-              <v-expansion-panel-content
-                class="pa-4 body-2 grey--text text--darken-1"
-              >
-                Employ unsupervised learning (clustering) to group similar
-                network behaviors, making it easy to spot anomalies or emerging
-                trends.
-              </v-expansion-panel-content>
-            </v-expansion-panel>
-
-            <v-expansion-panel class="mb-2 data-card">
-              <v-expansion-panel-header
-                class="font-weight-medium text-subtitle-1 grey--text text--darken-3"
-              >
-                Enable Dynamic Research
-              </v-expansion-panel-header>
-              <v-expansion-panel-content
-                class="pa-4 body-2 grey--text text--darken-1"
-              >
-                Offer the flexibility to generate and analyze custom PCAP files
-                on demand or from live capture streams.
-              </v-expansion-panel-content>
-            </v-expansion-panel>
-          </v-expansion-panels>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <v-card class="data-card pa-8 mb-6">
+    <!-- Core Capabilities -->
+    <v-card class="themed-card pa-6 mb-6">
       <h2 class="text-h5 font-weight-bold mb-4 primary--text">
-        <v-icon color="primary" class="mr-2">mdi-rocket-launch</v-icon>
-        Key Platform Capabilities
+        <v-icon color="primary" class="mr-2">mdi-rocket-launch-outline</v-icon>
+        Core Capabilities
       </h2>
 
-      <v-expansion-panels flat multiple class="transparent-expansion-panels">
+      <v-expansion-panels flat multiple>
         <v-expansion-panel
-          v-for="(capability, i) in capabilities"
+          v-for="(cap, i) in capabilities"
           :key="i"
-          class="mb-2 data-card"
+          class="themed-panel mb-2"
         >
-          <v-expansion-panel-header
-            class="font-weight-medium text-subtitle-1 grey--text text--darken-3"
-          >
+          <v-expansion-panel-header class="font-weight-medium text-subtitle-1">
             <div>
-              <v-icon left color="blue-grey lighten-1">
-                {{ capability.icon }}
-              </v-icon>
-              {{ capability.title }}
+              <v-icon left color="primary" small>{{ cap.icon }}</v-icon>
+              {{ cap.title }}
             </div>
           </v-expansion-panel-header>
-          <v-expansion-panel-content
-            class="pa-4 body-2 grey--text text--darken-1"
-          >
-            <p>{{ capability.description }}</p>
+          <v-expansion-panel-content class="pa-4 body-2 text-fade">
+            <p>{{ cap.description }}</p>
             <v-list
+              v-if="cap.subpoints"
               dense
-              class="transparent-list-nested"
-              v-if="capability.subpoints"
+              style="background: transparent !important"
             >
-              <v-list-item v-for="(sub, j) in capability.subpoints" :key="j">
+              <v-list-item v-for="(s, j) in cap.subpoints" :key="j">
                 <v-list-item-icon class="mr-2">
-                  <v-icon small color="blue-grey lighten-2"
-                    >mdi-circle-small</v-icon
-                  >
+                  <v-icon small color="primary">mdi-circle-small</v-icon>
                 </v-list-item-icon>
                 <v-list-item-content>
                   <v-list-item-title style="text-wrap: pretty" class="body-2">
-                    {{ sub }}
+                    {{ s }}
                   </v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
@@ -156,49 +88,80 @@
       </v-expansion-panels>
     </v-card>
 
-    <v-card class="data-card pa-8 mb-6">
+    <!-- Architecture -->
+    <v-card class="themed-accent-card pa-6 mb-6">
+      <h2 class="text-h5 font-weight-bold mb-4 primary--text">
+        <v-icon color="primary" class="mr-2">mdi-sitemap</v-icon>
+        System Architecture
+      </h2>
+      <p class="body-2 text-fade mb-4">
+        Three tiers communicate over REST and WebSocket. An optional host sensor
+        VM feeds live Zeek flow data and on-demand PCAP snapshots into the
+        monitoring pipeline using a shared internal token.
+      </p>
+      <pre class="arch-diagram text-caption text-fade">
+┌────────────────────────────────────────────────────────────┐
+│              Browser  (Nuxt 2 / Vue 2 SPA)                 │
+│  Analyze · Clustering · Real Time · Monitoring · Admin     │
+└─────────────────────────┬──────────────────────────────────┘
+                          │  REST + WebSocket (Socket.IO)
+┌─────────────────────────▼──────────────────────────────────┐
+│          Flask API  (server/app.py)   :5555                │
+│  JWT auth · SocketIO · Swagger UI (/apidocs, public)       │
+│  PCAP analysis · Clustering · Role pipeline · Zeek ingest  │
+└───────────┬────────────────────────────┬───────────────────┘
+            │ SQLAlchemy ORM             │ psycopg2 bulk insert
+┌───────────▼────────────────────────────▼───────────────────┐
+│         PostgreSQL 14 + TimescaleDB                        │
+│  users · pcap_files · flow_statistics (hypertable)         │
+│  role_snapshots · ue_sessions · cluster_results            │
+└─────────────────────────▲──────────────────────────────────┘
+                          │  X-Internal-Token
+┌─────────────────────────┴──────────────────────────────────┐
+│       Host Sensor VM  (Host Files/)   :5005                │
+│  zeek_agent.py  →  POST /v1/ingest/zeek                    │
+│  start_sensor.sh — tcpdump capture + Nmap async service    │
+└────────────────────────────────────────────────────────────┘
+</pre
+      >
+    </v-card>
+
+    <!-- Tech Stack -->
+    <v-card class="themed-card pa-8 mb-6">
       <h2 class="text-h5 font-weight-bold mb-4 primary--text">
         <v-icon color="primary" class="mr-2">mdi-code-braces</v-icon>
         Technology Stack
       </h2>
-      <p class="body-1 mb-4">
-        This front-end is powered by a robust
-        <strong class="primary--text">Flask API</strong> backend developed in
-        Python by the
-        <strong class="primary--text">University of Thessaly</strong>.
-      </p>
 
-      <v-simple-table class="data-card transparent-table">
+      <v-simple-table class="themed-table rounded-lg">
         <template v-slot:default>
           <thead>
             <tr>
               <th
-                class="text-left text-uppercase font-weight-bold primary--text text--darken-1"
+                class="text-left font-weight-bold primary--text text-uppercase"
+              >
+                Layer
+              </th>
+              <th
+                class="text-left font-weight-bold primary--text text-uppercase"
               >
                 Component
               </th>
               <th
-                class="text-left text-uppercase font-weight-bold primary--text text--darken-1"
+                class="text-left font-weight-bold primary--text text-uppercase"
               >
-                Function
-              </th>
-              <th
-                class="text-left text-uppercase font-weight-bold primary--text text--darken-1"
-              >
-                Technologies Used
+                Technologies
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in techStack" :key="item.component">
+            <tr v-for="item in techStack" :key="item.layer + item.component">
+              <td class="font-weight-medium">{{ item.layer }}</td>
+              <td class="text-fade">{{ item.component }}</td>
               <td>
-                <span class="font-weight-medium">{{ item.component }}</span>
-              </td>
-              <td>{{ item.function }}</td>
-              <td>
-                <span class="font-mono primary--text text--darken-1">
-                  {{ item.technologies }}
-                </span>
+                <span class="font-mono primary--text">{{
+                  item.technologies
+                }}</span>
               </td>
             </tr>
           </tbody>
@@ -206,24 +169,54 @@
       </v-simple-table>
     </v-card>
 
-    <v-card class="status-card pa-8">
+    <!-- API Documentation -->
+    <v-card class="themed-accent-card pa-6 mb-6">
+      <h2 class="text-h5 font-weight-bold mb-4 primary--text">
+        <v-icon color="primary" class="mr-2">mdi-api</v-icon>
+        API Documentation
+      </h2>
+      <p class="body-1 text-fade mb-4">
+        An interactive Swagger UI is served directly by the Flask backend at
+        <code class="primary--text">/apidocs</code>. It documents every endpoint
+        — parameters, request bodies, response schemas, and authentication
+        requirements — and requires no login to browse. Endpoints that require a
+        JWT Bearer token are marked with a lock icon; use the
+        <strong class="primary--text">Authorize</strong>
+        button in the UI to supply your token for live testing.
+      </p>
+      <v-btn
+        outlined
+        color="primary"
+        :href="apiDocsUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <v-icon left>mdi-open-in-new</v-icon>
+        Open Swagger UI
+      </v-btn>
+    </v-card>
+
+    <!-- License -->
+    <v-card class="themed-card pa-8">
       <h2 class="text-h5 font-weight-bold mb-4 primary--text">
         <v-icon color="primary" class="mr-2">mdi-license</v-icon>
-        License and Credits
+        License &amp; Credits
       </h2>
-      <p class="body-1 mb-2">
-        This project is a product of research and development at the
-        <strong class="primary--text">University of Thessaly</strong>.
+      <p class="body-1 text-fade mb-4">
+        Developed by the
+        <strong class="primary--text">University of Thessaly</strong> as part of
+        ongoing research into next-generation mobile network intelligence and
+        traffic analysis.
       </p>
-      <v-list dense class="transparent-list">
+      <v-list dense style="background: transparent !important">
         <v-list-item>
           <v-list-item-icon class="mr-3">
             <v-icon color="primary">mdi-copyright</v-icon>
           </v-list-item-icon>
           <v-list-item-content>
             <v-list-item-title class="body-1">
-              <span class="font-weight-medium">Copyright:</span> (c) 2025 by
-              University of Thessaly.
+              <span class="font-weight-medium">Copyright:</span>
+              &copy; 2025 University of Thessaly
             </v-list-item-title>
           </v-list-item-content>
         </v-list-item>
@@ -233,7 +226,7 @@
           </v-list-item-icon>
           <v-list-item-content>
             <v-list-item-title class="body-1">
-              <span class="font-weight-medium">License:</span> MIT License.
+              <span class="font-weight-medium">License:</span> MIT License
             </v-list-item-title>
           </v-list-item-content>
         </v-list-item>
@@ -244,69 +237,133 @@
 
 <script>
 export default {
-  name: "AboutUs",
+  name: "About",
+
+  computed: {
+    apiDocsUrl() {
+      return (
+        (process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555") +
+        "/apidocs"
+      );
+    },
+  },
+
   data: () => ({
     capabilities: [
       {
         icon: "mdi-file-chart-outline",
-        title: "Advanced PCAP Analysis",
+        title: "PCAP Upload & Analysis",
         description:
-          "Upload any PCAP file and immediately receive a detailed breakdown of its contents:",
+          "Upload any PCAP file and receive a full breakdown within seconds:",
         subpoints: [
-          "Conversation Statistics: Quantify traffic flow between specific IP pairs.",
-          "Protocol Distribution: Visualize the mix of protocols (TCP, UDP, ICMP, etc.) and their prevalence.",
-          "Network Graph Generation: View conversations as a dynamic graph, where nodes are IPs and links represent traffic volume.",
+          "Protocol distribution — visualise TCP, UDP, GTP, SCTP, ICMP and their relative prevalence.",
+          "Conversation statistics — quantify traffic volume between every observed IP pair.",
+          "Interactive network graph — nodes represent IP addresses; edge weight reflects traffic volume and packet count.",
         ],
-      },
-      {
-        icon: "mdi-account-search-outline",
-        title: "Intelligent IP Role Assessment",
-        description:
-          "We use a rule-based algorithm to classify the function of every observed IP address, giving context to your network map. This process helps rapidly differentiate between standard infrastructure (5G core, O-RAN components) and end-user devices.",
-      },
-      {
-        icon: "mdi-cellphone-wireless",
-        title: "User Equipment (UE) Session Tracking",
-        description:
-          "Specifically designed for mobile and telecom network analysis, this module extracts and tracks sessions belonging to individual User Equipment, crucial for identifying device-specific behavior and troubleshooting.",
       },
       {
         icon: "mdi-graph",
         title: "Agglomerative Clustering & Anomaly Detection",
         description:
-          "Our platform uses advanced agglomerative clustering to group IP entities based on their traffic patterns and features.",
+          "Unsupervised hierarchical clustering groups IP endpoints by traffic behaviour:",
         subpoints: [
-          "Behavioral Segmentation: Automatically identify clusters of similar devices or services.",
-          "Modularity-Based Suggestion: We incorporate graph theory principles (Modularity) to suggest the optimal number of clusters (k), maximizing the coherence of the detected groups.",
-          "Anomaly Flagging: Quickly identify outlier IPs that don't fit into established clusters, pointing directly to potential security incidents or misconfigurations.",
+          "Modularity-based automatic k-selection — graph-theoretic modularity scores suggest the optimal number of clusters so you do not have to guess.",
+          "Cluster hierarchy dendrogram — visualise how groups merge at each agglomerative linkage step.",
+          "Anomaly flagging — outlier IPs that deviate significantly from every cluster are highlighted as potential threats or misconfigurations.",
+        ],
+      },
+      {
+        icon: "mdi-account-search-outline",
+        title: "IP Role Assessment",
+        description:
+          "A rule-based classification engine assigns a functional role to every observed IP address — 5G Core NF, O-RAN component, User Equipment, external server, or unknown. The full report is exportable as JSON or CSV for downstream tooling.",
+      },
+      {
+        icon: "mdi-cellphone-wireless",
+        title: "UE Session Tracking",
+        description:
+          "Extracts and correlates User Equipment sessions from 4G/5G control-plane traffic, linking IMSI, GUTI, and assigned IPv4 addresses for per-device behaviour analysis — essential for mobile network forensics.",
+      },
+      {
+        icon: "mdi-monitor-dashboard",
+        title: "Continuous Real-Time Monitoring",
+        description:
+          "A lightweight Zeek agent on the sensor VM streams parsed connection logs to the API server in real time:",
+        subpoints: [
+          "Live flow table — sortable, filterable view of active and recent connections stored in a TimescaleDB hypertable.",
+          "Anomaly alerts — WebSocket-pushed notifications for massive data transfers (> 5 MB), packet floods (> 5 000 pkts), and rejected connections.",
+          "Nmap scan integration — trigger on-demand network scans from the dashboard and retrieve structured results.",
+          "Time-range export — download flow statistics as CSV or JSON for any historical window.",
         ],
       },
       {
         icon: "mdi-cloud-upload-outline",
-        title: "Dynamic PCAP Generation & Streaming",
+        title: "Streaming PCAP Assembly",
         description:
-          "We support experimental and research workflows by allowing:",
-        subpoints: [
-          "PCAP Assembly: Stream Base64-encoded raw packet chunks from an external source (like a live sniffer) and assemble them on the server into a cohesive PCAP file.",
-          "Automated Pipeline (WebSocket): Initiate a long-running packet capture from a specified WebSocket URL for a set duration, then automatically run the full analysis pipeline on the resulting PCAP.",
-        ],
+          "Accepts chunked Base64-encoded packet data from an external source (e.g. a live sniffer or remote capture agent) and assembles it server-side into a coherent PCAP file, enabling fully automated remote capture-and-analyse workflows.",
       },
     ],
+
     techStack: [
       {
-        component: "Data Handling",
-        function: "Packet manipulation and PCAP file processing.",
-        technologies: "Scapy, pandas",
+        layer: "Frontend",
+        component: "SPA framework",
+        technologies: "Nuxt 2, Vue 2, Vuetify 2",
       },
       {
-        component: "Web Server",
-        function: "Core API for processing requests and serving data.",
-        technologies: "Flask, Flask-CORS",
+        layer: "Frontend",
+        component: "Charts & graphs",
+        technologies: "Apache ECharts, vue-echarts",
       },
       {
-        component: "Documentation",
-        function: "Interactive API documentation for developers.",
-        technologies: "Flasgger (Swagger UI)",
+        layer: "Frontend",
+        component: "Real-time client",
+        technologies: "Socket.IO client",
+      },
+      {
+        layer: "Backend",
+        component: "API server",
+        technologies: "Flask, Flask-SocketIO, Flask-JWT-Extended",
+      },
+      {
+        layer: "Backend",
+        component: "API documentation",
+        technologies: "Flasgger (Swagger 2.0 UI)",
+      },
+      {
+        layer: "Backend",
+        component: "Rate limiting",
+        technologies: "Flask-Limiter",
+      },
+      {
+        layer: "Backend",
+        component: "Packet analysis",
+        technologies: "Scapy, PyShark / tshark, pandas",
+      },
+      {
+        layer: "Backend",
+        component: "Clustering & ML",
+        technologies: "scikit-learn, NetworkX, python-louvain",
+      },
+      {
+        layer: "Database",
+        component: "Relational store",
+        technologies: "PostgreSQL 14, SQLAlchemy",
+      },
+      {
+        layer: "Database",
+        component: "Time-series flows",
+        technologies: "TimescaleDB (hypertable on flow_statistics)",
+      },
+      {
+        layer: "Sensor VM",
+        component: "Flow telemetry",
+        technologies: "Zeek IDS, zeek_agent.py",
+      },
+      {
+        layer: "Sensor VM",
+        component: "Packet capture",
+        technologies: "tcpdump, Nmap",
       },
     ],
   }),
@@ -314,132 +371,60 @@ export default {
 </script>
 
 <style scoped>
-.futuristic-light-container {
+.page-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #f0f4f8;
-  font-family: "Inter", sans-serif;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
-.realtime-view {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 24px;
-  padding: 16px;
-  border: 1px dashed #3b82f644;
-  border-radius: 16px;
-}
-
-.status-card {
-  border: 1px solid #d1e5ff;
-  background-color: #f7faff !important;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.05);
-}
-
-.data-card {
-  border: 1px solid #e2e8f0;
-  background-color: white !important;
-  border-radius: 16px;
-}
-
-.controls-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.control-btn {
+.themed-card {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 16px !important;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0.5px;
 }
 
-.metric-box {
-  background-color: #f7faff;
-  border: 1px solid #e0f2fe;
-  padding: 12px;
-  border-radius: 12px;
-  margin-bottom: 8px;
+.themed-accent-card {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--accent-border) !important;
+  border-radius: 16px !important;
 }
 
-.metric-label {
-  font-size: 0.8rem;
-  color: #64748b;
-  font-weight: 500;
-  margin-bottom: 4px;
+.themed-panel {
+  background-color: var(--surface-alt) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  overflow: hidden;
 }
 
-.metric-value {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #1e40af;
+.themed-table {
+  background-color: var(--surface-alt) !important;
+  border: 1px solid var(--border) !important;
+  overflow: hidden;
 }
 
-.packet-list {
-  background-color: #f7faff;
-  border-radius: 12px;
-  padding: 8px;
+.themed-table th {
+  background-color: var(--highlight-bg) !important;
+  border-bottom: 1px solid var(--border) !important;
 }
 
-.packet-item {
-  border-bottom: 1px solid #e0f2fe;
-  padding: 8px 0;
+.themed-table td {
+  border-bottom: 1px solid var(--border) !important;
 }
-.packet-item:last-child {
-  border-bottom: none;
+
+.arch-diagram {
+  display: block;
+  overflow-x: auto;
+  background: var(--highlight-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace;
+  line-height: 1.5;
+  white-space: pre;
 }
+
 .font-mono {
   font-family: monospace;
-}
-
-.primary--text {
-  color: #1e40af !important;
-}
-
-.transparent-list {
-  background-color: transparent !important;
-}
-.transparent-list-nested {
-  background-color: transparent !important;
-  padding-left: 16px !important;
-}
-
-.transparent-expansion-panels .v-expansion-panel {
-  background-color: white !important;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  box-shadow: none;
-  overflow: hidden;
-}
-
-.transparent-expansion-panels .v-expansion-panel-header {
-  padding: 16px;
-  min-height: 56px;
-}
-
-.transparent-expansion-panels .v-expansion-panel-content__wrap {
-  padding: 0 16px 16px 16px;
-}
-
-.transparent-table {
-  background-color: white !important;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.transparent-table th,
-.transparent-table td {
-  border-bottom: 1px solid #f0f4f8 !important;
-}
-
-.transparent-table thead th {
-  background-color: #f7faff !important;
 }
 </style>

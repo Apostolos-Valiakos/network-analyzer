@@ -1,5 +1,5 @@
 <template>
-  <div class="futuristic-light-container">
+  <div class="dark-page-container">
     <v-snackbar v-model="snackbar" :color="snackbarType" timeout="3000">
       {{ snackbarText }}
       <template v-slot:actions>
@@ -393,7 +393,7 @@ export default {
 
           // Only log if session ID exists
           if (this.sessionId) {
-            fetch(`${this.apiUrl}/log-packet`, {
+            this.$apiFetch(`${this.apiUrl}/log-packet`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -403,7 +403,7 @@ export default {
                 protocol: protocol,
                 size: size,
               }),
-            }).catch((err) => console.error("Log error:", err));
+            }).catch(() => {});
           }
         }
       } catch (e) {
@@ -425,7 +425,7 @@ export default {
       this.uploadQueue = [];
 
       try {
-        const res = await fetch(`${this.apiUrl}/save-pcap`, {
+        const res = await this.$apiFetch(`${this.apiUrl}/save-pcap`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -462,7 +462,7 @@ export default {
         retries++;
       }
 
-      const res = await fetch(
+      const res = await this.$apiFetch(
         `${this.apiUrl}/analyze-saved-pcap/${this.filename}`
       );
       const data = await res.json();
@@ -536,14 +536,10 @@ export default {
 </script>
 
 <style scoped>
-.futuristic-light-container {
+.dark-page-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #f0f4f8;
-  font-family: "Inter", sans-serif;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
 .realtime-view {
@@ -552,21 +548,21 @@ export default {
   align-items: center;
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px dashed #3b82f644;
+  border: 1px dashed var(--highlight-border);
   border-radius: 16px;
+  background: var(--highlight-bg);
 }
 
 .status-card {
-  border: 1px solid #d1e5ff;
-  background-color: #f7faff !important;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.05);
+  border: 1px solid var(--accent-border) !important;
+  background-color: var(--surface) !important;
+  border-radius: 16px !important;
 }
 
 .data-card {
-  border: 1px solid #e2e8f0;
-  background-color: white !important;
-  border-radius: 16px;
+  border: 1px solid var(--border) !important;
+  background-color: var(--surface) !important;
+  border-radius: 16px !important;
 }
 
 .controls-section {
@@ -583,8 +579,8 @@ export default {
 }
 
 .metric-box {
-  background-color: #f7faff;
-  border: 1px solid #e0f2fe;
+  background-color: var(--metric-box-bg);
+  border: 1px solid var(--metric-box-border);
   padding: 12px;
   border-radius: 12px;
   margin-bottom: 8px;
@@ -592,7 +588,7 @@ export default {
 
 .metric-label {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 500;
   margin-bottom: 4px;
 }
@@ -600,17 +596,17 @@ export default {
 .metric-value {
   font-size: 1.5rem;
   font-weight: 800;
-  color: #1e40af;
+  color: var(--metric-value);
 }
 
 .packet-list {
-  background-color: #f7faff;
+  background-color: var(--highlight-bg);
   border-radius: 12px;
   padding: 8px;
 }
 
 .packet-item {
-  border-bottom: 1px solid #e0f2fe;
+  border-bottom: 1px solid var(--packet-item-border);
   padding: 8px 0;
 }
 .packet-item:last-child {
@@ -620,7 +616,6 @@ export default {
   font-family: monospace;
 }
 
-/* NEW: Style for gap in interface controls */
 .gap-3 {
   gap: 12px;
 }

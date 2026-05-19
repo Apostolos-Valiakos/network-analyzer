@@ -1,19 +1,29 @@
 <template>
-  <v-container class="pa-4">
-    <h1 class="text-h5 mb-4">Select a .json file to visualize network graph</h1>
+  <v-container class="pa-6" style="max-width: 900px">
+    <div class="d-flex align-center mb-6">
+      <v-icon size="32" color="primary" class="mr-3">mdi-graph-outline</v-icon>
+      <div>
+        <h1 class="text-h5 font-weight-bold mb-0">Network Graph Visualizer</h1>
+        <p class="text-caption mb-0 text-dim">
+          Select a .json file to visualize the network graph
+        </p>
+      </div>
+    </div>
 
-    <!-- File Picker -->
-    <v-file-input
-      v-model="file"
-      label="Select a .json file to vizualise"
-      filled
-      prepend-icon="mdi-file"
-      show-size
-      accept=".json"
-      @change="handleFile"
-    ></v-file-input>
+    <v-card class="themed-card rounded-xl pa-5 mb-6">
+      <v-file-input
+        v-model="file"
+        label="Select a .json file"
+        outlined
+        dense
+        prepend-inner-icon="mdi-file-code-outline"
+        show-size
+        accept=".json"
+        hide-details
+        @change="handleFile"
+      />
+    </v-card>
 
-    <!-- Graph is displayed only after graphData is loaded -->
     <NetworkGraph v-if="graphData" :graphData="graphData" />
   </v-container>
 </template>
@@ -50,3 +60,9 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.themed-card {
+  border: 1px solid var(--border) !important;
+}
+</style>
