@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Analyzer – User Manual / Εγχειρίδιο Χρήστη</title>
+<style>
+  /* ── Page layout ── */
+  @page {
+    size: A4;
+    margin: 25mm 20mm 25mm 20mm;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 11pt;
+    line-height: 1.65;
+    color: #111;
+    background: #fff;
+    max-width: 170mm;
+    margin: 0 auto;
+    padding: 10mm 0;
+  }
+
+  /* ── Typography ── */
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; border-bottom: 1.5pt solid #111; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  h4 { font-size: 11pt; margin: 12pt 0 3pt; font-style: italic; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul, ol { margin: 4pt 0 7pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { font-family: "Courier New", Courier, monospace; font-size: 10pt; background: #f4f4f4; padding: 0 2pt; }
+  pre  { font-family: "Courier New", Courier, monospace; font-size: 9pt; background: #f4f4f4;
+         border: 1pt solid #ccc; padding: 8pt; overflow-x: auto; white-space: pre; line-height: 1.35;
+         margin: 6pt 0 10pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; }
+  th, td { border: 1pt solid #aaa; padding: 4pt 6pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  a  { color: #1a56a8; }
+
+  /* ── Language markers ── */
+  .en { border-left: 3pt solid #1a56a8; padding-left: 8pt; }
+  .el { border-left: 3pt solid #c0392b; padding-left: 8pt; font-style: normal; color: #1a1a1a; }
+  .lang-label {
+    display: inline-block; font-size: 7.5pt; font-weight: bold; letter-spacing: .5pt;
+    border: 1pt solid; border-radius: 2pt; padding: 0 3pt; margin-bottom: 2pt;
+  }
+  .lang-label.en-lbl { color: #1a56a8; border-color: #1a56a8; }
+  .lang-label.el-lbl { color: #c0392b; border-color: #c0392b; }
+
+  /* ── Cover / header ── */
+  .cover { text-align: center; padding: 20pt 0 14pt; border-bottom: 2pt solid #111; margin-bottom: 16pt; }
+  .cover .subtitle { font-size: 13pt; margin: 4pt 0; }
+  .cover .meta { font-size: 10pt; color: #444; margin: 3pt 0; }
+  .cover .version { font-size: 9.5pt; color: #666; }
+
+  /* ── Diagram boxes ── */
+  .diagram-box { border: 1.5pt solid #555; padding: 10pt; margin: 8pt 0 12pt; background: #fafafa; }
+  .diagram-title { font-weight: bold; font-size: 9.5pt; text-align: center;
+                   margin-bottom: 6pt; letter-spacing: .4pt; }
+
+  /* ── Callout boxes ── */
+  .note { border: 1pt solid #1a56a8; background: #eef4ff; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .warn { border: 1pt solid #c0392b; background: #fff0ee; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .tip  { border: 1pt solid #1e8c45; background: #f0fff4; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+
+  /* ── Print helpers ── */
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 15mm; } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ COVER ═══ -->
+<div class="cover">
+  <img src="/6g_logo.png" alt="Network Analyzer Logo" width="72" onerror="this.style.display='none'">
+  <h1>Network Analyzer</h1>
+  <p class="subtitle">5G / 6G Network Traffic Analysis &amp; Intelligence Platform</p>
+  <p class="subtitle" lang="el">Πλατφόρμα Ανάλυσης &amp; Ευφυΐας Κίνησης Δικτύου 5G / 6G</p>
+  <p class="meta"><strong>User Manual / Εγχειρίδιο Χρήστη</strong></p>
+  <p class="meta">University of Thessaly — Πανεπιστήμιο Θεσσαλίας</p>
+  <p class="version">Version 1.0 &nbsp;|&nbsp; 2025 &nbsp;|&nbsp; MIT License</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ TABLE OF CONTENTS ═══ -->
+<h2>Table of Contents / Πίνακας Περιεχομένων</h2>
+<ol>
+  <li><a href="#sec-intro">Introduction / Εισαγωγή</a></li>
+  <li><a href="#sec-arch">System Architecture / Αρχιτεκτονική Συστήματος</a></li>
+  <li><a href="#sec-install">Installation &amp; Start-Up / Εγκατάσταση &amp; Εκκίνηση</a></li>
+  <li><a href="#sec-login">Authentication / Αυθεντικοποίηση</a></li>
+  <li><a href="#sec-analyze">PCAP Upload &amp; Analysis / Μεταφόρτωση &amp; Ανάλυση PCAP</a></li>
+  <li><a href="#sec-cluster">Agglomerative Clustering / Συσταδοποίηση</a></li>
+  <li><a href="#sec-realtime">Real-Time Streaming Analysis / Ανάλυση Ροής Πραγματικού Χρόνου</a></li>
+  <li><a href="#sec-monitor">Continuous Monitoring / Συνεχής Παρακολούθηση</a></li>
+  <li><a href="#sec-api">API Reference / Αναφορά API</a></li>
+  <li><a href="#sec-admin">Administration / Διαχείριση</a></li>
+  <li><a href="#sec-troubleshoot">Troubleshooting / Αντιμετώπιση Προβλημάτων</a></li>
+  <li><a href="#sec-glossary">Glossary / Γλωσσάριο</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════════ 1. INTRO ═══ -->
+<h2 id="sec-intro">1. Introduction / Εισαγωγή</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+Network Analyzer is an open-source research platform developed at the
+<strong>University of Thessaly</strong> for the deep inspection and
+classification of 5G and 6G network traffic. It ingests raw PCAP captures or
+a live Zeek telemetry stream, applies unsupervised machine-learning clustering
+and rule-based role assessment, and delivers interactive dashboards for
+researchers, security analysts, and network engineers.
+</p>
+<p>
+The platform addresses three primary research challenges:
+</p>
+<ol>
+  <li><strong>Traffic visibility</strong> — providing per-flow statistics, protocol
+      distribution, and interactive network graphs from arbitrary PCAP files.</li>
+  <li><strong>Behavioural classification</strong> — automatically grouping IP
+      endpoints by traffic behaviour using agglomerative clustering and assigning
+      5G/6G functional roles (UPF, AMF, gNB, UE, …) using a rule-based engine.</li>
+  <li><strong>Real-time situational awareness</strong> — streaming live Zeek
+      connection logs into a TimescaleDB hypertable and surfacing anomalies via
+      WebSocket-pushed alerts.</li>
+</ol>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Το Network Analyzer είναι μια πλατφόρμα ανοιχτού κώδικα που αναπτύχθηκε στο
+<strong>Πανεπιστήμιο Θεσσαλίας</strong> για τη βαθιά επιθεώρηση και ταξινόμηση
+της κυκλοφορίας δικτύου 5G και 6G. Επεξεργάζεται αρχεία PCAP ή ζωντανή ροή
+τηλεμετρίας Zeek, εφαρμόζει μη επιβλεπόμενη ομαδοποίηση μηχανικής μάθησης
+και αξιολόγηση ρόλων βάσει κανόνων, προσφέροντας διαδραστικά ταμπλό για
+ερευνητές, αναλυτές ασφαλείας και μηχανικούς δικτύων.
+</p>
+<p>Η πλατφόρμα αντιμετωπίζει τρεις κύριες ερευνητικές προκλήσεις:</p>
+<ol>
+  <li><strong>Ορατότητα κυκλοφορίας</strong> — στατιστικά ανά ροή, κατανομή
+      πρωτοκόλλου και διαδραστικά γραφήματα δικτύου.</li>
+  <li><strong>Ταξινόμηση συμπεριφοράς</strong> — αυτόματη ομαδοποίηση IP
+      σημείων με συσταδοποίηση και ανάθεση λειτουργικών ρόλων 5G/6G.</li>
+  <li><strong>Επίγνωση πραγματικού χρόνου</strong> — ζωντανή ροή αρχείων
+      καταγραφής Zeek και ειδοποιήσεις ανωμαλιών μέσω WebSocket.</li>
+</ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ 2. ARCH ═══ -->
+<h2 id="sec-arch">2. System Architecture / Αρχιτεκτονική Συστήματος</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The system is structured in three tiers that communicate over REST and
+WebSocket (Socket.IO). An optional Host Sensor VM feeds live Zeek flow data and
+on-demand PCAP snapshots into the monitoring pipeline using a shared internal
+token.
+</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Το σύστημα δομείται σε τρία επίπεδα που επικοινωνούν μέσω REST και WebSocket
+(Socket.IO). Ένα προαιρετικό εικονικό μηχάνημα αισθητήρα (Host Sensor VM)
+τροφοδοτεί ζωντανά δεδομένα ροής Zeek και στιγμιότυπα PCAP κατ' απαίτηση.
+</p>
+</div>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 1 – Three-Tier Architecture / Σχήμα 1 – Τριεπίπεδη Αρχιτεκτονική</div>
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│           Browser  (Nuxt 2 / Vue 2 SPA)                         │
+│  Analyze · Clustering · Real Time · Monitoring · Admin          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │  REST + WebSocket (Socket.IO)
+                           │  http://&lt;host&gt;:3000  →  :5555
+┌──────────────────────────▼──────────────────────────────────────┐
+│         Flask API  (server/app.py)   port 5555                  │
+│  JWT Auth · SocketIO · Swagger UI (/apidocs, public)            │
+│  PCAP analysis · Clustering · Role pipeline · Zeek ingest       │
+└────────────┬───────────────────────────┬────────────────────────┘
+             │ SQLAlchemy ORM             │ psycopg2 bulk insert
+┌────────────▼───────────────────────────▼────────────────────────┐
+│          PostgreSQL 14 + TimescaleDB                            │
+│  users · pcap_files · flow_statistics (hypertable)              │
+│  role_snapshots · ue_sessions · cluster_results                 │
+└──────────────────────────▲──────────────────────────────────────┘
+                           │  X-Internal-Token
+┌──────────────────────────┴──────────────────────────────────────┐
+│      Host Sensor VM  (Host Files/)   port 5005                  │
+│  zeek_agent.py  →  POST /v1/ingest/zeek                         │
+│  start_sensor.sh — tcpdump capture + Nmap async scans           │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<h3>2.1 Component Summary / Σύνοψη Συνιστωσών</h3>
+<table>
+  <thead>
+    <tr><th>Layer / Επίπεδο</th><th>Component</th><th>Technologies</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Frontend</td><td>SPA framework</td><td>Nuxt 2, Vue 2, Vuetify 2</td></tr>
+    <tr><td>Frontend</td><td>Charts &amp; graphs</td><td>Apache ECharts, vue-echarts</td></tr>
+    <tr><td>Frontend</td><td>Real-time client</td><td>Socket.IO client</td></tr>
+    <tr><td>Backend</td><td>API server</td><td>Flask, Flask-SocketIO, Flask-JWT-Extended</td></tr>
+    <tr><td>Backend</td><td>Rate limiting</td><td>Flask-Limiter</td></tr>
+    <tr><td>Backend</td><td>Packet analysis</td><td>Scapy, PyShark / tshark, pandas</td></tr>
+    <tr><td>Backend</td><td>Clustering &amp; ML</td><td>scikit-learn, NetworkX, python-louvain</td></tr>
+    <tr><td>Database</td><td>Relational store</td><td>PostgreSQL 14, SQLAlchemy</td></tr>
+    <tr><td>Database</td><td>Time-series flows</td><td>TimescaleDB hypertable</td></tr>
+    <tr><td>Sensor VM</td><td>Flow telemetry</td><td>Zeek IDS, zeek_agent.py</td></tr>
+    <tr><td>Sensor VM</td><td>Packet capture</td><td>tcpdump, Nmap</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════ 3. INSTALL ═══ -->
+<h2 id="sec-install">3. Installation &amp; Start-Up / Εγκατάσταση &amp; Εκκίνηση</h2>
+
+<h3>3.1 Prerequisites / Προαπαιτούμενα</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Before running the platform, ensure the following are installed on the server
+host:</p>
+<ul>
+  <li><strong>Python 3.11+</strong> — backend runtime</li>
+  <li><strong>Node.js 18+ and npm</strong> — frontend build toolchain</li>
+  <li><strong>PostgreSQL 14</strong> with the <strong>TimescaleDB</strong> extension enabled</li>
+  <li><strong>tshark / Wireshark</strong> (for PyShark-based PCAP decoding)</li>
+  <li><strong>Zeek IDS</strong> (Sensor VM only — for live telemetry)</li>
+  <li><strong>Nmap</strong> (Sensor VM only — for on-demand network scans)</li>
+</ul>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Πριν εκτελέσετε την πλατφόρμα βεβαιωθείτε ότι τα παρακάτω είναι
+εγκατεστημένα στον κεντρικό εξυπηρετητή:</p>
+<ul>
+  <li><strong>Python 3.11+</strong> — χρόνος εκτέλεσης backend</li>
+  <li><strong>Node.js 18+ και npm</strong> — αλυσίδα εργαλείων frontend</li>
+  <li><strong>PostgreSQL 14</strong> με ενεργοποιημένη επέκταση <strong>TimescaleDB</strong></li>
+  <li><strong>tshark / Wireshark</strong> για αποκωδικοποίηση PCAP</li>
+  <li><strong>Zeek IDS</strong> (μόνο Sensor VM)</li>
+  <li><strong>Nmap</strong> (μόνο Sensor VM)</li>
+</ul>
+</div>
+
+<h3>3.2 Environment Configuration / Διαμόρφωση Περιβάλλοντος</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Copy <code>.env.example</code> to <code>.env</code> in the project root and
+fill in all required values. The backend reads this file at startup via
+<code>python-dotenv</code>. Never commit a populated <code>.env</code> to
+version control.</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Αντιγράψτε το <code>.env.example</code> σε <code>.env</code> στη ρίζα του
+έργου και συμπληρώστε όλες τις απαιτούμενες τιμές. Μην υποβάλετε ποτέ
+συμπληρωμένο <code>.env</code> στο σύστημα ελέγχου εκδόσεων.</p>
+</div>
+
+<pre>
+# .env (example values — replace before use)
+DATABASE_URL=postgresql://user:password@localhost:5432/network_analyzer
+JWT_SECRET_KEY=change_me_to_a_long_random_string
+INTERNAL_TOKEN=change_me_internal_token
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+VUE_APP_API_BASE_URL=http://127.0.0.1:5555
+</pre>
+
+<h3>3.3 Database Initialisation / Αρχικοποίηση Βάσης Δεδομένων</h3>
+<pre>
+# Create the database and enable TimescaleDB
+psql -U postgres -c "CREATE DATABASE network_analyzer;"
+psql -U postgres -d network_analyzer -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+
+# Apply the ORM schema (run from the server/ directory)
+cd server
+python -c "from models import db; from app import app; app.app_context().push(); db.create_all()"
+</pre>
+
+<h3>3.4 Starting the Backend / Εκκίνηση Backend</h3>
+<pre>
+# From the project root
+cd server
+pip install -r requirements.txt
+python app.py
+# Server listens on http://0.0.0.0:5555
+</pre>
+
+<h3>3.5 Starting the Frontend / Εκκίνηση Frontend</h3>
+<pre>
+# From the project root
+npm install
+npm run dev       # development — hot-reload on http://localhost:3000
+npm run build     # production build
+npm run start     # production server
+</pre>
+
+<div class="tip">
+<strong>Tip / Συμβουλή:</strong> For a quick local setup, start the backend
+first and then the frontend. The Nuxt dev server proxies API calls to
+<code>http://127.0.0.1:5555</code> as configured in <code>nuxt.config.js</code>.
+<br><br>
+Για γρήγορη τοπική εγκατάσταση, ξεκινήστε πρώτα το backend και έπειτα το
+frontend. Ο Nuxt dev server μεταβιβάζει κλήσεις API στο
+<code>http://127.0.0.1:5555</code> όπως ορίζεται στο <code>nuxt.config.js</code>.
+</div>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════════ 4. LOGIN ═══ -->
+<h2 id="sec-login">4. Authentication / Αυθεντικοποίηση</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+All pages except the public Swagger UI (<code>/apidocs</code>) require an
+authenticated session. The application uses JSON Web Tokens (JWT) with an
+8-hour expiry. When the token expires the user is redirected to the login page
+automatically.
+</p>
+<h4>4.1 Logging In / Σύνδεση</h4>
+<ol>
+  <li>Navigate to <code>http://&lt;host&gt;:3000/login</code>.</li>
+  <li>Enter your <strong>Username</strong> and <strong>Password</strong> and
+      press <strong>Sign In</strong> or hit Enter.</li>
+  <li>On success, the JWT is stored in the browser and you are redirected to
+      the home dashboard.</li>
+  <li>The header displays your username and a <strong>Logout</strong> button
+      that clears the token immediately.</li>
+</ol>
+<p>If you see an <em>"Invalid credentials"</em> error, verify your username
+and password. Contact your system administrator for account creation or
+password resets — there is no self-service registration.</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Όλες οι σελίδες εκτός από το δημόσιο Swagger UI (<code>/apidocs</code>)
+απαιτούν πιστοποιημένη σύνδεση. Η εφαρμογή χρησιμοποιεί JWT με διάρκεια 8
+ωρών. Όταν λήξει το token, ο χρήστης ανακατευθύνεται αυτόματα στη σελίδα
+σύνδεσης.
+</p>
+<ol>
+  <li>Μεταβείτε στη διεύθυνση <code>http://&lt;host&gt;:3000/login</code>.</li>
+  <li>Εισαγάγετε το <strong>Όνομα χρήστη</strong> και τον <strong>Κωδικό
+      πρόσβασης</strong> και πατήστε <strong>Sign In</strong>.</li>
+  <li>Σε επιτυχία, το JWT αποθηκεύεται στον περιηγητή και ανακατευθύνεστε
+      στο κεντρικό ταμπλό.</li>
+  <li>Η κεφαλίδα εμφανίζει το όνομά σας και κουμπί <strong>Logout</strong>
+      που διαγράφει αμέσως το token.</li>
+</ol>
+<p>Εάν εμφανιστεί σφάλμα <em>"Invalid credentials"</em>, επαληθεύστε τα
+διαπιστευτήριά σας. Επικοινωνήστε με τον διαχειριστή για δημιουργία λογαριασμού
+ή επαναφορά κωδικού.</p>
+</div>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 2 – Login Flow / Σχήμα 2 – Ροή Σύνδεσης</div>
+<pre>
+  Browser                       Flask API
+     │                              │
+     │  POST /auth/login            │
+     │  { username, password }      │
+     │─────────────────────────────►│
+     │                              │ bcrypt verify
+     │  200 { access_token }        │
+     │◄─────────────────────────────│
+     │                              │
+     │  Store token in Vuex/cookie  │
+     │                              │
+     │  GET /some-protected-route   │
+     │  Authorization: Bearer &lt;tok&gt; │
+     │─────────────────────────────►│
+     │                              │ JWT verify (8 h TTL)
+     │  200 { data }                │
+     │◄─────────────────────────────│
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═════════════════════════════════════════════════════ 5. ANALYZE ═══ -->
+<h2 id="sec-analyze">5. PCAP Upload &amp; Analysis / Μεταφόρτωση &amp; Ανάλυση PCAP</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The <strong>Analyze</strong> page (<code>/analyze</code>) provides a one-step
+workflow: upload a <code>.pcap</code> file and receive a comprehensive analysis
+report — packet statistics, protocol distribution, conversation breakdown,
+interactive network graph, UE session extraction, and IP role assessment —
+all in a single API call.
+</p>
+
+<h4>Step-by-step / Βήμα προς βήμα</h4>
+<ol>
+  <li>Click the file-input field labelled <em>"Select .pcap file"</em> and
+      choose a valid PCAP file from your local filesystem.</li>
+  <li>The file size is shown next to the filename for confirmation.</li>
+  <li>Click <strong>Analyse</strong>. A progress indicator appears while the
+      backend processes the capture.</li>
+  <li>Once complete, the <em>Total Packets</em> summary card appears along
+      with all analysis sections (see below).</li>
+  <li>Use <strong>Save Roles as JSON</strong> or <strong>Save Roles as CSV</strong>
+      to export the role-assessment report for downstream tooling.</li>
+  <li><em>Clear cached results</em> removes the browser-stored previous
+      results so a fresh upload starts from scratch.</li>
+</ol>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Η σελίδα <strong>Analyze</strong> (<code>/analyze</code>) παρέχει ροή εργασίας
+ενός βήματος: μεταφορτώστε ένα αρχείο <code>.pcap</code> και λάβετε αναφορά
+ανάλυσης — στατιστικά πακέτων, κατανομή πρωτοκόλλου, ανάλυση συνομιλιών,
+διαδραστικό γράφημα δικτύου, εξαγωγή περιόδων UE και αξιολόγηση ρόλων IP.
+</p>
+<ol>
+  <li>Κάντε κλικ στο πεδίο εισαγωγής αρχείου <em>"Select .pcap file"</em>
+      και επιλέξτε ένα έγκυρο αρχείο PCAP.</li>
+  <li>Το μέγεθος του αρχείου εμφανίζεται δίπλα στο όνομά του.</li>
+  <li>Κάντε κλικ στο <strong>Analyse</strong>. Εμφανίζεται δείκτης προόδου.</li>
+  <li>Μετά την ολοκλήρωση εμφανίζεται κάρτα σύνοψης <em>Total Packets</em>
+      και όλες οι ενότητες ανάλυσης.</li>
+  <li>Εξαγωγή αναφοράς ρόλων με <strong>Save Roles as JSON / CSV</strong>.</li>
+  <li><em>Clear cached results</em> διαγράφει προηγούμενα αποτελέσματα από τον
+      περιηγητή.</li>
+</ol>
+</div>
+
+<h3>5.1 Analysis Sections / Ενότητες Ανάλυσης</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Section</th>
+      <th>Description (EN)</th>
+      <th>Περιγραφή (ΕΛ)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Total Packets</strong></td>
+      <td>Total count of captured packets in the file.</td>
+      <td>Συνολικός αριθμός πακέτων στο αρχείο.</td>
+    </tr>
+    <tr>
+      <td><strong>Protocol Distribution</strong></td>
+      <td>Pie/bar chart showing relative prevalence of TCP, UDP, GTP, SCTP, ICMP, and other protocols.</td>
+      <td>Γράφημα με κατανομή TCP, UDP, GTP, SCTP, ICMP κ.ά.</td>
+    </tr>
+    <tr>
+      <td><strong>Conversation Statistics</strong></td>
+      <td>Per IP-pair traffic volume, packet count, byte count.</td>
+      <td>Στατιστικά κυκλοφορίας ανά ζεύγος IP.</td>
+    </tr>
+    <tr>
+      <td><strong>Network Graph</strong></td>
+      <td>Interactive force-directed graph; nodes = IP addresses, edge weight = traffic volume.</td>
+      <td>Διαδραστικό γράφημα δικτύου· κόμβοι = IP, βάρος ακμής = κυκλοφορία.</td>
+    </tr>
+    <tr>
+      <td><strong>IP Role Assessment</strong></td>
+      <td>Rule-based classification into 5G NF, O-RAN component, UE, external server, or unknown.</td>
+      <td>Ταξινόμηση βάσει κανόνων σε 5G NF, O-RAN, UE, εξωτερικό διακομιστή ή άγνωστο.</td>
+    </tr>
+    <tr>
+      <td><strong>UE Sessions</strong></td>
+      <td>Extracted 4G/5G UE sessions — IMSI, GUTI, assigned IPv4, timestamps.</td>
+      <td>Εξαγωγή περιόδων UE 4G/5G — IMSI, GUTI, IPv4, χρονικές σφραγίδες.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+<strong>Note / Σημείωση:</strong> Only <code>.pcap</code> files are accepted.
+PCAPNG files must be converted first using <code>tshark -F pcap -r input.pcapng
+-w output.pcap</code>.
+<br><br>
+Γίνονται αποδεκτά μόνο αρχεία <code>.pcap</code>. Τα PCAPNG πρέπει να
+μετατραπούν πρώτα με το παραπάνω εντολή tshark.
+</div>
+
+<div class="page-break"></div>
+
+<!-- ════════════════════════════════════════════════════ 6. CLUSTER ═══ -->
+<h2 id="sec-cluster">6. Agglomerative Clustering / Συσταδοποίηση</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The <strong>Clustering</strong> page (<code>/clustering</code>) exposes an
+advanced three-step workflow for applying hierarchical agglomerative clustering
+to a PCAP that has already been uploaded and processed by the backend.
+</p>
+<p>
+Clustering groups IP endpoints by their traffic behaviour without requiring
+labelled training data (unsupervised learning). The platform uses
+<strong>graph modularity</strong> to automatically suggest the optimal number
+of clusters, so analysts do not need to guess.
+</p>
+
+<h4>Step 1 — Clustering</h4>
+<p>
+The stepper opens on the <em>Clustering</em> panel. The system has already
+computed a suggested cluster count based on the modularity score of the traffic
+graph. You may accept this suggestion or manually adjust the <em>Number of
+Clusters</em> slider. The dendrogram visualises how groups merge at each
+agglomerative linkage step; outlier IPs are flagged as anomalies.
+</p>
+
+<h4>Step 2 — Profiling</h4>
+<p>
+Select a cluster from the list to profile its member IPs. The profiling engine
+correlates port usage, connection patterns, and data volumes to assign each IP
+a probable 5G/6G functional role. Click <strong>Start Analysis</strong> with
+the desired cluster selected.
+</p>
+
+<h4>Step 3 — Results</h4>
+<p>
+The final results panel shows the complete role assessment for all clustered
+IPs. Download the PCAP for this session or export the role report as
+<code>JSON</code> or <code>CSV</code>.
+</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Η σελίδα <strong>Clustering</strong> (<code>/clustering</code>) παρέχει τριβήματη
+ροή εργασίας για ιεραρχική συσταδοποίηση σε PCAP που έχει ήδη μεταφορτωθεί.
+</p>
+<p>
+Η συσταδοποίηση ομαδοποιεί τα σημεία IP βάσει της κυκλοφοριακής τους
+συμπεριφοράς χωρίς ετικέτες εκπαίδευσης (μη επιβλεπόμενη μάθηση). Η πλατφόρμα
+χρησιμοποιεί <strong>διαμοντελικότητα γράφου</strong> για αυτόματη πρόταση του
+βέλτιστου αριθμού συστάδων.
+</p>
+
+<h4>Βήμα 1 — Συσταδοποίηση</h4>
+<p>
+Ο οδηγός ανοίγει στο πάνελ Clustering. Μπορείτε να αποδεχτείτε την πρόταση
+αριθμού συστάδων ή να ρυθμίσετε χειροκίνητα τον αριθμό. Το δενδρόγραμμα
+απεικονίζει τη συγχώνευση ομάδων· οι εκτοπισμένες IP σημειώνονται ως ανωμαλίες.
+</p>
+
+<h4>Βήμα 2 — Αξιολόγηση</h4>
+<p>
+Επιλέξτε συστάδα για αξιολόγηση. Ο κινητήρας συνδυάζει χρήση θύρας, μοτίβα
+σύνδεσης και όγκο δεδομένων για ανάθεση πιθανού ρόλου 5G/6G σε κάθε IP.
+</p>
+
+<h4>Βήμα 3 — Αποτελέσματα</h4>
+<p>
+Το τελικό πάνελ εμφανίζει πλήρη αξιολόγηση ρόλων. Εξαγωγή σε JSON ή CSV.
+</p>
+</div>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 3 – Clustering Workflow / Σχήμα 3 – Ροή Εργασίας Συσταδοποίησης</div>
+<pre>
+  ┌──────────────────────────────────────────────────────────┐
+  │                    CLUSTERING PAGE                       │
+  │                                                          │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 1: Clustering                             │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  Suggested clusters (modularity): 4             │    │
+  │  │  [Adjust slider] ──●────────────── [1 … 20]     │    │
+  │  │                                                 │    │
+  │  │  [Dendrogram chart]   [Anomaly list]            │    │
+  │  │                              ↓ NEXT             │    │
+  │  └─────────────────────────────────────────────────┘    │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 2: Profiling                              │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  Select cluster ▾  [Cluster A  /  Cluster B]   │    │
+  │  │  [Start Analysis]                               │    │
+  │  │                              ↓ NEXT             │    │
+  │  └─────────────────────────────────────────────────┘    │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 3: Results                                │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  IP Role table  [Download PCAP] [Save JSON/CSV] │    │
+  │  └─────────────────────────────────────────────────┘    │
+  └──────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════ 7. REAL-TIME ═══ -->
+<h2 id="sec-realtime">7. Real-Time Streaming Analysis / Ανάλυση Ροής Πραγματικού Χρόνου</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The <strong>Real Time</strong> page (<code>/realTime</code>) enables live
+packet capture from a remote WebSocket source. This is designed for scenarios
+where a network tap or sniffer streams raw packet data in Base64-encoded chunks
+to the platform, which reassembles them server-side into a coherent PCAP file.
+</p>
+
+<h4>Workflow</h4>
+<ol>
+  <li>Enter the <strong>WebSocket URL</strong> of the remote capture agent in
+      the text field (e.g. <code>ws://192.168.1.10:8080</code>).</li>
+  <li>Click <strong>Connect</strong>. The status indicator turns green and
+      shows "Connected".</li>
+  <li>Use the <em>Capture Controls</em> panel:
+    <ul>
+      <li>Click <strong>Get Interfaces</strong> to retrieve available network
+          interfaces from the remote agent.</li>
+      <li>Select an interface from the dropdown.</li>
+      <li>Click <strong>Start Capture</strong> to begin recording.</li>
+    </ul>
+  </li>
+  <li>When sufficient data is collected, click <strong>Generate PCAP</strong>
+      (button is active only while capturing). The backend finalises the file
+      and a download link appears.</li>
+  <li>Optionally send the assembled PCAP directly into the analysis pipeline
+      from this page.</li>
+</ol>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Η σελίδα <strong>Real Time</strong> (<code>/realTime</code>) επιτρέπει ζωντανή
+λήψη πακέτων από απομακρυσμένη πηγή WebSocket. Ο διακομιστής λαμβάνει τμήματα
+δεδομένων κωδικοποιημένα σε Base64 και τα συναρμολογεί σε αρχείο PCAP.
+</p>
+<ol>
+  <li>Εισαγάγετε τη <strong>διεύθυνση WebSocket</strong> του απομακρυσμένου
+      πράκτορα σύλληψης (π.χ. <code>ws://192.168.1.10:8080</code>).</li>
+  <li>Κάντε κλικ στο <strong>Connect</strong>. Ο δείκτης κατάστασης γίνεται
+      πράσινος.</li>
+  <li>Επιλέξτε διεπαφή δικτύου και κάντε κλικ στο <strong>Start Capture</strong>.</li>
+  <li>Όταν συγκεντρωθούν αρκετά δεδομένα, κάντε κλικ στο <strong>Generate
+      PCAP</strong>. Εμφανίζεται σύνδεσμος λήψης.</li>
+</ol>
+</div>
+
+<div class="warn">
+<strong>Warning / Προειδοποίηση:</strong> The WebSocket source must be
+reachable from the browser (not just from the Flask server) for the direct
+browser connection mode. Firewall rules and NAT may need to be adjusted.
+<br><br>
+Η πηγή WebSocket πρέπει να είναι προσβάσιμη από τον περιηγητή. Ρυθμίστε
+αναλόγως τα τείχη προστασίας και NAT.
+</div>
+
+<!-- ═══════════════════════════════════════════════════ 8. MONITOR ═══ -->
+<h2 id="sec-monitor">8. Continuous Monitoring / Συνεχής Παρακολούθηση</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The <strong>Continuous Monitoring</strong> dashboard (<code>/continuous_monitoring</code>)
+provides a live view of network flows stored in the TimescaleDB hypertable
+(<code>flow_statistics</code>). Data arrives from the Host Sensor VM via the
+Zeek agent and the <code>POST /v1/ingest/zeek</code> endpoint.
+</p>
+
+<h4>8.1 Timeframe Selection</h4>
+<p>
+Choose a start and end datetime to query historical flows, or enable
+<strong>Live Mode</strong> (toggle) to continuously refresh the data at a
+fixed interval. Click <strong>Apply</strong> to fetch.
+</p>
+
+<h4>8.2 Flow Statistics Table</h4>
+<p>
+A sortable, filterable table shows all recorded connections: source IP, destination
+IP, source/destination ports, protocol, bytes sent/received, packet count, and
+timestamp. Click any column header to sort ascending/descending.
+</p>
+
+<h4>8.3 Anomaly Alerts</h4>
+<p>
+The backend evaluates each ingested batch of flows and pushes WebSocket alerts
+to all connected clients when it detects:
+</p>
+<ul>
+  <li>Massive data transfers (&gt; 5 MB in a single flow)</li>
+  <li>Packet floods (&gt; 5 000 packets in a single flow)</li>
+  <li>Rejected connections (TCP RST / ICMP unreachable)</li>
+</ul>
+<p>Alerts appear as coloured snackbar notifications in the browser and are also
+logged server-side.</p>
+
+<h4>8.4 Nmap Scan Integration</h4>
+<p>
+Click <strong>Trigger Nmap Scan</strong> to instruct the Sensor VM to run an
+on-demand Nmap scan of the monitored subnet. Results are returned as a
+structured JSON object and displayed in the dashboard.
+</p>
+
+<h4>8.5 Export</h4>
+<p>
+Use the <strong>Download CSV / JSON</strong> buttons to export the currently
+displayed flow window for offline analysis.
+</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Το ταμπλό <strong>Continuous Monitoring</strong> (<code>/continuous_monitoring</code>)
+παρέχει ζωντανή θέαση ροών που αποθηκεύονται στο hypertable TimescaleDB.
+Τα δεδομένα φτάνουν από τον Sensor VM μέσω του πράκτορα Zeek.
+</p>
+<ul>
+  <li><strong>Επιλογή χρονοπλαισίου</strong> — επιλέξτε εύρος ημερομηνιών ή
+      ενεργοποιήστε τη <em>Ζωντανή Λειτουργία</em>.</li>
+  <li><strong>Πίνακας ροών</strong> — ταξινομήσιμος, με φίλτρα, για όλες τις
+      ηχογραφημένες συνδέσεις.</li>
+  <li><strong>Ειδοποιήσεις ανωμαλιών</strong> — μεταδίδονται μέσω WebSocket
+      όταν ανιχνευτούν μαζικές μεταφορές, πλημμύρες πακέτων ή απορρίψεις.</li>
+  <li><strong>Σάρωση Nmap</strong> — εκτελέστε σάρωση on-demand από τον Sensor VM.</li>
+  <li><strong>Εξαγωγή</strong> — λήψη CSV ή JSON για εκτός σύνδεσης ανάλυση.</li>
+</ul>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════ 9. API ═══ -->
+<h2 id="sec-api">9. API Reference / Αναφορά API</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+An interactive Swagger UI is served by the Flask backend at
+<code>http://&lt;host&gt;:5555/apidocs</code>. It documents every endpoint with
+parameters, request bodies, response schemas, and authentication requirements.
+No login is required to browse the documentation; endpoints that require a JWT
+token are marked with a lock icon. Use the <strong>Authorize</strong> button in
+the UI to supply your token for live interactive testing.
+</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Διαδραστικό Swagger UI σερβίρεται στη διεύθυνση
+<code>http://&lt;host&gt;:5555/apidocs</code> χωρίς ανάγκη σύνδεσης. Τα endpoints
+που απαιτούν JWT φέρουν εικονίδιο κλειδαριάς. Χρησιμοποιήστε το κουμπί
+<strong>Authorize</strong> για ζωντανή δοκιμή.
+</p>
+</div>
+
+<h3>9.1 Endpoint Summary / Σύνοψη Endpoints</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Method</th><th>Path</th><th>Auth</th><th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>POST</td><td>/auth/login</td><td>—</td><td>Obtain JWT access token</td></tr>
+    <tr><td>POST</td><td>/auth/register</td><td>Admin JWT</td><td>Create new user account</td></tr>
+    <tr><td>POST</td><td>/upload</td><td>JWT</td><td>Upload PCAP file (multipart/form-data)</td></tr>
+    <tr><td>GET</td><td>/pcap/&lt;id&gt;/analysis</td><td>JWT</td><td>Retrieve full analysis for a PCAP</td></tr>
+    <tr><td>POST</td><td>/analyze</td><td>JWT</td><td>Upload &amp; run full analysis in one call</td></tr>
+    <tr><td>POST</td><td>/clustering/run</td><td>JWT</td><td>Run agglomerative clustering on a PCAP</td></tr>
+    <tr><td>GET</td><td>/clustering/result/&lt;filename&gt;</td><td>JWT</td><td>Download clustering output file</td></tr>
+    <tr><td>POST</td><td>/roles/save</td><td>JWT</td><td>Persist role assessment to database</td></tr>
+    <tr><td>POST</td><td>/streaming/start</td><td>JWT</td><td>Start WebSocket capture pipeline</td></tr>
+    <tr><td>POST</td><td>/pcap/chunk</td><td>JWT</td><td>Submit a Base64 chunk for PCAP assembly</td></tr>
+    <tr><td>POST</td><td>/v1/ingest/zeek</td><td>X-Internal-Token</td><td>Ingest Zeek flow batch from Sensor VM</td></tr>
+    <tr><td>GET</td><td>/v1/flows</td><td>JWT</td><td>Query flow_statistics hypertable</td></tr>
+    <tr><td>GET</td><td>/v1/alerts</td><td>JWT</td><td>Retrieve anomaly alerts</td></tr>
+    <tr><td>POST</td><td>/v1/scan/start</td><td>JWT</td><td>Trigger Nmap scan on Sensor VM</td></tr>
+    <tr><td>GET</td><td>/v1/scan/results</td><td>JWT</td><td>Retrieve latest Nmap scan results</td></tr>
+    <tr><td>GET</td><td>/apidocs</td><td>—</td><td>Swagger UI (public)</td></tr>
+  </tbody>
+</table>
+
+<h3>9.2 Authentication Header / Κεφαλίδα Αυθεντικοποίησης</h3>
+<pre>
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+</pre>
+
+<h3>9.3 Rate Limiting / Περιορισμός Ρυθμού</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Flask-Limiter enforces per-IP rate limits to protect the server from abuse.
+Exceeding the limit returns HTTP <code>429 Too Many Requests</code>. The default
+limits are configured in the server environment; consult the administrator for
+current thresholds.</p>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Το Flask-Limiter εφαρμόζει ανά-IP όρια ρυθμού. Υπέρβαση επιστρέφει HTTP
+<code>429 Too Many Requests</code>. Επικοινωνήστε με τον διαχειριστή για τα
+τρέχοντα όρια.</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════════ 10. ADMIN ═══ -->
+<h2 id="sec-admin">10. Administration / Διαχείριση</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>
+The <strong>Admin</strong> panel (<code>/admin</code>) is accessible only to
+users with the <code>admin</code> role. It provides user management and
+system monitoring capabilities.
+</p>
+
+<h4>User Management</h4>
+<ul>
+  <li>Create new user accounts by supplying a username, password, and role.</li>
+  <li>Deactivate or delete existing accounts.</li>
+  <li>Passwords are stored as bcrypt hashes — they are never stored in plain text.</li>
+</ul>
+
+<h4>System Overview</h4>
+<ul>
+  <li>View all uploaded PCAP files, their analysis status, and timestamps.</li>
+  <li>View stored role snapshots and cluster results.</li>
+  <li>Purge old files or database records as needed for storage management.</li>
+</ul>
+</div>
+
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>
+Το πάνελ <strong>Admin</strong> (<code>/admin</code>) είναι προσβάσιμο μόνο
+σε χρήστες με ρόλο <code>admin</code>.
+</p>
+<ul>
+  <li>Δημιουργία νέων λογαριασμών χρηστών με όνομα, κωδικό και ρόλο.</li>
+  <li>Απενεργοποίηση ή διαγραφή υφιστάμενων λογαριασμών.</li>
+  <li>Οι κωδικοί αποθηκεύονται ως bcrypt hashes — ποτέ σε απλό κείμενο.</li>
+  <li>Επισκόπηση αναρτημένων PCAP, ρόλων, συστάδων και εκκαθάριση εγγραφών.</li>
+</ul>
+</div>
+
+<div class="warn">
+<strong>Security Note / Σημείωση Ασφαλείας:</strong> The
+<code>X-Internal-Token</code> header used by the Sensor VM must be kept secret
+and rotated regularly. Store it only in the <code>.env</code> file — never
+hardcode it in source code or commit it to version control.
+<br><br>
+Το token εσωτερικής επικοινωνίας <code>X-Internal-Token</code> πρέπει να
+παραμένει μυστικό και να ανανεώνεται τακτικά. Αποθηκεύστε το μόνο στο
+<code>.env</code>.
+</div>
+
+<!-- ══════════════════════════════════════════════ 11. TROUBLESHOOT ═══ -->
+<h2 id="sec-troubleshoot">11. Troubleshooting / Αντιμετώπιση Προβλημάτων</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Symptom / Σύμπτωμα</th>
+      <th>Likely Cause / Πιθανή Αιτία</th>
+      <th>Fix / Επίλυση</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Login returns "Invalid credentials"</td>
+      <td>Wrong username/password or account disabled</td>
+      <td>Verify credentials; ask admin to reset or re-enable account</td>
+    </tr>
+    <tr>
+      <td>Upload fails with 413</td>
+      <td>PCAP file exceeds server max upload size</td>
+      <td>Increase <code>MAX_CONTENT_LENGTH</code> in <code>app.py</code> or split the PCAP</td>
+    </tr>
+    <tr>
+      <td>Analysis hangs indefinitely</td>
+      <td>tshark not installed or not in PATH</td>
+      <td>Install Wireshark/tshark and verify with <code>tshark --version</code></td>
+    </tr>
+    <tr>
+      <td>Database connection error at startup</td>
+      <td><code>DATABASE_URL</code> not set or PostgreSQL not running</td>
+      <td>Check <code>.env</code>; verify PostgreSQL service with <code>pg_isready</code></td>
+    </tr>
+    <tr>
+      <td>TimescaleDB extension missing</td>
+      <td>Extension not installed in the database</td>
+      <td>Run <code>CREATE EXTENSION IF NOT EXISTS timescaledb;</code> as superuser</td>
+    </tr>
+    <tr>
+      <td>WebSocket connection refused (Real Time page)</td>
+      <td>Remote capture agent not running or firewall blocking</td>
+      <td>Start the remote agent; open the WebSocket port in the firewall</td>
+    </tr>
+    <tr>
+      <td>Zeek ingest returns 401</td>
+      <td>Incorrect or missing <code>X-Internal-Token</code></td>
+      <td>Ensure Sensor VM <code>.env</code> matches server <code>INTERNAL_TOKEN</code></td>
+    </tr>
+    <tr>
+      <td>Rate limit 429 on API</td>
+      <td>Too many requests from client IP</td>
+      <td>Reduce request frequency or ask admin to raise the limit</td>
+    </tr>
+    <tr>
+      <td>Frontend shows blank page after login</td>
+      <td>CORS mismatch — frontend origin not in <code>ALLOWED_ORIGINS</code></td>
+      <td>Add the frontend URL to <code>ALLOWED_ORIGINS</code> in <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>Clustering page shows no dendrogram</td>
+      <td>PCAP has too few unique IP addresses (&lt; 2)</td>
+      <td>Use a PCAP with more varied traffic for meaningful clustering</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ═════════════════════════════════════════════════════ 12. GLOSSARY ═══ -->
+<h2 id="sec-glossary">12. Glossary / Γλωσσάριο</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Definition (EN)</th>
+      <th>Ορισμός (ΕΛ)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>PCAP</strong></td>
+      <td>Packet CAPture — binary file format for network traffic recordings.</td>
+      <td>Αρχείο δυαδικής μορφής για εγγραφές κυκλοφορίας δικτύου.</td>
+    </tr>
+    <tr>
+      <td><strong>JWT</strong></td>
+      <td>JSON Web Token — compact, signed token used for authentication.</td>
+      <td>Μικρό υπογεγραμμένο token για αυθεντικοποίηση.</td>
+    </tr>
+    <tr>
+      <td><strong>5G NF</strong></td>
+      <td>5G Network Function — logical component of the 5G Core (e.g. AMF, UPF, SMF).</td>
+      <td>Λογικό στοιχείο του 5G Core (π.χ. AMF, UPF, SMF).</td>
+    </tr>
+    <tr>
+      <td><strong>UE</strong></td>
+      <td>User Equipment — mobile device connected to the network (phone, tablet, IoT).</td>
+      <td>Κινητή συσκευή συνδεδεμένη στο δίκτυο.</td>
+    </tr>
+    <tr>
+      <td><strong>gNB</strong></td>
+      <td>Next-Generation NodeB — 5G base station.</td>
+      <td>Σταθμός βάσης 5G.</td>
+    </tr>
+    <tr>
+      <td><strong>GTP</strong></td>
+      <td>GPRS Tunnelling Protocol — encapsulation protocol used in 4G/5G user plane.</td>
+      <td>Πρωτόκολλο τούνελ χρησιμοποιούμενο στο επίπεδο χρήστη 4G/5G.</td>
+    </tr>
+    <tr>
+      <td><strong>Zeek</strong></td>
+      <td>Network analysis framework that generates structured connection logs from live traffic.</td>
+      <td>Πλαίσιο ανάλυσης δικτύου που παράγει δομημένα αρχεία καταγραφής.</td>
+    </tr>
+    <tr>
+      <td><strong>TimescaleDB</strong></td>
+      <td>PostgreSQL extension optimised for time-series data; adds hypertables and time-bucketing.</td>
+      <td>Επέκταση PostgreSQL βελτιστοποιημένη για χρονοσειρές.</td>
+    </tr>
+    <tr>
+      <td><strong>Agglomerative Clustering</strong></td>
+      <td>Bottom-up hierarchical clustering that merges the two most similar clusters at each step.</td>
+      <td>Ιεραρχική συσταδοποίηση από κάτω προς τα πάνω.</td>
+    </tr>
+    <tr>
+      <td><strong>Modularity</strong></td>
+      <td>Graph-theory metric that measures the quality of a community partition.</td>
+      <td>Μετρική θεωρίας γράφων για την ποιότητα μιας διαμέρισης κοινότητας.</td>
+    </tr>
+    <tr>
+      <td><strong>Anomaly</strong></td>
+      <td>IP address or flow that deviates significantly from normal behaviour.</td>
+      <td>Διεύθυνση IP ή ροή που αποκλίνει σημαντικά από την κανονική συμπεριφορά.</td>
+    </tr>
+    <tr>
+      <td><strong>O-RAN</strong></td>
+      <td>Open Radio Access Network — open-interface radio access architecture for 5G/6G.</td>
+      <td>Ανοικτή αρχιτεκτονική δικτύου ραδιοπρόσβασης για 5G/6G.</td>
+    </tr>
+    <tr>
+      <td><strong>IMSI</strong></td>
+      <td>International Mobile Subscriber Identity — unique 15-digit identifier for a SIM.</td>
+      <td>Διεθνής Ταυτότητα Κινητού Συνδρομητή — μοναδικός αριθμός 15 ψηφίων.</td>
+    </tr>
+    <tr>
+      <td><strong>GUTI</strong></td>
+      <td>Globally Unique Temporary Identifier — privacy-preserving temporary UE identifier.</td>
+      <td>Προσωρινή ταυτότητα UE για διαφύλαξη ιδιωτικότητας.</td>
+    </tr>
+    <tr>
+      <td><strong>Hypertable</strong></td>
+      <td>TimescaleDB table automatically partitioned by time for high-throughput time-series writes.</td>
+      <td>Πίνακας TimescaleDB αυτόματα κατακερματισμένος ανά χρόνο.</td>
+    </tr>
+    <tr>
+      <td><strong>Nmap</strong></td>
+      <td>Network Mapper — open-source tool for network discovery and security auditing.</td>
+      <td>Εργαλείο ανακάλυψης δικτύου και ελέγχου ασφαλείας ανοικτού κώδικα.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════ FOOTER ═══ -->
+<hr style="margin: 30pt 0 10pt; border: none; border-top: 1pt solid #aaa;">
+<p style="text-align:center; font-size: 9pt; color: #555;">
+  Network Analyzer User Manual &nbsp;|&nbsp; &copy; 2025 University of Thessaly
+  &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; Version 1.0
+  <br>
+  Εγχειρίδιο Χρήστη Network Analyzer &nbsp;|&nbsp; Πανεπιστήμιο Θεσσαλίας
+</p>
+
+</body>
+</html>
