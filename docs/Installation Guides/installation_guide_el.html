@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Analyzer – Οδηγός Εγκατάστασης</title>
+<style>
+  @page { size: A4; margin: 25mm 20mm 25mm 20mm; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 11pt; line-height: 1.65; color: #111; background: #fff;
+    max-width: 170mm; margin: 0 auto; padding: 10mm 0;
+  }
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; border-bottom: 1.5pt solid #111; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  h4 { font-size: 11pt; margin: 12pt 0 3pt; font-style: italic; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul, ol { margin: 4pt 0 7pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { font-family: "Courier New", Courier, monospace; font-size: 10pt; background: #f4f4f4; padding: 0 2pt; }
+  pre  { font-family: "Courier New", Courier, monospace; font-size: 9pt; background: #f4f4f4;
+         border: 1pt solid #ccc; padding: 8pt; overflow-x: auto; white-space: pre; line-height: 1.35;
+         margin: 6pt 0 10pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; }
+  th, td { border: 1pt solid #aaa; padding: 4pt 6pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  a  { color: #1a56a8; }
+  .cover { text-align: center; padding: 20pt 0 14pt; border-bottom: 2pt solid #111; margin-bottom: 16pt; }
+  .cover .subtitle { font-size: 13pt; margin: 4pt 0; }
+  .cover .meta { font-size: 10pt; color: #444; margin: 3pt 0; }
+  .cover .version { font-size: 9.5pt; color: #666; }
+  .diagram-box { border: 1.5pt solid #555; padding: 10pt; margin: 8pt 0 12pt; background: #fafafa; }
+  .diagram-title { font-weight: bold; font-size: 9.5pt; text-align: center; margin-bottom: 6pt; letter-spacing: .4pt; }
+  .note { border: 1pt solid #1a56a8; background: #eef4ff; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .warn { border: 1pt solid #c0392b; background: #fff0ee; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .tip  { border: 1pt solid #1e8c45; background: #f0fff4; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 15mm; } }
+</style>
+</head>
+<body>
+
+<!-- ΕΞΩΦΥΛΛΟ -->
+<div class="cover">
+  <img src="/6g_logo.png" alt="Network Analyzer Logo" width="72" onerror="this.style.display='none'">
+  <h1>Network Analyzer</h1>
+  <p class="subtitle">Πλατφόρμα Ανάλυσης &amp; Ευφυΐας Κίνησης Δικτύου 5G / 6G</p>
+  <p class="meta"><strong>Οδηγός Εγκατάστασης</strong></p>
+  <p class="meta">Πανεπιστήμιο Θεσσαλίας</p>
+  <p class="version">Έκδοση 1.0 &nbsp;|&nbsp; 2025 &nbsp;|&nbsp; Άδεια MIT</p>
+</div>
+
+<!-- ΠΙΝΑΚΑΣ ΠΕΡΙΕΧΟΜΕΝΩΝ -->
+<h2>Πίνακας Περιεχομένων</h2>
+<ol>
+  <li><a href="#sec-overview">Επισκόπηση &amp; Τοπολογία Ανάπτυξης</a></li>
+  <li><a href="#sec-backend">Εγκατάσταση Backend (Flask API)</a></li>
+  <li><a href="#sec-frontend">Εγκατάσταση Frontend (Nuxt SPA)</a></li>
+  <li><a href="#sec-sensor">Εγκατάσταση VM Αισθητήρα (Host Files)</a></li>
+  <li><a href="#sec-verify">Επαλήθευση Πλήρους Στοίβας</a></li>
+  <li><a href="#sec-service">Εκτέλεση ως Υπηρεσίες Συστήματος</a></li>
+  <li><a href="#sec-trouble">Αντιμετώπιση Προβλημάτων Εγκατάστασης</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<!-- 1. ΕΠΙΣΚΟΠΗΣΗ -->
+<h2 id="sec-overview">1. Επισκόπηση &amp; Τοπολογία Ανάπτυξης</h2>
+<p>
+Μια πλήρης ανάπτυξη περιλαμβάνει τρεις ξεχωριστές μηχανές (ή διεργασίες). Για
+ανάπτυξη μπορούν να τρέχουν στον ίδιο υπολογιστή, ενώ σε περιβάλλον παραγωγής
+συνήθως διαχωρίζονται όπως φαίνεται παρακάτω.
+</p>
+
+<div class="diagram-box">
+<div class="diagram-title">Σχήμα 1 – Τοπολογία Ανάπτυξης</div>
+<pre>
+  ┌─────────────────────────┐     ┌─────────────────────────┐
+  │   ΕΞΥΠΗΡΕΤΗΤΗΣ ΕΦΑΡΜ.  │     │      VM ΑΙΣΘΗΤΗΡΑ       │
+  │                         │     │                         │
+  │  ┌───────────────────┐  │     │  start_sensor.sh        │
+  │  │  Flask API :5555  │◄─┼─────┼─ zeek_agent.py          │
+  │  └─────────┬─────────┘  │     │  pcap_server.py :5005   │
+  │            │ SQLAlchemy │     │  Zeek + dumpcap         │
+  │  ┌─────────▼─────────┐  │     └─────────────────────────┘
+  │  │  PostgreSQL 14    │  │
+  │  │  + TimescaleDB    │  │     ┌─────────────────────────┐
+  │  └───────────────────┘  │     │     ΠΕΡΙΗΓΗΤΗΣ          │
+  │                         │     │                         │
+  │  ┌───────────────────┐  │     │  http://&lt;host&gt;:3000     │
+  │  │  Nuxt SPA  :3000  │◄─┼─────┼─ Analyze / Cluster /   │
+  │  └───────────────────┘  │     │  Monitor / Admin        │
+  └─────────────────────────┘     └─────────────────────────┘
+</pre>
+</div>
+
+<h3>1.1 Γρήγορη Αναφορά: Θύρες &amp; Υπηρεσίες</h3>
+<table>
+  <thead>
+    <tr><th>Υπηρεσία</th><th>Μηχανή</th><th>Θύρα</th><th>Πρωτόκολλο</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Flask API</td><td>Εξυπηρετητής εφαρμογής</td><td>5555</td><td>HTTP / WebSocket</td></tr>
+    <tr><td>Nuxt SPA</td><td>Εξυπηρετητής εφαρμογής</td><td>3000</td><td>HTTP</td></tr>
+    <tr><td>PostgreSQL</td><td>Εξυπηρετητής εφαρμογής</td><td>5432</td><td>TCP</td></tr>
+    <tr><td>PCAP Server</td><td>VM Αισθητήρα</td><td>5005</td><td>HTTP</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 2. BACKEND -->
+<h2 id="sec-backend">2. Εγκατάσταση Backend (Flask API)</h2>
+
+<h3>2.1 Απαιτήσεις Συστήματος</h3>
+<table>
+  <thead>
+    <tr><th>Συνιστώσα</th><th>Ελάχιστο</th><th>Σημειώσεις</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>ΛΣ</td><td>Ubuntu 22.04 LTS / Debian 12 / Windows 10+</td><td>Linux συνιστάται για παραγωγή</td></tr>
+    <tr><td>Python</td><td>3.11</td><td>Υποστηρίζεται και η 3.12</td></tr>
+    <tr><td>RAM</td><td>2 GB</td><td>4 GB+ συνιστάται για μεγάλα PCAP</td></tr>
+    <tr><td>Δίσκος</td><td>10 GB ελεύθερος</td><td>Για PCAP και αποτελέσματα</td></tr>
+    <tr><td>PostgreSQL</td><td>14</td><td>Απαιτείται επέκταση TimescaleDB</td></tr>
+    <tr><td>tshark</td><td>3.x</td><td>Μέρος του πακέτου Wireshark</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Εγκατάσταση Εξαρτήσεων Συστήματος</h3>
+
+<h4>Ubuntu / Debian</h4>
+<pre>
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip \
+    wireshark-common tshark \
+    postgresql postgresql-contrib
+</pre>
+
+<h4>Εγκατάσταση TimescaleDB</h4>
+<pre>
+# Προσθήκη αποθετηρίου TimescaleDB
+sudo apt install -y gnupg postgresql-common apt-transport-https lsb-release wget
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+
+# Εγκατάσταση για PostgreSQL 14
+sudo apt install -y timescaledb-2-postgresql-14
+
+# Ρύθμιση PostgreSQL για TimescaleDB
+sudo timescaledb-tune --quiet --yes
+
+# Επανεκκίνηση PostgreSQL
+sudo systemctl restart postgresql
+</pre>
+
+<h3>2.3 Δημιουργία Βάσης Δεδομένων PostgreSQL</h3>
+<pre>
+# Μεταβείτε στον superuser postgres
+sudo -u postgres psql
+
+-- Μέσα στο psql:
+CREATE USER netanalyzer WITH PASSWORD 'επιλέξτε_ισχυρό_κωδικό';
+CREATE DATABASE network_analyzer OWNER netanalyzer;
+\c network_analyzer
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\q
+</pre>
+
+<h3>2.4 Ρύθμιση Περιβάλλοντος Python</h3>
+<pre>
+# Από τη ρίζα του έργου
+cd server
+
+# Δημιουργία απομονωμένου εικονικού περιβάλλοντος
+python3.11 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# Εγκατάσταση όλων των εξαρτήσεων Python
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Το Flask-SocketIO απαιτείται αλλά δεν βρίσκεται στο requirements.txt
+pip install flask-socketio
+</pre>
+
+<div class="note">
+<strong>Σημείωση:</strong> Σε μερικά συστήματα το <code>pyshark</code>
+απαιτεί το <code>tshark</code> να βρίσκεται στο <code>PATH</code>. Επαληθεύστε
+με: <code>tshark --version</code>.
+</div>
+
+<h3>2.5 Διαμόρφωση Αρχείου Περιβάλλοντος</h3>
+<p>
+Αντιγράψτε το <code>.env.example</code> σε <code>.env</code> και συμπληρώστε
+κάθε τιμή. Το backend αρνείται να εκκινήσει αν απουσιάζει το
+<code>JWT_SECRET_KEY</code>.
+</p>
+<pre>
+cp .env.example .env
+nano .env   # ή χρησιμοποιήστε οποιονδήποτε επεξεργαστή κειμένου
+</pre>
+
+<table>
+  <thead>
+    <tr><th>Μεταβλητή</th><th>Απαιτείται</th><th>Περιγραφή</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DATABASE_URL</code></td><td>Ναι</td><td>Συμβολοσειρά σύνδεσης PostgreSQL, π.χ. <code>postgresql://netanalyzer:κωδικός@localhost:5432/network_analyzer</code></td></tr>
+    <tr><td><code>JWT_SECRET_KEY</code></td><td>Ναι</td><td>Μακρά τυχαία συμβολοσειρά (τουλ. 32 χαρ.). Δημιουργία: <code>python3 -c "import secrets; print(secrets.token_hex(32))"</code></td></tr>
+    <tr><td><code>INTERNAL_TOKEN</code></td><td>Ναι</td><td>Κοινόχρηστο μυστικό μεταξύ Flask API και VM αισθητήρα. Πρέπει να ταιριάζει με <code>SECRET_TOKEN</code> στον αισθητήρα.</td></tr>
+    <tr><td><code>ALLOWED_ORIGINS</code></td><td>Ναι</td><td>Λίστα προελεύσεων frontend διαχωρισμένη με κόμμα, π.χ. <code>http://localhost:3000,http://192.168.1.10:3000</code></td></tr>
+    <tr><td><code>VUE_APP_API_BASE_URL</code></td><td>Όχι</td><td>Χρησιμοποιείται από το build του frontend, π.χ. <code>http://192.168.1.10:5555</code></td></tr>
+  </tbody>
+</table>
+
+<h3>2.6 Αρχικοποίηση Σχήματος Βάσης</h3>
+<pre>
+# Μέσα στο server/ με ενεργοποιημένο .venv
+python - &lt;&lt;'EOF'
+from app import app
+from models import db
+with app.app_context():
+    db.create_all()
+    print("Το σχήμα δημιουργήθηκε επιτυχώς.")
+EOF
+</pre>
+
+<h3>2.7 Δημιουργία Πρώτου Χρήστη Admin</h3>
+<pre>
+python - &lt;&lt;'EOF'
+from app import app
+from models import db, User
+from werkzeug.security import generate_password_hash
+with app.app_context():
+    user = User(
+        username="admin",
+        password_hash=generate_password_hash("αλλάξτε_αμέσως"),
+        role="admin"
+    )
+    db.session.add(user)
+    db.session.commit()
+    print("Ο χρήστης admin δημιουργήθηκε.")
+EOF
+</pre>
+
+<div class="warn">
+<strong>Προειδοποίηση:</strong> Αλλάξτε τον κωδικό admin αμέσως μετά την
+πρώτη σύνδεση. Ο παραπάνω κωδικός είναι μόνο δείγμα.
+</div>
+
+<h3>2.8 Εκκίνηση Backend</h3>
+<pre>
+# Από το server/ με ενεργοποιημένο .venv
+python app.py
+
+# Αναμενόμενη έξοδος:
+# * Running on http://0.0.0.0:5555
+# * Swagger UI available at http://0.0.0.0:5555/apidocs
+</pre>
+
+<div class="tip">
+<strong>Συμβουλή:</strong> Εκκίνηση από τη ρίζα του έργου μέσω npm:<br>
+<code>npm run api</code> &nbsp; (εκτελεί <code>python3 server/app.py</code>)
+</div>
+
+<div class="page-break"></div>
+
+<!-- 3. FRONTEND -->
+<h2 id="sec-frontend">3. Εγκατάσταση Frontend (Nuxt SPA)</h2>
+
+<h3>3.1 Απαιτήσεις Συστήματος</h3>
+<table>
+  <thead>
+    <tr><th>Συνιστώσα</th><th>Ελάχιστο</th><th>Σημειώσεις</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Node.js</td><td>18 LTS</td><td>Υποστηρίζεται και η 20 LTS</td></tr>
+    <tr><td>npm</td><td>9</td><td>Εγκαθίσταται μαζί με Node.js</td></tr>
+    <tr><td>RAM</td><td>1 GB</td><td>2 GB+ για το βήμα build</td></tr>
+  </tbody>
+</table>
+
+<h4>Εγκατάσταση Node.js (Ubuntu / Debian)</h4>
+<pre>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version   # πρέπει να εμφανίσει v20.x.x
+npm --version    # πρέπει να εμφανίσει 10.x.x
+</pre>
+
+<h3>3.2 Διαμόρφωση Περιβάλλοντος Frontend</h3>
+<p>
+Το frontend διαβάζει το <code>VUE_APP_API_BASE_URL</code> κατά το build για να
+γνωρίζει πού βρίσκεται το Flask API. Ορίστε το στο <code>.env</code> στη ρίζα
+του έργου:
+</p>
+<pre>
+# .env  (ρίζα έργου)
+VUE_APP_API_BASE_URL=http://192.168.1.10:5555
+</pre>
+
+<div class="warn">
+<strong>Σημαντικό:</strong> Εάν το Flask API βρίσκεται σε διαφορετική μηχανή
+από τον περιηγητή, χρησιμοποιήστε την IP δικτύου του εξυπηρετητή API — όχι
+<code>127.0.0.1</code>. Ο περιηγητής πρέπει να μπορεί να προσεγγίσει αυτή τη
+διεύθυνση άμεσα.
+</div>
+
+<h3>3.3 Εγκατάσταση Εξαρτήσεων Node</h3>
+<pre>
+# Από τη ρίζα του έργου
+npm install
+</pre>
+
+<h3>3.4 Λειτουργία Ανάπτυξης (Hot-Reload)</h3>
+<pre>
+npm run dev
+# Ο dev server εκκινεί στο http://localhost:3000
+# Αλλαγές σε αρχεία .vue ανανεώνουν αυτόματα τον περιηγητή.
+</pre>
+
+<h3>3.5 Build &amp; Εκκίνηση Παραγωγής</h3>
+<pre>
+# Κατασκευή βελτιστοποιημένου πακέτου
+npm run build
+
+# Εκκίνηση εξυπηρετητή SSR παραγωγής
+npm run start
+# Ακούει στο http://0.0.0.0:3000
+</pre>
+
+<h3>3.6 Προαιρετικό: Nginx Reverse Proxy</h3>
+<p>
+Για παραγωγή συνιστάται η τοποθέτηση Nginx μπροστά από τον Nuxt (θύρα 3000)
+και τον Flask API (θύρα 5555) ώστε και οι δύο να είναι προσβάσιμοι σε
+στάνταρ HTTP/HTTPS θύρες.
+</p>
+<pre>
+# /etc/nginx/sites-available/network-analyzer
+server {
+    listen 80;
+    server_name your.domain.com;
+
+    # Frontend
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+
+    # Flask API + WebSocket
+    location /api/ {
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass http://127.0.0.1:5555;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+}
+</pre>
+<pre>
+sudo ln -s /etc/nginx/sites-available/network-analyzer /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+</pre>
+
+<div class="page-break"></div>
+
+<!-- 4. SENSOR VM -->
+<h2 id="sec-sensor">4. Εγκατάσταση VM Αισθητήρα (Host Files)</h2>
+<p>
+Το VM αισθητήρα είναι μια Linux μηχανή φυσικά συνδεδεμένη (ή καθρεφτισμένη)
+στο δίκτυο που θέλετε να παρακολουθείτε. Εκτελεί τέσσερα στοιχεία:
+</p>
+<ul>
+  <li><strong>Zeek IDS</strong> — αναλύει ζωντανή κυκλοφορία και γράφει <code>conn.log</code> σε μορφή JSON.</li>
+  <li><strong>dumpcap</strong> — καταγράφει ακατέργαστα πακέτα σε κυλιόμενο δακτύλιο αρχείων PCAP.</li>
+  <li><strong>zeek_agent.py</strong> — παρακολουθεί το <code>conn.log</code> και αποστέλλει δέσμες εγγραφών ροών στο Flask API κάθε 2 δευτερόλεπτα (ή 50 εγγραφές, ό,τι συμβεί πρώτο).</li>
+  <li><strong>pcap_server.py</strong> — μικρός Flask εξυπηρετητής στη θύρα 5005 που εξυπηρετεί τμήματα PCAP στον εξυπηρετητή εφαρμογής κατ' απαίτηση.</li>
+</ul>
+
+<h3>4.1 Απαιτήσεις Συστήματος</h3>
+<table>
+  <thead>
+    <tr><th>Συνιστώσα</th><th>Ελάχιστο</th><th>Σημειώσεις</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>ΛΣ</td><td>Ubuntu 22.04 LTS / Debian 12</td><td>Απαιτείται Linux — τα scripts χρησιμοποιούν bash</td></tr>
+    <tr><td>Python</td><td>3.10+</td><td>Για zeek_agent.py και pcap_server.py</td></tr>
+    <tr><td>Zeek</td><td>6.x (LTS)</td><td>Εγκατεστημένο στο <code>/opt/zeek/</code></td></tr>
+    <tr><td>Wireshark CLI</td><td>3.x</td><td>Παρέχει dumpcap, mergecap, editcap</td></tr>
+    <tr><td>Nmap</td><td>7.x</td><td>Για σαρώσεις κατ' απαίτηση</td></tr>
+    <tr><td>NIC</td><td>1 Gbps+</td><td>Πρέπει να υποστηρίζει promiscuous mode</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 Εγκατάσταση Πακέτων Συστήματος</h3>
+<pre>
+sudo apt update
+sudo apt install -y python3 python3-pip wireshark-common tshark nmap curl wget
+</pre>
+
+<div class="note">
+<strong>Σημείωση:</strong> Κατά την εγκατάσταση Wireshark, όταν εμφανιστεί η
+ερώτηση <em>"Should non-superusers be able to capture packets?"</em> — απαντήστε
+<strong>Yes</strong> αν θέλετε εκτέλεση dumpcap χωρίς sudo. Διαφορετικά τα
+scripts αισθητήρα πρέπει να εκτελούνται ως root.
+</div>
+
+<h3>4.3 Εγκατάσταση Zeek</h3>
+<pre>
+# Προσθήκη αποθετηρίου πακέτου Zeek (παράδειγμα Ubuntu 22.04)
+echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' \
+    | sudo tee /etc/apt/sources.list.d/security:zeek.list
+
+curl -fsSL https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key \
+    | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg &gt; /dev/null
+
+sudo apt update
+sudo apt install -y zeek
+
+# Προσθήκη Zeek στο PATH
+echo 'export PATH=$PATH:/opt/zeek/bin' >> ~/.bashrc
+source ~/.bashrc
+
+# Επαλήθευση
+zeek --version
+</pre>
+
+<h3>4.4 Εγκατάσταση Python Εξαρτήσεων για Scripts Αισθητήρα</h3>
+<pre>
+pip3 install requests flask
+</pre>
+
+<h3>4.5 Αντιγραφή Αρχείων Αισθητήρα στο VM</h3>
+<p>
+Αντιγράψτε τα τρία αρχεία από τον κατάλογο <code>Host Files/</code> του έργου
+σε έναν κατάλογο εργασίας στο VM αισθητήρα (π.χ. <code>~/sensor/</code>):
+</p>
+<pre>
+# Από τον εξυπηρετητή εφαρμογής (με scp)
+scp "Host Files/start_sensor.sh" \
+    "Host Files/zeek_agent.py" \
+    "Host Files/pcap_server.py" \
+    χρήστης@ip-vm-αισθητήρα:~/sensor/
+</pre>
+<pre>
+# Στο VM αισθητήρα — δώστε δικαίωμα εκτέλεσης στο shell script
+chmod +x ~/sensor/start_sensor.sh
+</pre>
+
+<h3>4.6 Διαμόρφωση Αισθητήρα</h3>
+<p>
+Όλη η διαμόρφωση του αισθητήρα βρίσκεται hardcoded στην αρχή κάθε αρχείου —
+δεν υπάρχει αρχείο <code>.env</code> στο VM αισθητήρα. Ανοίξτε κάθε αρχείο
+και αντικαταστήστε τις τιμές πριν από την ανάπτυξη.
+</p>
+
+<h4>zeek_agent.py — αρχή αρχείου</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+ZEEK_LOG_PATH = "conn.log"
+HOST_API_URL  = "http://&lt;ip-εξυπηρετητή-εφαρμογής&gt;:5555/v1/ingest/zeek"
+SECRET_TOKEN  = "ίδια_τιμή_με_INTERNAL_TOKEN_στο_backend"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>pcap_server.py — αρχή αρχείου</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+SECRET_TOKEN = "ίδια_τιμή_με_INTERNAL_TOKEN_στο_backend"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>start_sensor.sh — αρχή αρχείου</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+HOST_IP="&lt;ip-vm-αισθητήρα&gt;"     # IP αυτής της μηχανής — εξαιρείται από την καταγραφή
+SENSOR_PORTS="5000 or port 5001 or port 5005"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<div class="warn">
+<strong>Σημαντικό:</strong> Το <code>SECRET_TOKEN</code> και στα δύο αρχεία
+Python πρέπει να είναι ακριβώς η ίδια συμβολοσειρά με το
+<code>INTERNAL_TOKEN</code> στο <code>.env</code> του Flask backend.
+Αναντιστοιχία θα προκαλέσει αποτυχία όλης της εισαγωγής ροών Zeek με HTTP 401.
+</div>
+
+<h3>4.7 Εκκίνηση Αισθητήρα</h3>
+<pre>
+cd ~/sensor
+
+# Εκτέλεση αισθητήρα στην επιλεγμένη διεπαφή δικτύου
+# Αντικαταστήστε το 'eth0' με το πραγματικό όνομα διεπαφής (χρησιμοποιήστε 'ip link')
+./start_sensor.sh eth0
+</pre>
+
+<p>Η επιτυχής έξοδος μοιάζει με:</p>
+<pre>
+[*] Cleaning up old PCAP and log files...
+
+ Starting Sensor Node on interface: eth0
+
+[*] Starting dumpcap (Ring Buffer)...
+[*] Starting Zeek...
+[*] Starting PCAP Server (Port 5005)...
+[*] Starting Zeek Agent...
+
+------------------------------------------------
+
+Sensor is active! Press [CTRL+C] to stop.
+
+------------------------------------------------
+</pre>
+
+<p>Πατήστε <strong>Ctrl+C</strong> για καθαρή διακοπή όλων των διεργασιών αισθητήρα.</p>
+
+<h3>4.8 Τι Κάνει Κάθε Συνιστώσα</h3>
+
+<div class="diagram-box">
+<div class="diagram-title">Σχήμα 2 – Εσωτερική Ροή VM Αισθητήρα</div>
+<pre>
+  Διεπαφή Δικτύου (promiscuous mode)
+           │
+           ├──────────────────────────────────┐
+           │                                  │
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │   Zeek IDS      │                │   dumpcap       │
+  │ -C -i eth0      │                │ δακτύλιος       │
+  │ LogAscii JSON   │                │ 500 MB / αρχείο │
+  └────────┬────────┘                │ max 3 αρχεία    │
+           │ conn.log (γραμμές JSON) └────────┬────────┘
+           │                                  │ generated_pcaps/
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │ zeek_agent.py   │                │ pcap_server.py  │
+  │ tail + δέσμη    │                │ Flask :5005     │
+  │ 50 ροές / 2 δλ  │                │ GET /get-pcap   │
+  └────────┬────────┘                └────────┬────────┘
+           │ POST /v1/ingest/zeek              │ τμήμα κατ' απαίτηση
+           │ X-Internal-Token                  │ (mergecap + editcap)
+           ▼                                   ▼
+     Flask API :5555              Flask API :5555
+   (flow_statistics DB)         (λήψη στιγμιότυπου)
+</pre>
+</div>
+
+<h3>4.9 Εύρεση Ονόματος Διεπαφής Δικτύου</h3>
+<pre>
+ip link show
+# ή
+ip a
+# Αναζητήστε διεπαφή με κατάσταση UP και συνδεδεμένη, π.χ. eth0, enp0s3, ens3
+</pre>
+
+<div class="tip">
+<strong>Συμβουλή:</strong> Για παθητική παρακολούθηση χωρίς διακοπή της
+κυκλοφορίας, τοποθετήστε τον αισθητήρα σε θύρα καθρέφτη δικτύου (SPAN) ή
+χρησιμοποιήστε network TAP. Η σημαία <code>-C</code> που περνάται στο Zeek
+απενεργοποιεί επαλήθευση checksum, η οποία είναι απαραίτητη σε θύρες καθρέφτη.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 5. ΕΠΑΛΗΘΕΥΣΗ -->
+<h2 id="sec-verify">5. Επαλήθευση Πλήρους Στοίβας</h2>
+
+<h3>5.1 Έλεγχος Υγείας Backend</h3>
+<pre>
+# Από οποιαδήποτε μηχανή στο δίκτυο
+curl -s http://&lt;ip-εξυπηρετητή&gt;:5555/apidocs | grep -c "swagger"
+# Πρέπει να επιστρέψει 1 (παρουσία HTML Swagger UI)
+</pre>
+
+<h3>5.2 Έλεγχος Υγείας Frontend</h3>
+<p>
+Ανοίξτε περιηγητή και μεταβείτε στο
+<code>http://&lt;ip-εξυπηρετητή&gt;:3000</code>. Πρέπει να εμφανιστεί η σελίδα
+σύνδεσης. Συνδεθείτε με τα διαπιστευτήρια admin που δημιουργήσατε στην
+Ενότητα 2.7.
+</p>
+
+<h3>5.3 Έλεγχος Εισαγωγής Ροών Zeek</h3>
+<pre>
+# Στον εξυπηρετητή εφαρμογής — αναζήτηση στον πίνακα flow_statistics
+sudo -u postgres psql -d network_analyzer -c \
+    "SELECT COUNT(*) FROM flow_statistics;"
+# Ο αριθμός γραμμών πρέπει να αυξάνεται κάθε λίγα δευτερόλεπτα
+# όσο ο αισθητήρας είναι ενεργός.
+</pre>
+
+<h3>5.4 Έλεγχος Εξυπηρετητή PCAP</h3>
+<pre>
+# Από τον εξυπηρετητή εφαρμογής
+curl -s -o /dev/null -w "%{http_code}" \
+    -H "X-Internal-Token: &lt;το-INTERNAL_TOKEN-σας&gt;" \
+    http://&lt;ip-αισθητήρα&gt;:5005/get-pcap
+# Πρέπει να επιστρέψει 200
+</pre>
+
+<h3>5.5 Λίστα Ελέγχου End-to-End</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Δοκιμή</th><th>Αναμενόμενο Αποτέλεσμα</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Πλοήγηση στο <code>http://&lt;app&gt;:5555/apidocs</code></td><td>Φόρτωση Swagger UI</td></tr>
+    <tr><td>2</td><td>Πλοήγηση στο <code>http://&lt;app&gt;:3000/login</code></td><td>Εμφάνιση φόρμας σύνδεσης</td></tr>
+    <tr><td>3</td><td>Σύνδεση με διαπιστευτήρια admin</td><td>Ανακατεύθυνση στο κεντρικό ταμπλό</td></tr>
+    <tr><td>4</td><td>Μεταφόρτωση αρχείου <code>.pcap</code> στη σελίδα Analyze</td><td>Εμφάνιση αποτελεσμάτων ανάλυσης</td></tr>
+    <tr><td>5</td><td>Άνοιγμα Continuous Monitoring, ενεργοποίηση Live Mode</td><td>Εμφάνιση και ενημέρωση γραμμών ροών</td></tr>
+    <tr><td>6</td><td>Δημιουργία ειδοποίησης WebSocket (αποστολή μεγάλου αρχείου μέσω παρακολουθούμενου δικτύου)</td><td>Εμφάνιση snackbar ειδοποίησης στον περιηγητή</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 6. ΥΠΗΡΕΣΙΕΣ ΣΥΣΤΗΜΑΤΟΣ -->
+<h2 id="sec-service">6. Εκτέλεση ως Υπηρεσίες Συστήματος (systemd)</h2>
+<p>
+Για αναπτύξεις παραγωγής, χρησιμοποιήστε αρχεία μονάδας systemd ώστε το
+backend, το frontend και ο αισθητήρας να επανεκκινούνται αυτόματα μετά από
+επανεκκίνηση.
+</p>
+
+<h3>6.1 Υπηρεσία Flask API</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-api.service
+[Unit]
+Description=Network Analyzer Flask API
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer/server
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/opt/network-analyzer/server/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl daemon-reload
+sudo systemctl enable --now netanalyzer-api
+sudo systemctl status netanalyzer-api
+</pre>
+
+<h3>6.2 Υπηρεσία Nuxt Frontend</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-frontend.service
+[Unit]
+Description=Network Analyzer Nuxt Frontend
+After=network.target netanalyzer-api.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-frontend
+</pre>
+
+<h3>6.3 Υπηρεσία Αισθητήρα</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-sensor.service
+[Unit]
+Description=Network Analyzer Sensor Node
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/χρήστης-αισθητήρα/sensor
+ExecStart=/bin/bash /home/χρήστης-αισθητήρα/sensor/start_sensor.sh eth0
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-sensor
+</pre>
+
+<div class="note">
+<strong>Σημείωση:</strong> Αντικαταστήστε <code>eth0</code> με το πραγματικό
+όνομα της διεπαφής σας. Η υπηρεσία αισθητήρα εκτελείται ως root επειδή η
+ακατέργαστη λήψη πακέτων με dumpcap απαιτεί συνήθως αυξημένα δικαιώματα.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 7. ΑΝΤΙΜΕΤΩΠΙΣΗ ΠΡΟΒΛΗΜΑΤΩΝ -->
+<h2 id="sec-trouble">7. Αντιμετώπιση Προβλημάτων Εγκατάστασης</h2>
+
+<table>
+  <thead>
+    <tr><th>Σύμπτωμα</th><th>Πιθανή Αιτία</th><th>Επίλυση</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>RuntimeError: JWT_SECRET_KEY environment variable must be set</code></td>
+      <td>Το <code>.env</code> δεν φορτώθηκε ή λείπει η μεταβλητή</td>
+      <td>Επιβεβαιώστε ότι το <code>.env</code> βρίσκεται στο <code>server/</code> και περιέχει <code>JWT_SECRET_KEY</code></td>
+    </tr>
+    <tr>
+      <td><code>psycopg2.OperationalError: could not connect to server</code></td>
+      <td>PostgreSQL δεν τρέχει ή λανθασμένο <code>DATABASE_URL</code></td>
+      <td>Εκτελέστε <code>sudo systemctl start postgresql</code>· επαληθεύστε με <code>pg_isready</code></td>
+    </tr>
+    <tr>
+      <td><code>ERROR: extension "timescaledb" does not exist</code></td>
+      <td>Το πακέτο TimescaleDB δεν εγκαταστάθηκε ή λάθος έκδοση PostgreSQL</td>
+      <td>Επαναλάβετε τα βήματα εγκατάστασης TimescaleDB· επιβεβαιώστε έκδοση PG με <code>psql --version</code></td>
+    </tr>
+    <tr>
+      <td><code>ModuleNotFoundError: No module named 'pyshark'</code></td>
+      <td>Εικονικό περιβάλλον δεν είναι ενεργό ή δεν εκτελέστηκε <code>pip install</code></td>
+      <td>Ενεργοποιήστε το <code>.venv</code> και επαναλάβετε <code>pip install -r requirements.txt</code></td>
+    </tr>
+    <tr>
+      <td>Σφάλματα tshark κατά ανάλυση PCAP</td>
+      <td><code>tshark</code> δεν βρίσκεται στο PATH ή αναντιστοιχία έκδοσης</td>
+      <td>Εκτελέστε <code>which tshark</code>· προσθέστε τον κατάλογο Wireshark bin στο PATH αν λείπει</td>
+    </tr>
+    <tr>
+      <td><code>npm install</code> αποτυγχάνει με EACCES</td>
+      <td>Πρόβλημα δικαιωμάτων καταλόγου npm global</td>
+      <td>Εκτελέστε ως κανονικός χρήστης (όχι root)· ή διορθώστε: <code>npm config set prefix ~/.npm-global</code></td>
+    </tr>
+    <tr>
+      <td>Ο Nuxt dev server δεν προσεγγίζει το Flask API (σφάλμα CORS)</td>
+      <td>Η προέλευση frontend δεν βρίσκεται στο <code>ALLOWED_ORIGINS</code></td>
+      <td>Προσθέστε <code>http://localhost:3000</code> στο <code>ALLOWED_ORIGINS</code> στο <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>Το Zeek δεν παράγει <code>conn.log</code></td>
+      <td>Zeek δεν εγκαταστάθηκε στο <code>/opt/zeek/bin/zeek</code> ή λανθασμένη διεπαφή</td>
+      <td>Εκτελέστε <code>which zeek</code> ή <code>/opt/zeek/bin/zeek --version</code>· ελέγξτε όνομα διεπαφής με <code>ip a</code></td>
+    </tr>
+    <tr>
+      <td>Αισθητήρας: zeek_agent.py τερματίζει αμέσως με "connection refused"</td>
+      <td><code>HOST_API_URL</code> δείχνει λανθασμένη IP/θύρα ή Flask API είναι εκτός λειτουργίας</td>
+      <td>Επαληθεύστε ότι το Flask API τρέχει· ελέγξτε την τιμή <code>HOST_API_URL</code> στην αρχή του <code>zeek_agent.py</code></td>
+    </tr>
+    <tr>
+      <td>pcap_server.py επιστρέφει 401 στον εξυπηρετητή εφαρμογής</td>
+      <td><code>SECRET_TOKEN</code> αισθητήρα ≠ <code>INTERNAL_TOKEN</code> backend</td>
+      <td>Αντιγράψτε την ακριβώς ίδια συμβολοσειρά στην αρχή του <code>zeek_agent.py</code> και <code>pcap_server.py</code>, και στο <code>INTERNAL_TOKEN</code> του backend <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>dumpcap: αρνήθηκε η άδεια</td>
+      <td>Ο χρήστης δεν ανήκει στην ομάδα <code>wireshark</code></td>
+      <td>Εκτελέστε <code>sudo usermod -aG wireshark $USER</code> και αποσυνδεθείτε/επανασυνδεθείτε</td>
+    </tr>
+    <tr>
+      <td><code>mergecap</code> ή <code>editcap</code> δεν βρέθηκε</td>
+      <td>Εγκαταστάθηκε μόνο <code>tshark</code>, όχι το πλήρες Wireshark CLI</td>
+      <td>Εκτελέστε <code>sudo apt install -y wireshark-common</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ΥΠΟΣΕΛΙΔΟ -->
+<hr style="margin: 30pt 0 10pt; border: none; border-top: 1pt solid #aaa;">
+<p style="text-align:center; font-size: 9pt; color: #555;">
+  Οδηγός Εγκατάστασης Network Analyzer &nbsp;|&nbsp; &copy; 2025 Πανεπιστήμιο Θεσσαλίας &nbsp;|&nbsp; Άδεια MIT &nbsp;|&nbsp; Έκδοση 1.0
+</p>
+
+</body>
+</html>
