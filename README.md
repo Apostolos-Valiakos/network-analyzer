@@ -1,217 +1,285 @@
-# Network Traffic Analysis & 5G/O-RAN Profiling Service
+# Network Analyzer
 
-**A full-stack application for analyzing, clustering, and profiling 5G and O-RAN network traffic using machine learning and rule-based heuristics.**
-
-This project provides a sophisticated backend for **Deep Packet Inspection (DPI)**, **Role Classification**, and **PCAP Generation**, paired with a modern **Vue.js + Vuetify** frontend for real-time visualization and interactive analysis.
+**5G / 6G Network Traffic Analysis & Intelligence Platform**  
+Developed by the University of Thessaly
 
 ---
 
-## Key Features
+## Overview
 
-### **1. Advanced 5G & O-RAN Analysis**
+Network Analyzer is a full-stack research platform for deep inspection,
+clustering, and role classification of 5G and 6G network traffic. It
+accepts uploaded PCAP files or a live Zeek telemetry stream from a sensor
+VM, runs automated analysis pipelines, and presents results through
+interactive dashboards.
 
-Unlike generic analyzers, this tool is optimized for next-gen mobile networks:
+---
 
-- **5G Core Identification:** Identifies AMF, SMF, UPF, and UDM using **HTTP/2 SBI (Service Based Interface)** signatures (e.g., `/namf`, `/nsmf`).
-- **O-RAN Component Detection:** Detects Near-RT RIC, E2 Nodes, and E2T traffic using **E2AP procedure codes** and specific ports (e.g., 38000 for E2T, 6379 for Redis).
-- **Control Plane Analysis:** Parses **NGAP** (gNB AMF) and **PFCP** (SMF UPF) signaling to map network topology.
-- **UE Session Extraction:** Extracts IMSI, GUTI, SUCI, and PDU Session IDs using `pyshark`.
+## Features
 
-### **2. Frontend Visualization (Vue.js + Vuetify)**
-
-- **Real-Time Sniffer:**
-- Live packet capture via WebSocket (`ws://127.0.0.1:5001`).
-- Interactive interface selection and buffer management.
-- Live metrics: Packets/sec, total data size, and raw packet logs.
-
-- **Analysis Wizard:** A step-by-step interface for processing PCAPs:
-
-1. **Clustering:** Force-directed graph visualization with **Graph Modularity** optimization to suggest the ideal number of clusters ().
-2. **Profiling:** Rule-based and ML classification of IP roles.
-3. **Results:** Export roles and hierarchies to JSON or CSV.
-
-- **Network Graphs:** High-performance topology rendering using **Apache ECharts**.
-
-### **3. Machine Learning Pipeline**
-
-- **Feature Engineering:** Extracts packet length, protocol sequences, and timestamps.
-- **Role Classification:** Hybird approach using **DPI rules** (headers, ports) and **ML sequencing** to label nodes (e.g., "gNB", "Malicious", "Unknown").
+| Feature | Description |
+|---|---|
+| PCAP Upload & Analysis | Protocol distribution, conversation stats, interactive network graph |
+| Agglomerative Clustering | Unsupervised grouping by traffic behaviour; modularity-based auto k-selection |
+| IP Role Assessment | Rule-based classification: 5G Core NF, O-RAN, UE, external server, unknown |
+| UE Session Tracking | Extracts IMSI, GUTI, and IPv4 per user equipment from control-plane traffic |
+| Real-Time Monitoring | Live Zeek flow ingestion via host agent; WebSocket anomaly alerts |
+| Nmap Scan Integration | On-demand network scans proxied through the sensor VM |
+| Export | Clustering results and role reports as CSV or JSON |
+| Swagger UI | Interactive API documentation at `/apidocs` — no login required |
 
 ---
 
 ## Architecture
 
-```text
-├── client/ (Vue.js)
-│   ├── views/
-│   │   ├── realTime.vue       # Live WebSocket capture & PCAP generation
-│   │   ├── clustering.vue     # Multi-step analysis wizard
-│   │   └── analyze.vue        # Quick static PCAP analysis
-│   ├── components/
-│   │   ├── NetworkGraph.vue   # ECharts topology visualizer
-│   │   ├── ModularityChart.vue# Elbow method visualization
-│   │   └── stepper/           # Wizard sub-components
-│   └── ...
-├── server/ (Flask)
-│   ├── app.py                 # API Entry point
-│   ├── rrc_utils.py           # 5G/O-RAN extraction logic (TShark wrappers)
-│   ├── Preprocess.py          # ML Feature extraction & Pipeline
-│   ├── role_assessment.py     # Rule-based heuristics
-│   ├── ueAnalysis.py          # UE identifier extraction
-│   └── pcap_generator_service.py # Packet reassembly service
-├── Dockerfile                 # Container configuration
-└── Makefile                   # Documentation build tools
-
+```
+┌────────────────────────────────────────────────────────────┐
+│              Browser  (Nuxt 2 / Vue 2 SPA)   :3000         │
+│  Analyze · Clustering · Real Time · Monitoring · Admin     │
+└─────────────────────────┬──────────────────────────────────┘
+                          │  REST + WebSocket (Socket.IO)
+┌─────────────────────────▼──────────────────────────────────┐
+│          Flask API  (server/app.py)   :5555                 │
+│  JWT auth · Flask-SocketIO · Flasgger Swagger UI           │
+│  PCAP analysis · Clustering · Role pipeline · Zeek ingest  │
+└───────────┬────────────────────────────┬───────────────────┘
+            │ SQLAlchemy                 │ psycopg2 bulk insert
+┌───────────▼────────────────────────────▼───────────────────┐
+│         PostgreSQL 14 + TimescaleDB   :5432                 │
+│  users · pcap_files · flow_statistics (hypertable)          │
+│  role_snapshots · ue_sessions · cluster_results             │
+└─────────────────────────▲──────────────────────────────────┘
+                          │  X-Internal-Token
+┌─────────────────────────┴──────────────────────────────────┐
+│       Host Sensor VM  (Host Files/)   :5005                 │
+│  zeek_agent.py  →  POST /v1/ingest/zeek                     │
+│  start_sensor.sh — tcpdump capture + Nmap async service     │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Installation & Setup
+## Prerequisites
 
-### Prerequisites
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | ≥ 18 | For the Nuxt frontend |
+| Python | ≥ 3.10 | For the Flask backend |
+| PostgreSQL | ≥ 14 | Main database |
+| TimescaleDB | ≥ 2.x | PostgreSQL extension — auto-enabled on first start |
+| tshark | any recent | Packet dissection cache used by analysis pipeline |
+| Zeek | ≥ 6.x | Optional — required only for Continuous Monitoring |
+| Nmap | any | Optional — required only for Nmap scan feature |
 
-- **Python 3.10+**
-- **Wireshark/TShark:** Required for the backend to parse specific 5G fields.
-- _Ubuntu:_ `sudo apt install tshark`
-- _Windows:_ Install Wireshark and ensure `tshark` is in your PATH.
+---
 
-### Option A: Running with Docker (Recommended)
+## Configuration
 
-The project includes a `Dockerfile` for easy deployment.
+### Backend — `server/.env`
 
-1. **Build the image:**
+```env
+# Required
+JWT_SECRET_KEY=change-me-to-a-long-random-string
 
-```bash
-docker build -t network-analyzer .
+# Database (defaults to local PostgreSQL)
+DATABASE_URL=postgresql://postgres:pass@localhost:5432/network_analyzer
 
+# Internal token shared between app.py and the sensor VM agents
+SECRET_TOKEN=change-me-to-another-random-string
+
+# Seeds the first admin account on startup (only if no admin exists yet)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=changeme123
+
+# CORS — comma-separated allowed origins
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Flask server port (default: 5555)
+PORT=5555
 ```
 
-2. **Run the container:**
+### Frontend — `.env`
 
-```bash
-docker run -p 5000:5000 network-analyzer
-
+```env
+VUE_APP_API_BASE_URL=http://127.0.0.1:5555
+VUE_APP_REALTIME_BASE_URL=http://127.0.0.1:5555
 ```
 
-_The API will be available at `http://127.0.0.1:5000`._
+---
 
-### Option B: Local Development
+## Installation
 
-1. **Install Python Dependencies:**
+### 1. Database
 
 ```bash
-python3 -m venv .venv
+createdb network_analyzer
+# TimescaleDB extension and all tables are created automatically
+# by the server on first startup.
+```
+
+### 2. Backend
+
+```bash
+cd server
+python -m venv .venv
+
+# Linux / macOS
 source .venv/bin/activate
-pip install -r server/requirements.txt
+
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+pip install -r requirements.txt
+
+# Create server/.env and fill in the values above
+python app.py
 ```
 
-If you prefer not to use a virtual environment, you can install directly:
+The server starts on `http://127.0.0.1:5555`.
+
+### 3. Frontend
 
 ```bash
-pip install -r server/requirements.txt
-```
-
-### System dependencies
-
-This project requires `tshark` for role classification and deep packet inspection.
-
-On macOS (Homebrew):
-
-```bash
-brew install wireshark
-```
-
-2. **Run the Flask Server:**
-
-```bash
-python3 server/app.py
-```
-
-Or via npm:
-
-```bash
-npm run api
-```
-
-You can override the API port (default 5000) with:
-
-```bash
-PORT=5001 python3 server/app.py
-```
-
-### 4. Run the frontend (Nuxt)
-
-```bash
+# From the project root
 npm install
-HOST=0.0.0.0 PORT=3000 npm run dev
+npm run dev          # development server at http://localhost:3000
+
+# Production build
+npm run build && npm run start
 ```
 
-The frontend uses these env vars (optional):
+### 4. Host Sensor VM (optional — Continuous Monitoring only)
+
+The sensor VM exposes a small Flask service on port 5005 and runs a Zeek
+agent that forwards parsed `conn.log` entries to the main API.
 
 ```bash
-API_BASE_URL=http://127.0.0.1:5001
-WS_URL=ws://127.0.0.1:5001
-```
+cd "Host Files"
 
-Server starts at:
+# Start the tcpdump / Nmap service
+bash start_sensor.sh
 
-```
-http://127.0.0.1:5000
-```
-
-Swagger Docs:
-
-```
-http://127.0.0.1:5000/apidocs/
+# Start the Zeek flow agent
+# Configure SECRET_TOKEN and the API URL inside the script to match server/.env
+python zeek_agent.py
 ```
 
 ---
 
-## Environment Variables
+## API Documentation
 
-| Variable             | Description                   | Default                  |
-| -------------------- | ----------------------------- | ------------------------ |
-| `PCAP_OUTPUT_DIR`    | Directory for generated PCAPs | `server/generated_pcaps` |
-| `MAX_CONTENT_LENGTH` | Max upload size               | `1GB`                    |
+Interactive Swagger UI:
 
-```bash
-npm install
-npm run dev
+```
+http://127.0.0.1:5555/apidocs
+```
 
+No login is required to browse the documentation. Endpoints that require a
+JWT Bearer token are marked with a lock icon. Use the **Authorize** button
+in the UI to supply your token for live testing.
+
+**Obtain a token:**
+
+```http
+POST http://127.0.0.1:5555/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "changeme123" }
 ```
 
 ---
 
-## API Overview
+## API Endpoint Summary
 
-### **Core Analysis**
+### Authentication
 
-- `POST /automated-analysis`: Upload a PCAP for full stack analysis (Stats, Graph, UE, Roles).
-- `POST /clustering`: Perform agglomerative clustering on network nodes.
-- `POST /run_pipeline`: Trigger the ML/Rule-based classification pipeline.
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/login` | — | Obtain a JWT access token |
+| POST | `/auth/register` | Admin JWT | Create a new user account |
+| GET | `/auth/users` | Admin JWT | List all users |
+| DELETE | `/auth/users/<id>` | Admin JWT | Delete a user |
 
-### **Real-Time & PCAP Generation**
+### PCAP Management
 
-- `POST /save-pcap`: Stream Base64 packet chunks to build a PCAP file on the server.
-- `GET /generated_pcaps/<filename>`: Download the assembled PCAP.
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/save-pcap` | JWT | Stream Base64 packet chunks to assemble a PCAP |
+| GET | `/generated_pcaps/<filename>` | JWT | Download a stored PCAP file |
 
-### **Utilities**
+### Analysis
 
-- `GET /suggested_clusters`: Calculates the "Elbow" or modularity peak to suggest clusters.
-- `POST /save_roles`: Export identified network roles to CSV/JSON.
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/analyze-saved-pcap/<filename>` | JWT | Protocol stats + network graph for a stored PCAP |
+| POST | `/automated-analysis` | JWT | Upload a PCAP, run full analysis + role pipeline |
+| POST | `/start-analysis-from-websocket` | JWT | Capture from a WebSocket URL then run pipeline |
+
+### Clustering
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/suggested_clusters?file=` | JWT | Modularity-based optimal k suggestion |
+| POST | `/clustering` | JWT | Run agglomerative clustering |
+| POST | `/save-results` | JWT | Persist clustering results (CSV + JSON) |
+| GET | `/clustering-output/<filename>` | JWT | Download a saved clustering result |
+| POST | `/run_pipeline` | JWT | Run the IP role classification pipeline |
+| GET | `/save_roles?file=&type=` | JWT | Download role report as JSON or CSV |
+
+### Continuous Monitoring
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/v1/ingest/zeek` | X-Internal-Token | Receive Zeek flow batches from the sensor VM |
+| GET | `/v1/network/statistics` | JWT | Query time-series flow statistics |
+| GET | `/v1/network/roles/latest` | JWT | Latest IP role snapshot |
+| GET | `/v1/network/pcap/headers` | JWT | Fetch headers-only PCAP from sensor for a time range |
+| GET | `/v1/network/pcap/latest/full` | JWT | Fetch the latest full-payload PCAP from sensor |
+| GET | `/v1/network/export` | JWT | Export flow data as CSV or JSON |
+| POST | `/v1/analyze_live` | JWT | Run role pipeline on the latest captured PCAP |
+| POST | `/v1/scan/start` | JWT | Trigger an Nmap scan on the sensor VM |
+| GET | `/v1/scan/results` | JWT | Retrieve Nmap scan results |
 
 ---
 
-## Documentation
+## Project Structure
 
-The project uses Sphinx for documentation.
-
-```bash
-# Build documentation
-make html
-
+```
+network-analyzer/
+├── components/          # Vue components (AppHeader, stepper steps, charts)
+├── Host Files/          # Sensor VM agents (zeek_agent.py, start_sensor.sh)
+├── layouts/             # Nuxt layouts (default.vue with theme CSS variables)
+├── middleware/          # Nuxt auth middleware
+├── pages/               # Nuxt page components
+│   ├── index.vue        # Home / dashboard
+│   ├── analyze.vue      # PCAP upload & analysis
+│   ├── clustering.vue   # Clustering stepper
+│   ├── realTime.vue     # Real-time WebSocket capture
+│   ├── continuous_monitoring.vue
+│   ├── about.vue
+│   ├── contact.vue
+│   ├── login.vue
+│   └── admin/users.vue
+├── plugins/             # Nuxt plugins (auth, api fetch wrapper)
+├── server/
+│   ├── app.py           # Main Flask application
+│   ├── models.py        # SQLAlchemy models
+│   ├── requirements.txt
+│   ├── docs/            # Swagger YAML definitions per endpoint
+│   ├── agglomerative_clustering.py
+│   ├── pcap_analysis.py
+│   ├── Preprocess.py    # IP role classification pipeline
+│   ├── role_assessment.py
+│   ├── graph_builder.py
+│   ├── ueAnalysis.py
+│   └── snapshot_scheduler.py
+├── store/               # Vuex store (auth module)
+├── nuxt.config.js
+└── package.json
 ```
 
 ---
 
-**2025 © UTH – XTRUST-6G**
+## License
+
+MIT License — Copyright © 2025 University of Thessaly
