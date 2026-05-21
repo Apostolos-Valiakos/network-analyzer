@@ -166,6 +166,21 @@ with app.app_context():
         db.session.execute(db.text(
             "ALTER TABLE users ALTER COLUMN password_hash TYPE VARCHAR(256)"
         ))
+        db.session.execute(db.text(
+            "ALTER TABLE pcap_files ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'upload'"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE pcap_files ADD COLUMN IF NOT EXISTS analysis_result JSONB"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE cluster_results ADD COLUMN IF NOT EXISTS result_json JSONB"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE cluster_results ADD COLUMN IF NOT EXISTS pcap_id VARCHAR(36) REFERENCES pcap_files(id) ON DELETE SET NULL"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE cluster_results ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)"
+        ))
         db.session.commit()
     except Exception as e:
         logger.warning("Schema migration warning: %s", e)
@@ -363,6 +378,7 @@ def save_pcap_stream():
                 original_filename=session_id,
                 file_path=file_path,
                 status="PROCESSING",
+                source="generated",
                 user_id=_current_user_id(),
             )
             db.session.add(pcap_record)
@@ -470,6 +486,7 @@ def automated_analysis():
             file_path=str(pcap_path),
             file_size=os.path.getsize(pcap_path),
             status="PROCESSING",
+            source="upload",
             user_id=_current_user_id(),
         )
         db.session.add(pcap_record)
@@ -500,7 +517,13 @@ def automated_analysis():
                 )
             db.session.bulk_save_objects(ue_objects)
 
+        stored_result = {
+            "total_packets": analysis_result["total_packets"],
+            "graph": build_graph_json(analysis_result["conversations"]),
+            "roles": report.get("ip_roles", {}),
+        }
         pcap_record.status = "COMPLETED"
+        pcap_record.analysis_result = stored_result
         db.session.commit()
 
         response = {
@@ -508,10 +531,10 @@ def automated_analysis():
             "json": f"/save_roles?file={unique_name[:-5]}&type=json",
             "csv": f"/save_roles?file={unique_name[:-5]}&type=csv",
             "analysis": {
-                "total_packets": analysis_result["total_packets"],
-                "graph": build_graph_json(analysis_result["conversations"]),
+                "total_packets": stored_result["total_packets"],
+                "graph": stored_result["graph"],
             },
-            "roles": report.get("ip_roles", {}),
+            "roles": stored_result["roles"],
         }
         return jsonify(response), 200
 
@@ -558,6 +581,25 @@ def clustering_analysis():
             max_clusters=max_clusters,
             anomaly_threshold=anomaly_threshold,
         )
+
+        uid = _current_user_id()
+        existing = ClusterResult.query.filter_by(pcap_id=pcap.id).first()
+        if existing:
+            existing.result_json = result
+            existing.created_at = datetime.utcnow()
+        else:
+            db.session.add(ClusterResult(
+                user_id=uid,
+                filename=f"cluster_{pcap.id}",
+                result_json=result,
+                pcap_id=pcap.id,
+                original_filename=pcap.original_filename,
+            ))
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
         return jsonify(result), 200
     except Exception as e:
         logger.exception("clustering_analysis failed")
@@ -1111,6 +1153,182 @@ def get_scan_results():
     except Exception as e:
         logger.exception("get_scan_results: failed to reach VM")
         return jsonify({"error": "Failed to reach VM"}), 500
+
+
+# ==========================================
+# FILE HISTORY ENDPOINTS
+# ==========================================
+
+def _pcap_to_dict(r):
+    return {
+        "id": r.id,
+        "filename": r.filename,
+        "original_filename": r.original_filename,
+        "file_size": r.file_size,
+        "upload_time": r.upload_time.isoformat() if r.upload_time else None,
+        "status": r.status,
+        "source": r.source,
+        "has_result": r.analysis_result is not None,
+        "username": r.uploader.username if r.uploader else None,
+    }
+
+
+def _cluster_to_dict(r):
+    return {
+        "id": r.id,
+        "filename": r.filename,
+        "original_filename": r.original_filename,
+        "pcap_id": r.pcap_id,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "has_result": r.result_json is not None,
+        "username": r.owner.username if r.owner else None,
+    }
+
+
+def _is_admin(user_id: int) -> bool:
+    u = User.query.get(user_id)
+    return bool(u and u.is_admin)
+
+
+@app.route("/v1/history/pcaps", methods=["GET"])
+@jwt_required()
+def history_pcaps():
+    uid = _current_user_id()
+    q = PcapFile.query.filter_by(source="upload")
+    if not _is_admin(uid):
+        q = q.filter_by(user_id=uid)
+    records = q.order_by(PcapFile.upload_time.desc()).all()
+    return jsonify([_pcap_to_dict(r) for r in records])
+
+
+@app.route("/v1/history/generated", methods=["GET"])
+@jwt_required()
+def history_generated():
+    uid = _current_user_id()
+    q = PcapFile.query.filter_by(source="generated")
+    if not _is_admin(uid):
+        q = q.filter_by(user_id=uid)
+    records = q.order_by(PcapFile.upload_time.desc()).all()
+    return jsonify([_pcap_to_dict(r) for r in records])
+
+
+@app.route("/v1/history/clusters", methods=["GET"])
+@jwt_required()
+def history_clusters():
+    uid = _current_user_id()
+    q = ClusterResult.query
+    if not _is_admin(uid):
+        q = q.filter_by(user_id=uid)
+    records = q.order_by(ClusterResult.created_at.desc()).all()
+    return jsonify([_cluster_to_dict(r) for r in records])
+
+
+@app.route("/v1/history/pcap/<pcap_id>/result", methods=["GET"])
+@jwt_required()
+def get_pcap_history_result(pcap_id):
+    uid = _current_user_id()
+    record = PcapFile.query.get(pcap_id)
+    if not record:
+        return jsonify({"error": "Not found"}), 404
+    if not _is_admin(uid) and record.user_id != uid:
+        return jsonify({"error": "Access denied"}), 403
+    if not record.analysis_result:
+        return jsonify({"error": "No results stored"}), 404
+    return jsonify(record.analysis_result)
+
+
+@app.route("/v1/history/cluster/<int:cluster_id>/result", methods=["GET"])
+@jwt_required()
+def get_cluster_history_result(cluster_id):
+    uid = _current_user_id()
+    record = ClusterResult.query.get(cluster_id)
+    if not record:
+        return jsonify({"error": "Not found"}), 404
+    if not _is_admin(uid) and record.user_id != uid:
+        return jsonify({"error": "Access denied"}), 403
+    if not record.result_json:
+        return jsonify({"error": "No results stored"}), 404
+    return jsonify(record.result_json)
+
+
+@app.route("/v1/history/pcap/<pcap_id>/reanalyze", methods=["POST"])
+@jwt_required()
+@limiter.limit("5 per minute")
+def reanalyze_pcap(pcap_id):
+    uid = _current_user_id()
+    record = PcapFile.query.get(pcap_id)
+    if not record:
+        return jsonify({"error": "Not found"}), 404
+    if not _is_admin(uid) and record.user_id != uid:
+        return jsonify({"error": "Access denied"}), 403
+
+    filepath = Path(record.file_path)
+    if not filepath.exists():
+        return jsonify({"error": "File no longer exists on disk"}), 410
+
+    try:
+        analysis_result, err = initialize_analysis(str(filepath))
+        if err:
+            raise RuntimeError(err)
+
+        report = run_ip_role_pipeline(str(filepath), "rule_based")
+
+        stored_result = {
+            "total_packets": analysis_result["total_packets"],
+            "graph": build_graph_json(analysis_result["conversations"]),
+            "roles": report.get("ip_roles", {}),
+        }
+        record.analysis_result = stored_result
+        record.status = "COMPLETED"
+        db.session.commit()
+        return jsonify(stored_result), 200
+    except Exception:
+        logger.exception("reanalyze_pcap failed")
+        db.session.rollback()
+        return jsonify({"error": "Analysis failed"}), 500
+
+
+@app.route("/v1/history/pcap/<pcap_id>", methods=["DELETE"])
+@jwt_required()
+def delete_history_pcap(pcap_id):
+    uid = _current_user_id()
+    record = PcapFile.query.get(pcap_id)
+    if not record:
+        return jsonify({"error": "Not found"}), 404
+    if not _is_admin(uid) and record.user_id != uid:
+        return jsonify({"error": "Access denied"}), 403
+
+    if record.file_path and os.path.exists(record.file_path):
+        try:
+            os.remove(record.file_path)
+        except OSError:
+            logger.warning("Could not delete file: %s", record.file_path)
+
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"message": "Deleted"}), 200
+
+
+@app.route("/v1/history/cluster/<int:cluster_id>", methods=["DELETE"])
+@jwt_required()
+def delete_history_cluster(cluster_id):
+    uid = _current_user_id()
+    record = ClusterResult.query.get(cluster_id)
+    if not record:
+        return jsonify({"error": "Not found"}), 404
+    if not _is_admin(uid) and record.user_id != uid:
+        return jsonify({"error": "Access denied"}), 403
+
+    output_path = Path(CLUSTERING_OUTPUT_DIR) / record.filename
+    if output_path.exists():
+        try:
+            output_path.unlink()
+        except OSError:
+            logger.warning("Could not delete cluster file: %s", record.filename)
+
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"message": "Deleted"}), 200
 
 
 if __name__ == "__main__":

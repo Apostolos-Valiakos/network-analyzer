@@ -215,6 +215,7 @@ export default {
       navItems: [
         { to: "/", icon: "mdi-home-outline", label: "Home", exact: true },
         { to: "/analyze", icon: "mdi-file-upload-outline", label: "Analyze" },
+        { to: "/history", icon: "mdi-history", label: "History" },
         { to: "/realTime", icon: "mdi-access-point", label: "Real Time" },
         {
           to: "/continuous_monitoring",

@@ -32,6 +32,8 @@ class PcapFile(db.Model):
     file_size = db.Column(db.BigInteger)
     upload_time = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default="PENDING")
+    source = db.Column(db.String(20), default="upload")  # "upload" or "generated"
+    analysis_result = db.Column(db.JSON, nullable=True)
 
     # Relationships (Needed for rrc_utils.py and ueAnalysis.py)
     roles = db.relationship(
@@ -131,3 +133,6 @@ class ClusterResult(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     filename = db.Column(db.String(255), nullable=False, unique=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    result_json = db.Column(db.JSON, nullable=True)
+    pcap_id = db.Column(db.String(36), db.ForeignKey("pcap_files.id", ondelete="SET NULL"), nullable=True)
+    original_filename = db.Column(db.String(255), nullable=True)
