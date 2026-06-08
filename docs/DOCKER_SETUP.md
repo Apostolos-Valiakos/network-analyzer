@@ -29,27 +29,38 @@ Docker and the app handle everything:
 sudo apt-get remove docker docker-engine docker.io containerd runc
 ```
 
-### 1.2 Add Docker's official repository
+### 1.2 Install prerequisites
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg
-
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get install -y ca-certificates curl
 ```
 
-> **Debian users:** replace `ubuntu` with `debian` in the URL above.
+### 1.3 Download Docker's official GPG key
 
-### 1.3 Install Docker Engine + Compose plugin
+```bash
+# Ensure the keyrings directory exists
+sudo install -m 0755 -d /etc/apt/keyrings
+
+# Download the key directly as .asc
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+
+# Grant read permissions
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+```
+
+### 1.4 Add the Docker repository to APT sources
+
+```bash
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+
+> **Debian users:** replace `ubuntu` with `debian` in both URLs above.
+
+### 1.5 Install Docker Engine + Compose plugin
 
 ```bash
 sudo apt-get update
@@ -61,14 +72,14 @@ sudo apt-get install -y \
     docker-compose-plugin
 ```
 
-### 1.4 Allow your user to run Docker without sudo
+### 1.6 Allow your user to run Docker without sudo
 
 ```bash
 sudo usermod -aG docker $USER
 newgrp docker          # apply group change without logging out
 ```
 
-### 1.5 Verify the installation
+### 1.7 Verify the installation
 
 ```bash
 docker --version          # Docker version 26.x.x …
