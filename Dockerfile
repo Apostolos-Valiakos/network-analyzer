@@ -1,31 +1,30 @@
-# --- Stage 1: Build the Application ---
-FROM node:lts-alpine AS build-stage
+# ── Stage 1: Build ─────────────────────────────────────────────────────────
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# 1. Copy package.json and package-lock.json (if available)
-# Doing this before copying the rest of the code caches the install step
+# Copy manifests first for layer-cache efficiency
 COPY package*.json ./
+RUN npm ci --prefer-offline
 
-# 2. Install dependencies
-RUN npm install
-
-# 3. Copy the rest of the application source code
+# Copy source (node_modules excluded via .dockerignore)
 COPY . .
 
-# 4. Build the app
-# Generates the static 'dist' folder required for Nginx
+# API_BASE_URL and WS_URL are inlined into the webpack bundle by nuxt.config.js
+# at build time (SPA/static mode).  Override from docker-compose build.args or
+# docker build --build-arg API_BASE_URL=http://your-server:5555
+ARG API_BASE_URL=http://localhost:5555
+ARG WS_URL=ws://localhost:5002
+ENV API_BASE_URL=$API_BASE_URL
+ENV WS_URL=$WS_URL
+
 RUN npm run generate
 
-# --- Stage 2: Serve with Nginx ---
-FROM nginx:stable-alpine AS production-stage
+# ── Stage 2: Serve ─────────────────────────────────────────────────────────
+FROM nginx:stable-alpine
 
-# Nuxt static generation outputs to '/dist' inside the '/app' directory
-COPY --from=build-stage /app/dist /usr/share/nginx/html
-
-# Replace default nginx config with our hardened version
+COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

@@ -58,10 +58,11 @@ import requests
 
 faulthandler.enable()
 
-UPLOAD_FOLDER = "server/uploads"
-PCAP_GEN_OUTPUT_DIR = "server/generated_pcaps"
-CLUSTERING_OUTPUT_DIR = "server/cluster_analysis"
-RESULTS_OUTPUT_DIR = "server/results"
+_SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(_SERVER_DIR, "uploads")
+PCAP_GEN_OUTPUT_DIR = os.path.join(_SERVER_DIR, "generated_pcaps")
+CLUSTERING_OUTPUT_DIR = os.path.join(_SERVER_DIR, "cluster_analysis")
+RESULTS_OUTPUT_DIR = os.path.join(_SERVER_DIR, "results")
 
 for d in [
     UPLOAD_FOLDER,
@@ -621,11 +622,15 @@ def suggested_clusters():
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
 
-    result = analyze_pcap_for_clustering(
-        str(filepath), max_clusters=10, anomaly_threshold=2
-    )
-    summary = result["clusterSummary"]
+    try:
+        result = analyze_pcap_for_clustering(
+            str(filepath), max_clusters=10, anomaly_threshold=2
+        )
+    except Exception:
+        logger.exception("suggested_clusters: analysis failed for %s", filename)
+        return jsonify({"error": "Clustering analysis failed"}), 500
 
+    summary = result["clusterSummary"]
     return jsonify(
         {
             "best_k": summary["best_k"],
@@ -707,9 +712,14 @@ def run_pipeline_endpoint():
 
     try:
         report = run_ip_role_pipeline(str(full_path), model, data.get("selected_ips"))
+        if report.get("status") == "success" and "ip_roles" in report:
+            report["ip_roles"] = {
+                ip: {"role": role, "confidence": 0.90}
+                for ip, role in report["ip_roles"].items()
+            }
         status = 200 if report.get("status") == "success" else 500
         return jsonify(report), status
-    except Exception as e:
+    except Exception:
         logger.exception("run_pipeline_endpoint failed")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
 
@@ -1109,7 +1119,7 @@ def analyze_live():
 
         return jsonify(results), 200
 
-    except Exception as e:
+    except Exception:
         logger.exception("analyze_live failed")
         return jsonify({"message": "Internal server error"}), 500
 
@@ -1117,6 +1127,7 @@ def analyze_live():
 @app.route("/v1/scan/start", methods=["POST"])
 @jwt_required()
 @limiter.limit("5 per minute")
+@swag_from("docs/start_scan.yml")
 def start_scan():
     data = request.get_json() or {}
 
@@ -1136,13 +1147,14 @@ def start_scan():
     try:
         response = requests.post(vm_url, json=data, headers=headers, timeout=10)
         return jsonify(response.json()), response.status_code
-    except Exception as e:
+    except Exception:
         logger.exception("start_scan: failed to reach VM")
         return jsonify({"error": "Failed to reach VM"}), 500
 
 
 @app.route("/v1/scan/results", methods=["GET"])
 @jwt_required()
+@swag_from("docs/get_scan_results.yml")
 def get_scan_results():
     vm_url = "http://127.0.0.1:5005/get-nmap-results"
     headers = {"X-Internal-Token": os.getenv("SECRET_TOKEN", "")}
@@ -1150,7 +1162,7 @@ def get_scan_results():
     try:
         response = requests.get(vm_url, headers=headers, timeout=10)
         return jsonify(response.json()), response.status_code
-    except Exception as e:
+    except Exception:
         logger.exception("get_scan_results: failed to reach VM")
         return jsonify({"error": "Failed to reach VM"}), 500
 

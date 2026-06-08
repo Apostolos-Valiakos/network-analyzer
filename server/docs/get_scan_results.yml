@@ -1,0 +1,112 @@
+tags:
+  - Active Probing
+summary: Poll Nmap Scan Results
+description: >
+  Retrieves the results of the most recently dispatched Nmap scan from the
+  Sensor VM. This endpoint is intended to be polled after calling
+  POST /v1/scan/start.
+
+  The "status" field in the response drives the polling loop.
+  A value of "running" means the scan is still in progress and the client
+  should poll again in a few seconds.
+  A value of "completed" means the scan finished and the "results" array
+  contains the parsed Nmap output.
+  A value of "error" means the scan failed on the VM; inspect the
+  "message" field for details.
+  A value of "idle" means no scan has been started yet, or the results
+  have been cleared.
+
+  The frontend polls this endpoint on a 5-second interval and stops
+  automatically when "status" reaches "completed" or "error".
+  Polling faster than every 2 seconds is not recommended.
+produces:
+  - application/json
+security:
+  - Bearer: []
+responses:
+  200:
+    description: Current scan status and, when complete, the parsed results.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [idle, running, completed, error]
+          description: Current state of the async Nmap job on the Sensor VM.
+          example: "completed"
+        message:
+          type: string
+          description: Human-readable status message or error detail.
+          example: "Scan completed successfully."
+        results:
+          type: array
+          description: >
+            List of scanned hosts. Present only when status is "completed".
+            Each entry describes one host and its discovered open ports.
+          items:
+            type: object
+            properties:
+              host:
+                type: string
+                description: IP address of the scanned host.
+                example: "192.168.1.10"
+              hostname:
+                type: string
+                description: Resolved hostname, if available.
+                example: "gateway.local"
+              state:
+                type: string
+                description: Host reachability state reported by Nmap.
+                example: "up"
+              ports:
+                type: array
+                description: List of discovered open ports and services.
+                items:
+                  type: object
+                  properties:
+                    port:
+                      type: integer
+                      example: 22
+                    protocol:
+                      type: string
+                      example: "tcp"
+                    state:
+                      type: string
+                      example: "open"
+                    service:
+                      type: string
+                      description: Service name identified by Nmap.
+                      example: "ssh"
+                    version:
+                      type: string
+                      description: >
+                        Service version string. Populated when the "deep"
+                        or "vuln" profile was used.
+                      example: "OpenSSH 8.9p1 Ubuntu"
+                    cves:
+                      type: array
+                      description: >
+                        CVE identifiers reported by the Vulners NSE script.
+                        Populated only when the "vuln" profile was used.
+                      items:
+                        type: string
+                      example: ["CVE-2023-38408", "CVE-2021-41617"]
+  401:
+    description: Missing or invalid JWT Bearer token.
+    schema:
+      type: object
+      properties:
+        msg:
+          type: string
+          example: "Missing Authorization Header"
+  500:
+    description: >
+      The Sensor VM could not be reached. Ensure pcap_server.py is running
+      and network connectivity between the application server and the
+      Sensor VM is intact.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Failed to reach VM"

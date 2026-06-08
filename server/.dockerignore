@@ -1,6 +1,15 @@
 __pycache__
 *.pyc
+*.pyo
 .git
 .env
-venv/
+venv
 Dockerfile
+
+# Runtime data — created fresh inside the container via volumes
+uploads
+generated_pcaps
+cluster_analysis
+results
+
+*.log

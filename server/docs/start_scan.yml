@@ -1,0 +1,118 @@
+tags:
+  - Active Probing
+summary: Start Asynchronous Nmap Scan
+description: >
+  Dispatches an active network probe to the Sensor VM, which runs Nmap
+  asynchronously against the specified target(s). The request returns
+  immediately with an acceptance acknowledgement; poll GET /v1/scan/results
+  to retrieve the output once the scan completes.
+
+  Two targeting modes are supported. Pass a single "target" string
+  (IP address, CIDR range, or hostname) for a single-target scan,
+  or pass a "targets" array of IP addresses for a multi-target scan.
+  Exactly one of the two fields must be present.
+
+  Three scan profiles are available via the "profile" field.
+  "fast" runs Nmap with the -F flag and scans the 100 most common ports
+  (fastest option, completes in seconds).
+  "deep" runs Nmap with -sV for service and version detection across all
+  open ports (default).
+  "vuln" combines version detection with the Vulners NSE script across the
+  first 10000 ports, producing a list of known CVEs per service.
+
+  All string parameter values are validated against a strict allowlist
+  (valid IPs, CIDRs, plain hostnames) before being forwarded to the Sensor
+  VM. Shell metacharacters and encoded sequences are rejected with HTTP 400.
+
+  Rate limit is 5 requests per minute per authenticated user.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: >
+            Single scan target — an IP address, CIDR notation, or hostname.
+            Mutually exclusive with "targets".
+          example: "192.168.1.0/24"
+        targets:
+          type: array
+          items:
+            type: string
+          description: >
+            List of individual IP addresses to scan.
+            Mutually exclusive with "target".
+          example: ["10.0.0.1", "10.0.0.5", "10.0.0.12"]
+        profile:
+          type: string
+          enum: [fast, deep, vuln]
+          default: deep
+          description: >
+            Nmap scan profile. "fast" uses -F (100 common ports).
+            "deep" uses -sV (version detection). "vuln" uses version
+            detection plus the Vulners NSE script on 10000 ports.
+          example: "deep"
+      example:
+        target: "192.168.1.0/24"
+        profile: "deep"
+security:
+  - Bearer: []
+responses:
+  202:
+    description: >
+      Scan accepted and dispatched to the Sensor VM.
+      Poll GET /v1/scan/results to retrieve results.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "accepted"
+        message:
+          type: string
+          example: "Nmap scan started."
+  400:
+    description: >
+      Invalid request. Returned when a parameter value contains shell
+      metacharacters, an unrecognised character sequence, or fails
+      IP / CIDR / hostname validation.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid value for parameter 'target'"
+  401:
+    description: Missing or invalid JWT Bearer token.
+    schema:
+      type: object
+      properties:
+        msg:
+          type: string
+          example: "Missing Authorization Header"
+  429:
+    description: Rate limit exceeded — more than 5 requests per minute.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "5 per 1 minute"
+  500:
+    description: >
+      The Sensor VM could not be reached, or the VM returned an internal
+      error. Ensure pcap_server.py is running on the Sensor VM and that
+      the INTERNAL_TOKEN values match on both sides.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Failed to reach VM"

@@ -40,8 +40,8 @@ export default {
   ],
 
   env: {
-    API_BASE_URL: process.env.API_BASE_URL || "http://127.0.0.1:5001",
-    WS_URL: process.env.WS_URL || "ws://127.0.0.1:5001",
+    API_BASE_URL: process.env.API_BASE_URL || "http://127.0.0.1:5555",
+    WS_URL: process.env.WS_URL || "ws://127.0.0.1:5002",
   },
 
   // Vuetify module configuration: https://go.nuxtjs.dev/config-vuetify

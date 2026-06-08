@@ -328,11 +328,21 @@ def suggest_clusters_modularity(df, max_clusters=10):
 #         and a summary of cluster modularity results.
 def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2):
     df = extract_features(pcap_path)
+
+    if len(df) < 2:
+        raise ValueError(
+            f"Not enough unique IP endpoints to cluster "
+            f"(found {len(df)}, minimum 2 required). "
+            "Capture more traffic before running clustering."
+        )
+
     cluster_result = suggest_clusters_modularity(df, max_clusters=max_clusters)
     df = cluster_nodes(df, n_clusters=cluster_result["best_k"])
     anomalies = detect_anomalies(df, threshold=anomaly_threshold)
     graph_data = build_graph_data(df)
-    save_results(df, os.path.basename(pcap_path), "server/cluster_analysis")
+
+    _output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cluster_analysis")
+    save_results(df, os.path.basename(pcap_path), _output_dir)
 
     return {
         "clusters": anomalies,

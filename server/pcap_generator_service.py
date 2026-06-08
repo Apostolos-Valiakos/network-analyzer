@@ -1,54 +1,60 @@
 import os
 import base64
-from typing import List, Dict, Union
+import struct
+import time
+from typing import List, Union
 
-# Define the directory where PCAP files will be saved
-PCAP_OUTPUT_DIR = "generated_pcaps"
+# Resolve path relative to this file so it always points to
+# server/generated_pcaps/ regardless of where Flask is launched from.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+PCAP_OUTPUT_DIR = os.path.join(_HERE, "generated_pcaps")
 os.makedirs(PCAP_OUTPUT_DIR, exist_ok=True)
 
+# PCAP global header — written once at the start of each new file.
+# Little-endian, magic 0xa1b2c3d4, version 2.4, LINKTYPE_ETHERNET (1).
+_PCAP_GLOBAL_HEADER = struct.pack(
+    "<IHHiIII",
+    0xA1B2C3D4,  # magic number
+    2, 4,        # version major / minor
+    0,           # timezone offset (GMT)
+    0,           # timestamp accuracy
+    65535,       # snapshot length
+    1,           # link-layer type: Ethernet
+)
 
-##
-# Handles a chunk of packets from the frontend.
-# Appends raw binary data to a session-specific PCAP file.
-#
-# @param [str] session_id Unique identifier for the capture session.
-# @param [list] packets List of Base64 encoded packet strings.
-# @param [bool] is_final_chunk If True, finalizes the file (optional logic).
-# @return [tuple] (success: bool, filename: str|None, error: str|None)
+
+def _pcap_packet_header(pkt_len: int) -> bytes:
+    ts = time.time()
+    ts_sec = int(ts)
+    ts_usec = int((ts - ts_sec) * 1_000_000)
+    return struct.pack("<IIII", ts_sec, ts_usec, pkt_len, pkt_len)
+
+
 def handle_pcap_chunk(
     session_id: str, packets: List[str], is_final_chunk: bool = False
 ):
     if not session_id:
         return False, None, "Missing session_id"
 
-    # Sanitize session_id to prevent directory traversal
     safe_filename = f"{os.path.basename(session_id)}.pcap"
     file_path = os.path.join(PCAP_OUTPUT_DIR, safe_filename)
 
     try:
-        # Open in APPEND binary mode ('ab')
+        is_new_file = not os.path.exists(file_path)
         with open(file_path, "ab") as f:
+            if is_new_file:
+                f.write(_PCAP_GLOBAL_HEADER)
             for b64_pkt in packets:
                 if not b64_pkt:
                     continue
                 try:
-                    # Decode Base64 to raw bytes
                     pkt_bytes = base64.b64decode(b64_pkt)
-
-                    # Write PCAP Packet Header + Data
-                    # Note: The frontend sends raw packet bytes.
-                    # To make a valid PCAP, we technically need a Global Header (once)
-                    # and Packet Headers (per packet).
-                    # Assuming the sniffer sends fully formed frames or we rely on
-                    # a library like Scapy to fix it later.
-                    # For raw appending:
+                    f.write(_pcap_packet_header(len(pkt_bytes)))
                     f.write(pkt_bytes)
                 except Exception as e:
-                    print(f"Error decoding packet chunk: {e}")
+                    print(f"Error decoding packet: {e}")
                     continue
-
         return True, safe_filename, None
-
     except Exception as e:
         return False, None, str(e)
 

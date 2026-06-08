@@ -1,20 +1,70 @@
 version: '3.8'
 
 services:
-  # The Python Backend
-  server:
-    build:
-      context: ./server  # Looks inside the 'server' folder for the Dockerfile
-    ports:
-      - "5000:5000"
-    container_name: network_analyzer_backend
 
-  # The Nuxt/Nginx Frontend
+  # ── PostgreSQL + TimescaleDB ──────────────────────────────────────────────
+  db:
+    image: timescale/timescaledb:latest-pg14
+    container_name: penm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: network_analyzer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pass}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Flask Backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./server
+    container_name: penm_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-pass}@db:5432/network_analyzer
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_in_production}
+      SECRET_TOKEN: ${SECRET_TOKEN:-change_me_in_production}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      PORT: "5555"
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_generated:/app/generated_pcaps
+      - backend_clusters:/app/cluster_analysis
+      - backend_results:/app/results
+    ports:
+      - "5555:5555"
+
+  # ── Nuxt Frontend (static build served by Nginx) ──────────────────────────
   frontend:
     build:
-      context: .         # Looks in the current root folder for the Dockerfile
+      context: .
+      args:
+        # These are baked into the Nuxt bundle at image-build time.
+        # Change them here (or via .env) whenever the backend host/port changes.
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:5555}
+        WS_URL: ${WS_URL:-ws://localhost:5002}
+    container_name: penm_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
     ports:
       - "80:80"
-    container_name: network_analyzer_frontend
-    depends_on:
-      - server           # Ensures backend starts before frontend
+
+volumes:
+  db_data:
+  backend_uploads:
+  backend_generated:
+  backend_clusters:
+  backend_results:

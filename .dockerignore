@@ -1,7 +1,27 @@
+# Dependencies — reinstalled inside the container
 node_modules
+
+# Git history
 .git
 .gitignore
-Dockerfile
-server/
-dist/
-.output/
+
+# Runtime artifacts
+dist
+.nuxt
+.output
+
+# Backend folder — not needed for the frontend image
+server
+
+# Secrets
+.env
+
+# Editor / OS noise
+.DS_Store
+*.log
+Thumbs.db
+
+# Docs / test data
+docs
+uploads
+generated_pcaps

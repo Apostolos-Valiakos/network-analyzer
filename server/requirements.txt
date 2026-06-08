@@ -15,3 +15,5 @@ flask-sqlalchemy
 psycopg2-binary
 flask_jwt_extended
 flask-limiter
+flask-socketio
+eventlet

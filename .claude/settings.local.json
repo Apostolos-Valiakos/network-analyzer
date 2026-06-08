@@ -8,7 +8,22 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('snapshot_scheduler.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -c \"import dotenv; print\\('python-dotenv available'\\)\")",
       "Bash(python.exe -m pip install python-dotenv flask-limiter)",
-      "Bash(python.exe -c \"from dotenv import load_dotenv; print\\('python-dotenv OK'\\)\")"
+      "Bash(python.exe -c \"from dotenv import load_dotenv; print\\('python-dotenv OK'\\)\")",
+      "Bash(Test-Path \"c:\\\\Users\\\\student\\\\Desktop\\\\network analyzer\\\\README.md\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -s http://127.0.0.1:5555/apispec_1.json)",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"import flasgger.utils; print\\(flasgger.utils.__file__\\)\")",
+      "Bash(curl -sv http://127.0.0.1:5555/apispec_1.json)",
+      "Bash(Get-Content \"C:\\\\Users\\\\student\\\\.claude\\\\projects\\\\c--Users-student-Desktop-network-analyzer\\\\d05b10c8-28e1-469e-8321-17d63cb8b8d5.jsonl\")",
+      "Bash(Select-Object -Last 100)",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\student\\\\.claude\\\\projects\\\\c--Users-student-Desktop-network-analyzer\\\\d05b10c8-28e1-469e-8321-17d63cb8b8d5.jsonl\" -Tail 50; $content | ForEach-Object { try { $j = $_ | ConvertFrom-Json; if \\($j.message.role -eq 'assistant'\\) { $j.message.content | ForEach-Object { if \\($_.type -eq 'text'\\) { Write-Output \"ASSISTANT: $\\($_.text.Substring\\(0, [Math]::Min\\(500, $_.text.Length\\)\\)\\)\" } } } elseif \\($j.type -eq 'user'\\) { $j.message.content | ForEach-Object { if \\($_.type -eq 'tool_result'\\) { Write-Output \"TOOL_RESULT: $\\($_.content | Out-String | Select-Object -First 3\\)\" } } } } catch {} })",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git filter-branch -f --msg-filter 'python3 -c \" *)",
+      "Bash(git stash *)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'python3 -c \" *)"
     ]
   }
 }

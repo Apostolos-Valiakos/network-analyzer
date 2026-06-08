@@ -11,7 +11,7 @@
 
     <div class="realtime-view">
       <v-btn
-        @click="stopCaptureAndDownload"
+        @click="generateSnapshot"
         :disabled="!isConnected || !isCapturing || isGenerating"
         color="primary"
         size="large"
@@ -19,7 +19,7 @@
         class="control-btn"
         prepend-icon="mdi-download"
       >
-        {{ isGenerating ? "Finalizing PCAP..." : "Generate PCAP" }}
+        {{ isGenerating ? "Saving snapshot..." : "Generate PCAP" }}
       </v-btn>
       <div v-if="downloadLink" class="mt-2">
         <a :href="downloadLink" :download="filename">Download PCAP</a>
@@ -113,7 +113,7 @@
             </v-btn>
             <v-btn
               @click="stopCapture"
-              :disabled="!isConnected || !isCapturing || isGenerating"
+              :disabled="!isConnected || isGenerating"
               color="orange"
               variant="flat"
               class="control-btn"
@@ -143,15 +143,15 @@
               Visualize
             </v-btn>
             <v-btn
-              :disabled="!totalPacketsCaptured || isSendingPcap"
-              @click="startClustering()"
+              :disabled="!totalPacketsCaptured || isSendingPcap || isGenerating"
+              @click="analyzeCapture"
               color="blue"
               size="large"
               variant="flat"
               class="control-btn mb-4"
               prepend-icon="mdi-chart-areaspline"
             >
-              Analyze
+              {{ isGenerating ? "Preparing..." : "Analyze" }}
             </v-btn>
           </div>
         </v-card>
@@ -232,7 +232,7 @@ export default {
   components: { NetworkGraph },
   data() {
     return {
-      wsUrl: process.env.VUE_APP_WS_URL || "ws://127.0.0.1:5001",
+      wsUrl: process.env.WS_URL || "ws://127.0.0.1:5002",
       apiUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555",
       chunkSize: 500,
 
@@ -302,14 +302,9 @@ export default {
         if (msg.type === "STATUS") {
           if (msg.status === "CAPTURE_STARTED") {
             this.isCapturing = true;
-            // NOTE: sessionId is now set in startCapture() to prevent race conditions.
-            // We only reset UI elements if they weren't already reset.
-            if (
-              this.totalPacketsCaptured > 0 &&
-              this.uploadQueue.length === 0
-            ) {
-              // This implies a restart from another client or glitch, safe to sync
-            }
+          }
+          if (msg.status === "CAPTURE_STOPPED") {
+            this.isCapturing = false;
           }
           if (msg.current_interface)
             this.currentInterface = msg.current_interface;
@@ -390,21 +385,6 @@ export default {
           }.${bytes[ipOffset + 19]}`;
 
           this.updateLiveGraph(srcIp, dstIp);
-
-          // Only log if session ID exists
-          if (this.sessionId) {
-            this.$apiFetch(`${this.apiUrl}/log-packet`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                session_id: this.sessionId,
-                src_ip: srcIp,
-                dst_ip: dstIp,
-                protocol: protocol,
-                size: size,
-              }),
-            }).catch(() => {});
-          }
         }
       } catch (e) {
         // Ignore parsing errors
@@ -446,10 +426,29 @@ export default {
       }
     },
 
-    stopCaptureAndDownload() {
-      this.sendControlCommand("STOP_CAPTURE");
+    // Snapshot: finalize current buffer as a PCAP, keep capture running
+    async generateSnapshot() {
+      if (this.isGenerating) return;
       this.isGenerating = true;
-      setTimeout(() => this.flushUploadQueue(true), 500);
+      await this.flushUploadQueue(true);
+      // Start a fresh accumulation session for the ongoing capture
+      this.sessionId = this.generateUniqueId();
+      this.uploadQueue = [];
+    },
+
+    // Stop capture, finalize PCAP, navigate to clustering
+    async analyzeCapture() {
+      if (this.isGenerating) return;
+      this.isGenerating = true;
+      this.sendControlCommand("STOP_CAPTURE");
+      this.isCapturing = false;
+      await this.flushUploadQueue(true);
+      if (!this.filename) {
+        this.showSnackbar("Failed to generate PCAP for analysis", "error");
+        this.isGenerating = false;
+        return;
+      }
+      this.$router.push({ path: "/clustering", query: { id: this.filename } });
     },
 
     async handleVisualizeNetwork() {
@@ -492,6 +491,7 @@ export default {
 
     stopCapture() {
       this.sendControlCommand("STOP_CAPTURE");
+      this.isCapturing = false;
     },
     clearPackets() {
       this.totalPacketsCaptured = 0;
@@ -501,7 +501,9 @@ export default {
       this.graphData = null;
     },
     startClustering() {
-      this.$router.push({ name: "clustering", query: { id: this.filename } });
+      if (this.filename) {
+        this.$router.push({ path: "/clustering", query: { id: this.filename } });
+      }
     },
     showSnackbar(text, type) {
       this.snackbarText = text;
