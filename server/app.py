@@ -9,6 +9,7 @@ import re
 import json
 import logging
 import ipaddress
+import time
 from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env before any os.getenv() calls
@@ -140,10 +141,9 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
 # Initialize DB Tables
-with app.app_context():
+def _init_db():
     db.create_all()
 
-    # Enable TimescaleDB Hypertable for flow statistics
     try:
         db.session.execute(
             db.text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
@@ -159,7 +159,6 @@ with app.app_context():
         print(f"TimescaleDB warning (ensure it is installed on PG server): {e}")
         db.session.rollback()
 
-    # Migrate pre-existing tables to add columns added after initial creation
     try:
         db.session.execute(db.text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"
@@ -187,7 +186,6 @@ with app.app_context():
         logger.warning("Schema migration warning: %s", e)
         db.session.rollback()
 
-    # Seed first admin from env vars if no admin exists yet
     _admin_username = os.getenv("ADMIN_USERNAME")
     _admin_password = os.getenv("ADMIN_PASSWORD")
     if _admin_username and _admin_password:
@@ -199,6 +197,23 @@ with app.app_context():
             ))
             db.session.commit()
             logger.info("Seeded admin user: %s", _admin_username)
+
+_MAX_DB_RETRIES = 12
+_DB_RETRY_DELAY = 5  # seconds between attempts
+
+with app.app_context():
+    for _attempt in range(1, _MAX_DB_RETRIES + 1):
+        try:
+            _init_db()
+            break
+        except Exception as _exc:
+            if _attempt < _MAX_DB_RETRIES:
+                print(f"[DB] Attempt {_attempt}/{_MAX_DB_RETRIES} failed: {_exc}. Retrying in {_DB_RETRY_DELAY}s...")
+                time.sleep(_DB_RETRY_DELAY)
+            else:
+                raise RuntimeError(
+                    f"Could not initialise database after {_MAX_DB_RETRIES} attempts."
+                ) from _exc
 
 def generate_csv_response(data_list, filename):
     """Converts a list of dicts to a CSV Flask response."""

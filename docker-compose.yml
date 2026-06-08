@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  penm_net:
+    driver: bridge
+
 services:
 
   # ── PostgreSQL + TimescaleDB ──────────────────────────────────────────────
@@ -7,6 +11,8 @@ services:
     image: timescale/timescaledb:latest-pg14
     container_name: penm_db
     restart: unless-stopped
+    networks:
+      - penm_net
     environment:
       POSTGRES_DB: network_analyzer
       POSTGRES_USER: postgres
@@ -27,6 +33,8 @@ services:
       context: ./server
     container_name: penm_backend
     restart: unless-stopped
+    networks:
+      - penm_net
     depends_on:
       db:
         condition: service_healthy
@@ -51,12 +59,12 @@ services:
     build:
       context: .
       args:
-        # These are baked into the Nuxt bundle at image-build time.
-        # Change them here (or via .env) whenever the backend host/port changes.
         API_BASE_URL: ${API_BASE_URL:-http://localhost:5555}
         WS_URL: ${WS_URL:-ws://localhost:5002}
     container_name: penm_frontend
     restart: unless-stopped
+    networks:
+      - penm_net
     depends_on:
       - backend
     ports:
