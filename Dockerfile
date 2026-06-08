@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Copy manifests first for layer-cache efficiency
 COPY package*.json ./
-RUN npm ci --prefer-offline
+RUN npm install
 
 # Copy source (node_modules excluded via .dockerignore)
 COPY . .
