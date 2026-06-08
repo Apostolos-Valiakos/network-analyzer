@@ -79,7 +79,7 @@ export default {
       showPassword: false,
       loading: false,
       error: null,
-      apiBaseUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555",
+      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
     };
   },
 

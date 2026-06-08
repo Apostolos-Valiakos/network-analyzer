@@ -190,7 +190,7 @@ export default {
 
   data() {
     return {
-      apiBaseUrl: process.env.VUE_APP_API_BASE_URL || "http://127.0.0.1:5555",
+      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       form: { username: "", password: "", is_admin: false },
       showPassword: false,
       creating: false,

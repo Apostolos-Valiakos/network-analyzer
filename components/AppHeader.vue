@@ -230,7 +230,7 @@ export default {
         },
         { to: "/contact", icon: "mdi-email-outline", label: "Contact" },
         {
-          href: `${process.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:5555'}/apidocs`,
+          href: `${process.env.API_BASE_URL || 'http://127.0.0.1:5555'}/apidocs`,
           icon: "mdi-book-open-variant",
           label: "API Docs",
         },
