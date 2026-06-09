@@ -542,7 +542,7 @@ export default {
   data() {
     return {
       socket: null,
-      apiUrl: process.env.HOST_URL || "http://10.6.2.135:5555",
+      apiUrl: process.env.API_BASE_URL || "http://localhost:5555",
       startTime: this.getLocalISOString(new Date(Date.now() - 3600000)),
       endTime: this.getLocalISOString(new Date()),
       isLive: true,
@@ -692,6 +692,15 @@ export default {
     this.socket = io(this.apiUrl, {
       transports: ["websocket", "polling"],
       upgrade: true,
+    });
+    this.socket.on("connect", () => {
+      this.showSnackbar("Live feed connected.", "success");
+    });
+    this.socket.on("disconnect", () => {
+      this.showSnackbar("Live feed disconnected.", "warning");
+    });
+    this.socket.on("connect_error", () => {
+      this.showSnackbar("Could not connect to live feed.", "error");
     });
     this.socket.on("new_network_data", (newFlows) => {
       if (this.isLive) {
