@@ -1,2 +1,2 @@
-redef TCP::inactivity_timeout = 30sec;
-redef UDP::inactivity_timeout = 15sec;
+redef tcp_inactivity_timeout = 30sec;
+redef udp_inactivity_timeout = 15sec;

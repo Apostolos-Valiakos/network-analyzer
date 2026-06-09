@@ -7,6 +7,12 @@
 # Override by setting HOST_IP in the environment before running this script.
 HOST_IP="${HOST_IP:-$(hostname -I | awk '{print $1}')}"
 
+# Shared secret — must match SECRET_TOKEN in the backend .env file.
+export SECRET_TOKEN="${SECRET_TOKEN:-affcb41505dc0f50fae1c4cb897ca980d9a10990d389f632dac46fe40918fb36}"
+
+# Backend ingest URL.
+export HOST_API_URL="${HOST_API_URL:-http://10.250.100.42:5555/v1/ingest/zeek}"
+
 # Ports used by pcap_server.py and zeek_agent.py — excluded from capture.
 SENSOR_PORTS="5000 or port 5001 or port 5005"
 # ──────────────────────────────────────────────────────────────────────────────
