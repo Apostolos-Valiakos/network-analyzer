@@ -11,16 +11,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
-# Edit these three values before deploying to the sensor machine.
+# Set these environment variables on the sensor machine, or edit the defaults.
+#   export HOST_API_URL=http://10.250.100.42:5555/v1/ingest/zeek
+#   export SECRET_TOKEN=<value from backend .env>
 
-# Path to the Zeek JSON connection log (relative to the working directory).
 ZEEK_LOG_PATH = "conn.log"
 
-# Full URL of the Flask API ingest endpoint on the application server.
-HOST_API_URL = "http://192.168.1.10:5555/v1/ingest/zeek"
+HOST_API_URL = os.environ.get(
+    "HOST_API_URL", "http://10.250.100.42:5555/v1/ingest/zeek"
+)
 
-# Shared secret — must match INTERNAL_TOKEN in the backend .env file.
-SECRET_TOKEN = "change_me_internal_token"
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Batch settings to optimize network traffic

@@ -4,7 +4,8 @@
 # Edit these values before deploying to the sensor machine.
 
 # IP address of this sensor VM (used to exclude its own management traffic).
-HOST_IP="10.6.2.135"
+# Override by setting HOST_IP in the environment before running this script.
+HOST_IP="${HOST_IP:-$(hostname -I | awk '{print $1}')}"
 
 # Ports used by pcap_server.py and zeek_agent.py — excluded from capture.
 SENSOR_PORTS="5000 or port 5001 or port 5005"
