@@ -810,7 +810,7 @@ def ingest_zeek():
 
     conn = None
     try:
-        conn = psycopg2.connect(app.config["SQLALCHEMY_DATABASE_URI"])
+        conn = db.engine.raw_connection()
         cursor = conn.cursor()
         batch = []
 
