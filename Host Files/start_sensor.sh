@@ -33,7 +33,7 @@ sudo dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
 DUMPCAP_PID=$!
 
 echo -e "\n[*] Starting Zeek..."
-sudo /opt/zeek/bin/zeek -C -i $INTERFACE LogAscii::use_json=T -f "$FILTER" > /dev/null 2>&1 &
+sudo /opt/zeek/bin/zeek -C -i $INTERFACE LogAscii::use_json=T tuning.zeek -f "$FILTER" > /dev/null 2>&1 &
 ZEEK_PID=$!
 
 sleep 2 
