@@ -2,7 +2,9 @@ import logging
 import os
 import glob
 import io
+import re
 import subprocess
+import threading
 from flask import Flask, request, send_file, jsonify
 
 logging.basicConfig(
@@ -81,6 +83,55 @@ def get_pcap():
             os.remove(merged_filename)
         if os.path.exists(out_filename):
             os.remove(out_filename)
+
+_SAFE_NMAP_ARGS = re.compile(r'^[a-zA-Z0-9 ./\-]+$')
+
+_scan_lock = threading.Lock()
+_scan_result = {"status": "idle", "output": "", "error": ""}
+
+
+def _run_nmap(target, args):
+    global _scan_result
+    try:
+        cmd = ["nmap"] + args.split() + [target]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        with _scan_lock:
+            _scan_result = {"status": "done", "output": proc.stdout, "error": proc.stderr}
+    except subprocess.TimeoutExpired:
+        with _scan_lock:
+            _scan_result = {"status": "error", "output": "", "error": "Scan timed out"}
+    except Exception as e:
+        with _scan_lock:
+            _scan_result = {"status": "error", "output": "", "error": str(e)}
+
+
+@app.route("/run-nmap-async", methods=["POST"])
+def run_nmap_async():
+    data = request.get_json(silent=True) or {}
+    target = data.get("target", "")
+    args = data.get("args", "-sV")
+
+    if not target or not _SAFE_NMAP_ARGS.match(target):
+        return jsonify({"error": "Invalid target"}), 400
+    if not _SAFE_NMAP_ARGS.match(args):
+        return jsonify({"error": "Invalid args"}), 400
+
+    with _scan_lock:
+        _scan_result["status"] = "running"
+        _scan_result["output"] = ""
+        _scan_result["error"] = ""
+
+    thread = threading.Thread(target=_run_nmap, args=(target, args), daemon=True)
+    thread.start()
+    return jsonify({"status": "running"}), 202
+
+
+@app.route("/get-nmap-results", methods=["GET"])
+def get_nmap_results():
+    with _scan_lock:
+        result = dict(_scan_result)
+    return jsonify(result), 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5005)
