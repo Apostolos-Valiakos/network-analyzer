@@ -790,7 +790,7 @@ def start_analysis_from_websocket():
 # CONTINUOUS MONITORING API ENDPOINTS
 # ==========================================
 
-VM_URL = "http://127.0.0.1:5005/get-pcap"
+VM_URL = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/get-pcap"
 SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 
 
@@ -992,23 +992,27 @@ def get_pcap_headers_only():
     start_time = request.args.get("start_time")
     end_time = request.args.get("end_time")
 
-    vm_response = requests.get(
-        VM_URL,
-        params={"start_time": start_time, "end_time": end_time, "headers_only": "true"},
-        headers={"X-Internal-Token": SECRET_TOKEN},
-        stream=True,
-    )
-
-    if vm_response.status_code != 200:
-        return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 500
-
-    return Response(
-        vm_response.iter_content(chunk_size=1024),
-        content_type="application/vnd.tcpdump.pcap",
-        headers={
-            "Content-Disposition": f"attachment; filename=headers_{int(float(start_time))}.pcap"
-        },
-    )
+    try:
+        vm_response = requests.get(
+            VM_URL,
+            params={"start_time": start_time, "end_time": end_time, "headers_only": "true"},
+            headers={"X-Internal-Token": SECRET_TOKEN},
+            stream=True,
+            timeout=10,
+        )
+        if vm_response.status_code != 200:
+            return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 502
+        return Response(
+            vm_response.iter_content(chunk_size=1024),
+            content_type="application/vnd.tcpdump.pcap",
+            headers={
+                "Content-Disposition": f"attachment; filename=headers_{int(float(start_time))}.pcap"
+            },
+        )
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "Sensor is unreachable"}), 503
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Sensor request timed out"}), 504
 
 
 @app.route("/v1/network/pcap/latest/full", methods=["GET"])
@@ -1016,18 +1020,21 @@ def get_pcap_headers_only():
 @swag_from("docs/get_latest_full_pcap.yml")
 def get_latest_full_pcap():
     """Endpoint 4: Get Full Payload PCAP (Latest Snapshot)"""
-    vm_response = requests.get(
-        VM_URL, headers={"X-Internal-Token": SECRET_TOKEN}, stream=True
-    )
-
-    if vm_response.status_code != 200:
-        return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 500
-
-    return Response(
-        vm_response.iter_content(chunk_size=1024),
-        content_type="application/vnd.tcpdump.pcap",
-        headers={"Content-Disposition": "attachment; filename=latest_full.pcap"},
-    )
+    try:
+        vm_response = requests.get(
+            VM_URL, headers={"X-Internal-Token": SECRET_TOKEN}, stream=True, timeout=10
+        )
+        if vm_response.status_code != 200:
+            return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 502
+        return Response(
+            vm_response.iter_content(chunk_size=1024),
+            content_type="application/vnd.tcpdump.pcap",
+            headers={"Content-Disposition": "attachment; filename=latest_full.pcap"},
+        )
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "Sensor is unreachable"}), 503
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Sensor request timed out"}), 504
 
 
 @app.route("/v1/network/export", methods=["GET"])
@@ -1153,7 +1160,7 @@ def start_scan():
             logger.warning("start_scan: rejected unsafe param %s=%r", key, value)
             return jsonify({"error": f"Invalid value for parameter '{key}'"}), 400
 
-    vm_url = "http://127.0.0.1:5005/run-nmap-async"
+    vm_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/run-nmap-async"
     headers = {
         "X-Internal-Token": os.getenv("SECRET_TOKEN", ""),
         "Content-Type": "application/json",
@@ -1171,7 +1178,7 @@ def start_scan():
 @jwt_required()
 @swag_from("docs/get_scan_results.yml")
 def get_scan_results():
-    vm_url = "http://127.0.0.1:5005/get-nmap-results"
+    vm_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/get-nmap-results"
     headers = {"X-Internal-Token": os.getenv("SECRET_TOKEN", "")}
 
     try:
