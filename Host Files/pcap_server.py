@@ -16,8 +16,8 @@ app = Flask(__name__)
 # ─── Configuration ────────────────────────────────────────────────────────────
 # Edit this value before deploying to the sensor machine.
 
-# Shared secret — must match INTERNAL_TOKEN in the backend .env file.
-SECRET_TOKEN = "change_me_internal_token"
+# Shared secret — must match SECRET_TOKEN in the backend .env file.
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
 # ──────────────────────────────────────────────────────────────────────────────
 
 PCAP_DIR = "generated_pcaps"

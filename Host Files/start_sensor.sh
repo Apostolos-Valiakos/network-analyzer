@@ -17,6 +17,12 @@ export HOST_API_URL="${HOST_API_URL:-http://10.250.100.42:5555/v1/ingest/zeek}"
 SENSOR_PORTS="5000 or port 5001 or port 5005"
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Activate virtual environment if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate"
+fi
+
 if [ -z "$1" ]; then
     echo -e "\n Error: No network interface provided. (e.g., ./start_sensor.sh enp0s3)\n"
     exit 1
@@ -34,7 +40,7 @@ echo -e "\n Starting Sensor Node on interface: $INTERFACE"
 FILTER="not (host $HOST_IP and (port $SENSOR_PORTS))"
 
 echo -e "\n[*] Starting dumpcap (Ring Buffer)..."
-sudo dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
+sudo /usr/bin/dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
   -w generated_pcaps/continuous_capture.pcap \
   -f "$FILTER" > /dev/null 2>&1 &
 DUMPCAP_PID=$!
