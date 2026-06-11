@@ -8,7 +8,7 @@
 HOST_IP="${HOST_IP:-$(hostname -I | awk '{print $1}')}"
 
 # Shared secret — must match SECRET_TOKEN in the backend .env file.
-export SECRET_TOKEN="${SECRET_TOKEN:-affcb41505dc0f50fae1c4cb897ca980d9a10990d389f632dac46fe40918fb36}"
+export SECRET_TOKEN="${SECRET_TOKEN:-405266d38a2b176a0545f4398d91a29b2dc8fa39dd9ce0ca8f668d90af8fd819}"
 
 # Backend ingest URL.
 export HOST_API_URL="${HOST_API_URL:-http://10.250.100.42:5555/v1/ingest/zeek}"
@@ -40,7 +40,7 @@ echo -e "\n Starting Sensor Node on interface: $INTERFACE"
 FILTER="not (host $HOST_IP and (port $SENSOR_PORTS))"
 
 echo -e "\n[*] Starting dumpcap (Ring Buffer)..."
-sudo /usr/bin/dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
+/usr/bin/dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
   -w generated_pcaps/continuous_capture.pcap \
   -f "$FILTER" > /dev/null 2>&1 &
 DUMPCAP_PID=$!
