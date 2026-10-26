@@ -53,6 +53,12 @@
         </div>
       </v-card>
 
+      <PrivacyPanel
+        v-if="response && response.privacy_records && response.privacy_records.length"
+        :records="response.privacy_records"
+        :api-base-url="apiBaseUrl"
+      />
+
       <div class="d-flex flex-wrap btn-gap">
         <v-btn
           color="success"
@@ -78,9 +84,10 @@
 <script>
 import Assessments from "@/components/Assessments.vue";
 import NetworkGraph from "@/components/NetworkGraph.vue";
+import PrivacyPanel from "@/components/PrivacyPanel.vue";
 
 export default {
-  components: { Assessments, NetworkGraph },
+  components: { Assessments, NetworkGraph, PrivacyPanel },
 
   data() {
     return {

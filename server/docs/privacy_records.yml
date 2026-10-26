@@ -1,0 +1,22 @@
+tags:
+  - Privacy
+summary: Per-host privacy records
+description: Builds one record per host from an uploaded PCAP (one tshark pass). GTP-U inner UE addresses get their own record; cut-off captures are accepted.
+parameters:
+  - name: filename
+    in: path
+    type: string
+    required: true
+    description: The name of the uploaded PCAP file.
+  - name: pilot
+    in: query
+    type: string
+    required: false
+    description: Pilot label used for per-pilot pseudonymisation.
+responses:
+  200:
+    description: Records with ip, mac, mac_vendor, subnet, scope, role, service_port, protocols, protocol_count, packets, bytes, tx_share, peer_count, first_seen_s, duration_s, pilot.
+  404:
+    description: PCAP file not found.
+  500:
+    description: tshark failed.
