@@ -1,34 +1,40 @@
 <template>
-  <v-container class="pa-4">
-    <div>
-      <h1 class="text-h5 mb-4">Upload PCAP for Full Analysis</h1>
-      <h5 class="text-disabled mb-2 grey--text">
-        The file is saved and fully analyzed in one step (stats, UE, clustering,
-        ML roles).
-      </h5>
+  <v-container class="pa-6" style="max-width: 960px">
+    <div class="d-flex align-center mb-6">
+      <v-icon size="32" color="primary" class="mr-3">mdi-file-upload-outline</v-icon>
+      <div>
+        <h1 class="text-h5 font-weight-bold mb-0">Upload PCAP for Full Analysis</h1>
+        <p class="text-caption mb-0 text-dim">
+          Saved and fully analyzed in one step — stats, UE, clustering, ML roles.
+        </p>
+      </div>
     </div>
 
-    <v-file-input
-      v-model="file"
-      label="Select .pcap file"
-      filled
-      prepend-icon="mdi-file"
-      show-size
-      accept=".pcap"
-      @change="handleFile"
-    ></v-file-input>
+    <v-card class="themed-card rounded-xl pa-5 mb-6">
+      <v-file-input
+        v-model="file"
+        label="Select .pcap file"
+        outlined
+        dense
+        prepend-inner-icon="mdi-file-outline"
+        show-size
+        accept=".pcap"
+        hide-details
+        @change="handleFile"
+      />
+      <v-btn
+        :disabled="!file"
+        :loading="loading"
+        color="primary"
+        class="mt-4"
+        @click="runFullAnalysis"
+      >
+        <v-icon left>mdi-play-circle-outline</v-icon>
+        Analyse
+      </v-btn>
+    </v-card>
 
-    <v-btn
-      :disabled="!file"
-      :loading="loading"
-      color="primary"
-      class="mt-4"
-      @click="runFullAnalysis"
-    >
-      Analyse
-    </v-btn>
-
-    <div v-if="analysis" class="mt-8">
+    <div v-if="analysis">
       <v-alert
         v-if="loadedFromCache"
         type="info"
@@ -39,244 +45,35 @@
         Loaded previous results from this browser. Upload a new file to replace
         them.
       </v-alert>
-      <!-- Packet Stats -->
-      <v-card class="mb-6 pa-4" outlined>
-        <h3>Total Packets: {{ analysis.total_packets }}</h3>
-      </v-card>
 
-      <v-card class="mb-6 pa-4" outlined>
-        <h3 class="text-h6 mb-2">Privacy Metrics</h3>
-        <p class="mb-4 grey--text text--darken-1">
-          Select identifiers and sensitive attributes, then test
-          pseudonymization, generalization, and suppression to improve
-          k-anonymity, l-diversity, and t-closeness.
-        </p>
-
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="privacyIdentifiers"
-              :items="privacyColumns"
-              label="Identifiers (quasi-identifiers)"
-              multiple
-              chips
-              outlined
-              dense
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="privacySensitiveAttribute"
-              :items="privacyColumns"
-              label="Sensitive Attribute"
-              outlined
-              dense
-            />
-          </v-col>
-        </v-row>
-
-        <div class="mb-4 d-flex align-center">
-          <v-btn small text color="primary" @click="privacyInfoDialog = true">
-            <v-icon small class="mr-1">mdi-information-outline</v-icon>
-            Privacy Transformation Info
-          </v-btn>
-        </div>
-
-        <v-dialog v-model="privacyInfoDialog" max-width="760">
-          <v-card>
-            <v-card-title class="text-h6">Privacy Transformation Info</v-card-title>
-            <v-card-text>
-              <div class="option-line">
-                <b>Pseudonymization</b> replaces direct values (like IPs) with stable tokens (e.g. <code>ps_xxx</code>) while keeping row linkage.
-              </div>
-              <div class="option-line"><b>Deterministic:</b> same input always maps to same token.</div>
-              <div class="option-line"><b>Per-run:</b> stable only for current computation, changes next run.</div>
-              <div class="option-line"><b>Per-pilot:</b> stable within each pilot value, different across pilots.</div>
-              <div class="option-line mt-2">
-                <b>Generalization</b> makes values less specific (IP masks, numeric bins, text prefixes, protocol families) to increase anonymity.
-              </div>
-              <div class="option-line mt-2">
-                <b>Suppression</b> masks selected values as <code>*</code>; threshold suppression hides low-frequency values.
-              </div>
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer />
-              <v-btn text color="primary" @click="privacyInfoDialog = false">Close</v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
-
-        <v-expansion-panels v-model="privacyPanels" multiple flat class="mb-4">
-          <v-expansion-panel>
-            <v-expansion-panel-header>
-              <span class="font-weight-medium">Pseudonymization</span>
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
-              <v-select
-                v-model="privacyPseudonymize"
-                :items="privacyColumns"
-                label="Pseudonymize Columns"
-                multiple
-                chips
-                outlined
-                dense
-                class="mb-2"
-              />
-              <v-select
-                v-model="privacyPseudonymizationMode"
-                :items="pseudonymizationModeOptions"
-                item-text="text"
-                item-value="value"
-                label="Pseudonymization Mode"
-                outlined
-                dense
-              />
-            </v-expansion-panel-content>
-          </v-expansion-panel>
-
-          <v-expansion-panel>
-            <v-expansion-panel-header>
-              <span class="font-weight-medium">Generalization</span>
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
-              <v-select
-                v-model="privacyGeneralize"
-                :items="privacyColumns"
-                label="Generalize Columns"
-                multiple
-                chips
-                outlined
-                dense
-                class="mb-2"
-              />
-              <v-select
-                v-for="col in privacyGeneralize"
-                :key="`gen-${col}`"
-                v-model="privacyGeneralizeProfiles[col]"
-                :items="generalizationProfileOptions"
-                item-text="text"
-                item-value="value"
-                :label="`Profile for ${col}`"
-                outlined
-                dense
-                class="mb-2"
-              />
-              <v-alert dense outlined type="info" class="mt-2">
-                Auto: by data type, IP /24 and /16: subnet/network grouping, Numeric bins 5/10: range buckets, Text prefix 1/3: partial masking, Protocol family: TCP/SCTP/UDP/OTHER.
-              </v-alert>
-            </v-expansion-panel-content>
-          </v-expansion-panel>
-
-          <v-expansion-panel>
-            <v-expansion-panel-header>
-              <span class="font-weight-medium">Suppression</span>
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
-              <v-select
-                v-model="privacySuppress"
-                :items="privacyColumns"
-                label="Suppress Columns"
-                multiple
-                chips
-                outlined
-                dense
-                class="mb-2"
-              />
-              <v-text-field
-                v-model.number="privacySuppressThreshold"
-                type="number"
-                min="2"
-                label="Suppression threshold (min frequency)"
-                outlined
-                dense
-              />
-            </v-expansion-panel-content>
-          </v-expansion-panel>
-        </v-expansion-panels>
-
-        <v-btn
-          color="primary"
-          class="mb-4"
-          :disabled="!canComputePrivacy"
-          :loading="privacyLoading"
-          @click="computePrivacyMetrics"
-        >
-          Compute Privacy Metrics
-        </v-btn>
-
-        <v-alert v-if="privacyError" type="error" dense class="mb-4">
-          {{ privacyError }}
-        </v-alert>
-        <v-alert
-          v-if="privacySuggestions.length"
-          type="warning"
-          dense
-          outlined
-          class="mb-4"
-        >
-          <div class="mb-1"><b>Suggestions</b></div>
-          <ul class="suggestions">
-            <li v-for="(item, idx) in privacySuggestions" :key="`sug-${idx}`">
-              {{ item }}
-            </li>
-          </ul>
-        </v-alert>
-
-        <v-row v-if="privacyOriginalMetrics && privacyTransformedMetrics">
-          <v-col cols="12" md="6">
-            <v-card outlined class="pa-3">
-              <h4 class="mb-2">Before Transformations</h4>
-              <div class="metric-line">
-                k-anonymity: {{ privacyOriginalMetrics.k_anonymity }}
-              </div>
-              <div class="metric-line">
-                l-diversity: {{ privacyOriginalMetrics.l_diversity }}
-              </div>
-              <div class="metric-line">
-                t-closeness: {{ privacyOriginalMetrics.t_closeness }}
-              </div>
-            </v-card>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-card outlined class="pa-3">
-              <h4 class="mb-2">After Transformations</h4>
-              <div class="metric-line">
-                k-anonymity: {{ privacyTransformedMetrics.k_anonymity }}
-              </div>
-              <div class="metric-line">
-                l-diversity: {{ privacyTransformedMetrics.l_diversity }}
-              </div>
-              <div class="metric-line">
-                t-closeness: {{ privacyTransformedMetrics.t_closeness }}
-              </div>
-            </v-card>
-          </v-col>
-        </v-row>
-
-        <div v-if="privacyTransformedRecords.length" class="mt-4">
-          <h4 class="mb-2">Transformed Records Preview</h4>
-          <v-data-table
-            :headers="privacyTableHeaders"
-            :items="privacyTransformedRecords"
-            dense
-            hide-default-footer
-          />
+      <v-card class="themed-accent-card rounded-xl pa-5 mb-5">
+        <div class="d-flex align-center">
+          <v-icon color="primary" class="mr-3">mdi-package-variant</v-icon>
+          <span class="text-h6 font-weight-bold">Total Packets: <span class="primary--text">{{ analysis.total_packets }}</span></span>
         </div>
       </v-card>
 
-      <div class="mt-4">
+      <PrivacyPanel
+        v-if="response && response.privacy_records && response.privacy_records.length"
+        :records="response.privacy_records"
+        :api-base-url="apiBaseUrl"
+      />
+
+      <div class="d-flex flex-wrap btn-gap">
         <v-btn
           color="success"
-          class="mr-3"
           @click="saveRoles('json')"
           :loading="savingJson"
         >
+          <v-icon left>mdi-code-json</v-icon>
           Save Roles as JSON
         </v-btn>
         <v-btn color="success" @click="saveRoles('csv')" :loading="savingCsv">
+          <v-icon left>mdi-table</v-icon>
           Save Roles as CSV
         </v-btn>
-        <v-btn text class="ml-3" @click="clearCachedResults">
+        <v-btn text @click="clearCachedResults">
+          <v-icon left>mdi-trash-can-outline</v-icon>
           Clear cached results
         </v-btn>
       </div>
@@ -285,7 +82,13 @@
 </template>
 
 <script>
+import Assessments from "@/components/Assessments.vue";
+import NetworkGraph from "@/components/NetworkGraph.vue";
+import PrivacyPanel from "@/components/PrivacyPanel.vue";
+
 export default {
+  components: { Assessments, NetworkGraph, PrivacyPanel },
+
   data() {
     return {
       cacheKey: "analyze:latest",
@@ -293,8 +96,6 @@ export default {
       loading: false,
       savingJson: false,
       savingCsv: false,
-
-      // Results from backend
       filename: null,
       analysis: null,
       graphData: null,
@@ -303,7 +104,7 @@ export default {
       clustering: null,
       suggested_clusters: null,
       response: null,
-      apiBaseUrl: process.env.API_BASE_URL,
+      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       loadedFromCache: false,
       privacyInfoDialog: false,
       privacyPanels: [0, 1, 2],
@@ -461,7 +262,7 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await fetch(`${this.apiBaseUrl}/automated-analysis`, {
+        const resp = await this.$apiFetch(`${this.apiBaseUrl}/automated-analysis`, {
           method: "POST",
           body: form,
         });
@@ -483,8 +284,6 @@ export default {
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
         this.cacheResults(data);
-        console.log(data);
-        console.log(data.roles);
       } catch (err) {
         alert(`Analysis failed: ${err.message}`);
       } finally {
@@ -551,7 +350,7 @@ export default {
       const url = `${this.apiBaseUrl}/save_roles?file=${this.filename}&type=${type}`;
 
       try {
-        const resp = await fetch(url);
+        const resp = await this.$apiFetch(url);
         if (!resp.ok) {
           const err = await resp.json();
           throw new Error(err.error || "Save failed");
@@ -581,30 +380,11 @@ export default {
 </script>
 
 <style scoped>
-.v-card {
-  border-radius: 8px;
+.themed-card {
+  border: 1px solid var(--border) !important;
 }
-
-.metric-line {
-  font-size: 0.95rem;
-  margin-bottom: 4px;
+.themed-accent-card {
+  border: 1px solid var(--accent-border) !important;
 }
-
-.suggestions {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.option-line {
-  font-size: 0.92rem;
-  margin-bottom: 4px;
-}
-
-.privacy-option-card {
-  height: 100%;
-}
-
-.privacy-option-grid .v-col {
-  display: flex;
-}
+.btn-gap { gap: 12px; }
 </style>

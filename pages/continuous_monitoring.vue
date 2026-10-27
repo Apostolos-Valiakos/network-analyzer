@@ -1,0 +1,1229 @@
+<template>
+  <v-container class="dark-page-container" fluid>
+    <v-snackbar v-model="snackbar" :color="snackbarType" timeout="3000">
+      {{ snackbarText }}
+      <template v-slot:actions>
+        <v-btn color="white" variant="text" @click="snackbar = false"
+          >Close</v-btn
+        >
+      </template>
+    </v-snackbar>
+
+    <v-row>
+      <v-col cols="12">
+        <v-card class="elevation-8 rounded-xl pa-6 status-card">
+          <div class="d-flex justify-space-between align-center">
+            <div>
+              <h2 class="text-h4 font-weight-bold text-white mb-2">
+                Continuous Monitoring Dashboard
+              </h2>
+              <p class="text-white text-opacity-80 mb-0">
+                Live network statistics, traffic trends, and role snapshots
+              </p>
+            </div>
+            <v-icon size="64" color="white" class="opacity-50"
+              >mdi-monitor-dashboard</v-icon
+            >
+          </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row class="mt-4">
+      <v-col cols="12" md="5">
+        <v-card class="elevation-4 rounded-xl pa-4 h-100">
+          <h3 class="text-h6 mb-4">Timeframe Selection</h3>
+          <v-row>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="startTime"
+                label="Start Time"
+                type="datetime-local"
+                variant="outlined"
+                density="compact"
+                hide-details
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="endTime"
+                label="End Time"
+                type="datetime-local"
+                variant="outlined"
+                density="compact"
+                hide-details
+              ></v-text-field>
+            </v-col>
+            <v-col
+              cols="12"
+              class="d-flex align-center justify-space-between mt-2"
+            >
+              <v-switch
+                v-model="isLive"
+                label="Live Mode"
+                color="success"
+                density="compact"
+                hide-details
+              ></v-switch>
+              <v-btn
+                color="primary"
+                @click="fetchData"
+                :loading="loading"
+                width="120"
+                >Apply</v-btn
+              >
+            </v-col>
+          </v-row>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="3">
+        <v-card
+          class="elevation-4 rounded-xl pa-4 h-100 d-flex flex-column justify-center"
+        >
+          <h3 class="text-subtitle-1 font-weight-bold mb-3 text-center">
+            Raw PCAP
+          </h3>
+          <v-btn
+            color="secondary"
+            variant="flat"
+            class="mb-3"
+            prepend-icon="mdi-download"
+            @click="downloadHeadersPcap"
+            >Headers Only</v-btn
+          >
+          <v-btn
+            color="green-darken-1"
+            variant="flat"
+            prepend-icon="mdi-download-multiple"
+            @click="downloadFullPcap"
+            >Full Payload</v-btn
+          >
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="4">
+        <v-card
+          class="elevation-4 rounded-xl pa-4 h-100 d-flex flex-column justify-center"
+        >
+          <h3 class="text-subtitle-1 font-weight-bold mb-2 text-center">
+            Export Analytics
+          </h3>
+          <v-text-field
+            v-model="exportLimit"
+            label="Limit (Optional, leave blank for all)"
+            type="number"
+            variant="outlined"
+            density="compact"
+            hide-details
+            class="mb-3"
+          ></v-text-field>
+          <div class="d-flex" style="gap: 8px">
+            <v-btn
+              color="info"
+              variant="flat"
+              class="flex-grow-1"
+              prepend-icon="mdi-file-delimited"
+              @click="downloadAnalytics('csv')"
+              >CSV</v-btn
+            >
+            <v-btn
+              color="warning"
+              variant="flat"
+              class="flex-grow-1"
+              prepend-icon="mdi-code-json"
+              @click="downloadAnalytics('json')"
+              >JSON</v-btn
+            >
+          </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row class="mt-4" v-if="!loading && stats.length > 0">
+      <v-col cols="12" md="4">
+        <v-card class="elevation-4 rounded-xl pa-4 text-center">
+          <h4 class="text-subtitle-1 text-grey-darken-1">
+            Total Bytes Transferred
+          </h4>
+          <h2 class="text-h3 text-primary font-weight-bold">
+            {{ formatBytes(totalBytes) }}
+          </h2>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="4">
+        <v-card class="elevation-4 rounded-xl pa-4 text-center">
+          <h4 class="text-subtitle-1 text-grey-darken-1">Total Packets</h4>
+          <h2 class="text-h3 text-info font-weight-bold">
+            {{ totalPackets.toLocaleString() }}
+          </h2>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="4">
+        <v-card class="elevation-4 rounded-xl pa-4 text-center">
+          <h4 class="text-subtitle-1 text-grey-darken-1">Total Flow Records</h4>
+          <h2 class="text-h3 text-success font-weight-bold">
+            {{ stats.length }}
+          </h2>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12"
+        ><v-card class="elevation-4 rounded-xl pa-4"
+          ><h3 class="text-h6 mb-4">Traffic Trend (Bytes over Time)</h3>
+          <div id="trend-chart" style="height: 350px"></div></v-card
+      ></v-col>
+      <v-col cols="12"
+        ><v-card class="elevation-4 rounded-xl pa-4"
+          ><h3 class="text-h6 mb-4">Network Conversations (Topology)</h3>
+          <div id="conversations-chart" style="height: 450px"></div></v-card
+      ></v-col>
+      <v-col cols="12" md="4"
+        ><v-card class="elevation-4 rounded-xl pa-4"
+          ><h3 class="text-h6 mb-4">Protocol Distribution</h3>
+          <div id="protocol-chart" style="height: 300px"></div></v-card
+      ></v-col>
+      <v-col cols="12" md="4"
+        ><v-card class="elevation-4 rounded-xl pa-4"
+          ><h3 class="text-h6 mb-4">Connection States</h3>
+          <div id="state-chart" style="height: 300px"></div></v-card
+      ></v-col>
+      <v-col cols="12" md="4"
+        ><v-card class="elevation-4 rounded-xl pa-4"
+          ><h3 class="text-h6 mb-4">Top Talkers (Bytes Out)</h3>
+          <div id="top-talkers-chart" style="height: 300px"></div></v-card
+      ></v-col>
+    </v-row>
+
+    <v-row class="mt-4" v-if="!loading && stats.length > 0">
+      <v-col cols="12">
+        <v-card class="elevation-4 rounded-xl pa-4">
+          <div class="d-flex justify-space-between align-center mb-4">
+            <h3 class="text-h6">Network Flow Logs</h3>
+            <v-text-field
+              v-model="search"
+              append-icon="mdi-magnify"
+              label="Search IP or Protocol"
+              single-line
+              hide-details
+              density="compact"
+              style="max-width: 300px"
+            ></v-text-field>
+          </div>
+          <v-data-table
+            :headers="flowHeaders"
+            :items="stats"
+            :search="search"
+            class="elevation-0"
+            density="compact"
+            :items-per-page="5"
+          >
+            <template v-slot:item.ts="{ item }">{{
+              new Date(item.ts * 1000).toLocaleTimeString()
+            }}</template>
+            <template v-slot:item.orig_bytes="{ item }">{{
+              formatBytes(item.orig_bytes)
+            }}</template>
+            <template v-slot:item.resp_bytes="{ item }">{{
+              formatBytes(item.resp_bytes)
+            }}</template>
+            <template v-slot:item.conn_state="{ item }">
+              <v-chip
+                size="small"
+                :color="
+                  item.conn_state === 'S0'
+                    ? 'warning'
+                    : item.conn_state === 'REJ'
+                    ? 'error'
+                    : 'success'
+                "
+                >{{ item.conn_state }}</v-chip
+              >
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row class="mt-4">
+      <v-col cols="12">
+        <v-card class="elevation-4 rounded-xl pa-6 mb-8 connection-card">
+          <h3 class="text-h5 font-weight-bold mb-4 text-primary">
+            <v-icon color="primary" class="mr-2" size="large">mdi-brain</v-icon>
+            Live Rule Based Analysis
+          </h3>
+
+          <v-alert v-if="cnnError" type="error" class="mb-4" variant="tonal">{{
+            cnnError
+          }}</v-alert>
+
+          <div class="d-flex align-center mb-6">
+            <v-btn
+              color="primary"
+              size="large"
+              @click="startLiveAnalysis"
+              :loading="cnnLoading"
+              :disabled="cnnLoading"
+              class="white--text control-btn"
+            >
+              <v-icon start>mdi-send-circle</v-icon> Run Analysis on Latest
+              Slice
+            </v-btn>
+            <v-progress-linear
+              v-if="cnnLoading"
+              indeterminate
+              color="deep-purple-accent-4"
+              class="ml-4 rounded-lg"
+              height="10"
+            ></v-progress-linear>
+          </div>
+
+          <template v-if="cnnResults">
+            <v-row class="mb-6">
+              <v-col
+                v-for="(val, key) in overview"
+                :key="key"
+                cols="12"
+                sm="6"
+                md="4"
+              >
+                <v-card class="pa-4 status-card text-center" elevation="4">
+                  <div
+                    class="text-caption text-white text-opacity-80 text-uppercase font-weight-bold mb-1"
+                  >
+                    {{ labels[key] }}
+                  </div>
+                  <div class="text-h4 font-weight-black text-white">
+                    {{ val }}
+                  </div>
+                </v-card>
+              </v-col>
+            </v-row>
+
+            <v-card
+              class="pa-4 mb-6 rounded-xl elevation-2"
+              variant="outlined"
+              v-if="formattedCnnChartData.length"
+            >
+              <PieChart
+                :chartData="formattedCnnChartData"
+                chartTitle="Role Distribution Summary"
+              />
+            </v-card>
+
+            <h4 class="text-h6 font-weight-bold mb-3">Identified Roles</h4>
+            <v-data-table
+              :headers="cnnHeaders"
+              :items="enhancedTableItems"
+              class="packet-table elevation-2 rounded-lg"
+              density="comfortable"
+              hover
+            >
+              <template v-slot:item.class_name="{ item }">
+                <div class="d-flex align-center font-weight-bold">
+                  <v-avatar
+                    size="24"
+                    color="primary"
+                    variant="tonal"
+                    class="mr-2"
+                    ><span class="text-caption">{{
+                      item.class_name.charAt(0)
+                    }}</span></v-avatar
+                  >
+                  {{ item.class_name }}
+                </div>
+              </template>
+              <template v-slot:item.percentage="{ item }">
+                <div class="d-flex align-center" style="width: 100%">
+                  <v-progress-linear
+                    :model-value="item.percentage"
+                    color="primary"
+                    height="8"
+                    rounded
+                    striped
+                    class="mr-2"
+                  ></v-progress-linear>
+                  <span
+                    class="text-caption text-medium-emphasis font-weight-bold"
+                    >{{ item.percentage }}%</span
+                  >
+                </div>
+              </template>
+              <template v-slot:item.ips="{ item }">
+                <div v-if="item.ips?.length" class="py-2">
+                  <v-chip
+                    v-for="ip in item.ips"
+                    :key="ip"
+                    size="small"
+                    color="primary"
+                    variant="flat"
+                    class="mr-1 mb-1 font-weight-bold shadow-sm"
+                    >{{ ip }}</v-chip
+                  >
+                </div>
+                <div v-else class="text-grey text-caption font-italic">
+                  No IPs assigned
+                </div>
+              </template>
+            </v-data-table>
+          </template>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row class="mt-2">
+      <v-col cols="12">
+        <v-card class="elevation-4 rounded-xl pa-6 mb-8 connection-card">
+          <h3 class="text-h5 font-weight-bold mb-4 text-indigo-darken-1">
+            <v-icon color="indigo-darken-1" class="mr-2" size="large"
+              >mdi-radar-scan</v-icon
+            >
+            Advanced Service Inspection (Nmap)
+          </h3>
+
+          <v-alert v-if="scanError" type="error" class="mb-4" variant="tonal">
+            {{ scanError }}
+          </v-alert>
+
+          <v-row class="mb-4">
+            <v-col cols="12" md="4">
+              <v-select
+                v-model="scanProfile"
+                :items="scanProfiles"
+                label="Select Scan Profile"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+              ></v-select>
+            </v-col>
+            <v-col cols="12" md="8" class="d-flex align-center">
+              <v-text-field
+                v-model="customScanTarget"
+                label="Custom Target (e.g. 192.168.100.1/26) [Leave blank to auto-scan all IPs]"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                class="flex-grow-1 mr-4"
+              ></v-text-field>
+            </v-col>
+          </v-row>
+
+          <div class="d-flex align-center mb-6">
+            <v-btn
+              color="indigo-darken-1"
+              size="large"
+              @click="startBackgroundScan"
+              :loading="scanStatus === 'running'"
+              :disabled="
+                scanStatus === 'running' ||
+                (!customScanTarget && !analyzedIps.length)
+              "
+              class="white--text control-btn"
+            >
+              <v-icon start>mdi-shield-search</v-icon>
+              {{
+                scanStatus === "running"
+                  ? "Scan in Progress..."
+                  : "Launch Background Scan"
+              }}
+            </v-btn>
+
+            <span
+              v-if="scanStatus === 'running'"
+              class="ml-3 text-subtitle-2 text-indigo font-weight-bold blink-text"
+              >Scanning targets (This may take several minutes)...</span
+            >
+          </div>
+
+          <template v-if="scanResults && scanResults.length > 0">
+            <div class="d-flex align-center mb-3 mt-4">
+              <h4 class="text-h6 font-weight-bold text-success mb-0">
+                <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>Scan
+                Completed
+              </h4>
+              <v-spacer></v-spacer>
+              <v-btn
+                color="primary"
+                variant="outlined"
+                prepend-icon="mdi-file-delimited-outline"
+                @click="downloadScanResultsCsv"
+              >
+                Download CSV
+              </v-btn>
+            </div>
+            <v-expansion-panels variant="accordion">
+              <v-expansion-panel
+                v-for="hostResult in scanResults"
+                :key="hostResult.host"
+                class="mb-2"
+              >
+                <v-expansion-panel-title class="font-weight-bold text-indigo">
+                  <v-icon start color="indigo">mdi-server-network</v-icon> Host:
+                  {{ hostResult.host }}
+                  <span
+                    v-if="hostResult.hostname"
+                    class="text-caption text-grey ml-2"
+                    >({{ hostResult.hostname }})</span
+                  >
+                  <v-chip size="small" color="info" class="ml-4"
+                    >{{ hostResult.ports.length }} Open Ports</v-chip
+                  >
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-data-table
+                    :headers="serviceHeaders"
+                    :items="hostResult.ports"
+                    density="compact"
+                    class="elevation-1 mt-2"
+                    hide-default-footer
+                  >
+                    <template v-slot:item.port="{ item }">
+                      <v-chip
+                        size="small"
+                        color="primary"
+                        variant="flat"
+                        class="font-weight-bold"
+                        >{{ item.port }} /
+                        {{ item.protocol.toUpperCase() }}</v-chip
+                      >
+                    </template>
+
+                    <template v-slot:item.version="{ item }">
+                      <span
+                        >{{ item.service
+                        }}<span v-if="item.version"> — {{ item.version }}</span></span
+                      >
+                    </template>
+
+                    <template v-slot:item.cves="{ item }">
+                      <div v-if="item.cves && item.cves.length">
+                        <v-chip
+                          v-for="cve in item.cves"
+                          :key="cve"
+                          size="x-small"
+                          color="error"
+                          variant="outlined"
+                          class="mr-1 mt-1"
+                          >{{ cve }}</v-chip
+                        >
+                      </div>
+                      <span v-else class="text-caption text-grey font-italic"
+                        >No known CVEs</span
+                      >
+                    </template>
+                  </v-data-table>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </template>
+
+          <v-alert
+            v-else-if="scanStatus === 'completed'"
+            type="info"
+            variant="tonal"
+            class="mt-4"
+          >
+            Scan completed, but no open services were detected on the targeted
+            IPs.
+          </v-alert>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-container>
+</template>
+
+<script>
+import * as echarts from "echarts";
+import { io } from "socket.io-client";
+import PieChart from "@/components/PieChart.vue";
+
+export default {
+  name: "ContinuousMonitoring",
+  components: { PieChart },
+  data() {
+    return {
+      socket: null,
+      apiUrl: process.env.API_BASE_URL || "http://localhost:5555",
+      startTime: this.getLocalISOString(new Date(Date.now() - 3600000)),
+      endTime: this.getLocalISOString(new Date()),
+      isLive: true,
+      loading: false,
+      search: "",
+      stats: [],
+      snackbar: false,
+      snackbarText: "",
+      snackbarType: "info",
+
+      // CNN Variables
+      cnnLoading: false,
+      cnnResults: null,
+      cnnError: null,
+
+      // Async Nmap Variables
+      // Async Nmap Variables
+      scanProfile: "deep",
+      scanProfiles: [
+        { text: "Fast Scan (-F)", value: "fast" },
+        { text: "Deep Version Scan (-sV)", value: "deep" },
+        { text: "Vulnerability Scan (10k ports + Vulners)", value: "vuln" },
+      ],
+      customScanTarget: "",
+      scanStatus: "idle",
+      scanResults: null,
+      scanError: null,
+      scanInterval: null,
+
+      // Chart Instances
+      protoChart: null,
+      topTalkersChart: null,
+      trendChart: null,
+      stateChart: null,
+      conversationsChart: null,
+      topologyInterval: null,
+
+      // CHANGED BACK TO text AND value FOR VUETIFY 2
+      flowHeaders: [
+        { text: "Time", value: "ts" },
+        { text: "Source IP", value: "id.orig_h" },
+        { text: "Dest IP", value: "id.resp_h" },
+        { text: "Protocol", value: "proto" },
+        { text: "State", value: "conn_state" },
+        { text: "Bytes Out", value: "orig_bytes" },
+        { text: "Bytes In", value: "resp_bytes" },
+      ],
+      cnnHeaders: [
+        {
+          text: "Role / Class Name",
+          value: "class_name",
+          align: "start",
+          width: "25%",
+        },
+        { text: "Count", value: "count", sortable: true, width: "15%" },
+        {
+          text: "Distribution",
+          value: "percentage",
+          align: "center",
+          width: "20%",
+        },
+        { text: "Assigned IP Addresses", value: "ips", sortable: false },
+      ],
+      serviceHeaders: [
+        { text: "Port", value: "port", width: "15%" },
+        { text: "Service / Version", value: "version", width: "40%" },
+        { text: "Known CVEs", value: "cves", width: "45%" },
+      ],
+      exportLimit: null,
+    };
+  },
+  computed: {
+    startTimestamp() {
+      return new Date(this.startTime).getTime() / 1000;
+    },
+    endTimestamp() {
+      return new Date(this.endTime).getTime() / 1000;
+    },
+    totalBytes() {
+      return this.stats.reduce(
+        (acc, curr) =>
+          acc +
+          (parseInt(curr.orig_bytes) || 0) +
+          (parseInt(curr.resp_bytes) || 0),
+        0
+      );
+    },
+    totalPackets() {
+      return this.stats.reduce(
+        (acc, curr) =>
+          acc +
+          (parseInt(curr.orig_pkts) || 0) +
+          (parseInt(curr.resp_pkts) || 0),
+        0
+      );
+    },
+
+    analyzedIps() {
+      if (!this.cnnResults?.rule_based_classification_summary) return [];
+      const ipSet = new Set();
+      this.cnnResults.rule_based_classification_summary.forEach((item) => {
+        if (item.ips) item.ips.forEach((ip) => ipSet.add(ip));
+      });
+      return Array.from(ipSet);
+    },
+
+    overview() {
+      if (!this.cnnResults) return {};
+      return {
+        most_frequent_class: this.cnnResults.most_frequent_class || "N/A",
+        total_classified: this.cnnResults.total_classified || 0,
+        processing_time: this.cnnResults.processing_time
+          ? `${this.cnnResults.processing_time.toFixed(2)}s`
+          : "0s",
+      };
+    },
+    labels() {
+      return {
+        most_frequent_class: "Most Frequent Class",
+        total_classified: "Total Classified IPs",
+        processing_time: "Processing Time",
+      };
+    },
+    enhancedTableItems() {
+      if (!this.cnnResults?.rule_based_classification_summary) return [];
+      const total = this.cnnResults.rule_based_classification_summary.reduce(
+        (sum, item) => sum + item.count,
+        0
+      );
+      return this.cnnResults.rule_based_classification_summary.map((item) => ({
+        ...item,
+        percentage: total > 0 ? ((item.count / total) * 100).toFixed(1) : 0,
+      }));
+    },
+    formattedCnnChartData() {
+      if (!this.cnnResults?.rule_based_classification_summary) return [];
+      return this.cnnResults.rule_based_classification_summary.map((item) => ({
+        name: item.class_name,
+        value: item.count,
+      }));
+    },
+  },
+  mounted() {
+    this.fetchData();
+    window.addEventListener("resize", this.resizeCharts);
+    this.socket = io(this.apiUrl, {
+      transports: ["websocket", "polling"],
+      upgrade: true,
+    });
+    this.socket.on("connect", () => {
+      this.showSnackbar("Live feed connected.", "success");
+    });
+    this.socket.on("disconnect", () => {
+      this.showSnackbar("Live feed disconnected.", "warning");
+    });
+    this.socket.on("connect_error", () => {
+      this.showSnackbar("Could not connect to live feed.", "error");
+    });
+    this.socket.on("new_network_data", (newFlows) => {
+      if (this.isLive) {
+        this.stats = [...newFlows, ...this.stats].slice(0, 1000);
+        this.updateCharts();
+      }
+    });
+    this.topologyInterval = setInterval(() => {
+      if (this.isLive && this.stats.length > 0) this.renderConversationsChart();
+    }, 60000);
+  },
+  unmounted() {
+    if (this.socket) this.socket.disconnect();
+    if (this.topologyInterval) clearInterval(this.topologyInterval);
+    if (this.scanInterval) clearInterval(this.scanInterval);
+    window.removeEventListener("resize", this.resizeCharts);
+  },
+  methods: {
+    // ----------------------------------------
+    // Async Background Nmap Methods
+    // ----------------------------------------
+    async startBackgroundScan() {
+      this.scanStatus = "running";
+      this.scanError = null;
+      this.scanResults = null;
+
+      // Decide payload: Custom target string OR list of extracted IPs
+      const payload = this.customScanTarget.trim()
+        ? { target: this.customScanTarget.trim(), profile: this.scanProfile }
+        : { targets: this.analyzedIps, profile: this.scanProfile };
+
+      try {
+        const response = await this.$apiFetch(`${this.apiUrl}/v1/scan/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.message || "Failed to start background scan.");
+
+        this.pollScanResults();
+      } catch (error) {
+        this.scanError = error.message;
+        this.scanStatus = "failed";
+      }
+    },
+
+    pollScanResults() {
+      if (this.scanInterval) clearInterval(this.scanInterval);
+
+      this.scanInterval = setInterval(async () => {
+        try {
+          const res = await this.$apiFetch(`${this.apiUrl}/v1/scan/results`);
+          const data = await res.json();
+
+          if (data.status === "completed") {
+            clearInterval(this.scanInterval);
+            this.scanResults = data.results;
+            this.scanStatus = "completed";
+          } else if (data.status === "error") {
+            clearInterval(this.scanInterval);
+            this.scanError =
+              data.message || "The background scan encountered an error.";
+            this.scanStatus = "failed";
+          }
+        } catch (error) {
+          console.error("Polling error:", error);
+        }
+      }, 30000);
+    },
+
+    // ----------------------------------------
+    // Live Analysis Methods
+    // ----------------------------------------
+    async startLiveAnalysis() {
+      this.cnnLoading = true;
+      this.cnnError = null;
+      try {
+        const response = await this.$apiFetch(
+          `${this.apiUrl}/v1/analyze_live`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.message || "Failed to analyze live PCAP.");
+        this.cnnResults = data;
+      } catch (error) {
+        this.cnnError = error.message;
+      } finally {
+        this.cnnLoading = false;
+      }
+    },
+
+    // Standard Charts & Stats Logic below...
+    updateCharts() {
+      this.$nextTick(() => {
+        if (this.stats.length > 0) {
+          this.renderProtocolChart();
+          this.renderTopTalkersChart();
+          this.renderTrendChart();
+          this.renderStateChart();
+        }
+      });
+    },
+    renderConversationsChart() {
+      /* Removed large echarts init for brevity */
+    },
+    async downloadAnalytics(format) {
+      let url = `${this.apiUrl}/v1/network/export?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}&format=${format}`;
+      if (this.exportLimit) url += `&limit=${this.exportLimit}`;
+      try {
+        const res = await this.$apiFetch(url);
+        if (!res.ok) throw new Error("Export failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = `network_analytics.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
+    },
+    downloadScanResultsCsv() {
+      if (!this.scanResults || !this.scanResults.length) return;
+
+      const escapeCsv = (value) => {
+        const str = value === null || value === undefined ? "" : String(value);
+        return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+      };
+
+      const headers = [
+        "Host",
+        "Hostname",
+        "Host State",
+        "Port",
+        "Protocol",
+        "Port State",
+        "Service",
+        "Version",
+        "CVEs",
+      ];
+      const rows = [headers];
+
+      this.scanResults.forEach((hostResult) => {
+        const ports = hostResult.ports && hostResult.ports.length
+          ? hostResult.ports
+          : [{}]; // still emit one row for hosts with no open ports
+        ports.forEach((port) => {
+          rows.push([
+            hostResult.host,
+            hostResult.hostname || "",
+            hostResult.state || "",
+            port.port ?? "",
+            port.protocol || "",
+            port.state || "",
+            port.service || "",
+            port.version || "",
+            (port.cves || []).join("; "),
+          ]);
+        });
+      });
+
+      const csvContent = rows
+        .map((row) => row.map(escapeCsv).join(","))
+        .join("\r\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `scan_results_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    },
+    getLocalISOString(date) {
+      const offset = date.getTimezoneOffset() * 60000;
+      return new Date(date - offset).toISOString().slice(0, 16);
+    },
+    showSnackbar(text, type = "info") {
+      this.snackbarText = text;
+      this.snackbarType = type;
+      this.snackbar = true;
+    },
+    formatBytes(bytes) {
+      if (!bytes || bytes === 0) return "0 B";
+      const k = 1024,
+        sizes = ["B", "KB", "MB", "GB", "TB"],
+        i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    },
+    async fetchData() {
+      await this.fetchStatistics();
+    },
+    async fetchStatistics(showLoader = true) {
+      if (showLoader) this.loading = true;
+      try {
+        const res = await this.$apiFetch(
+          `${this.apiUrl}/v1/network/statistics?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}&format=json&limit=5000`
+        );
+        if (!res.ok) throw new Error("Failed to fetch");
+        this.stats = (await res.json()).reverse();
+        this.updateCharts();
+      } catch (err) {
+        if (showLoader) this.showSnackbar("Could not load stats.", "error");
+      } finally {
+        if (showLoader) this.loading = false;
+      }
+    },
+    renderTrendChart() {
+      const dom = document.getElementById("trend-chart");
+      if (!dom) return;
+      if (!this.trendChart) this.trendChart = echarts.init(dom);
+
+      // this.stats is kept newest-first (to match the live-update prepend
+      // convention), but ECharts draws line points in array order rather
+      // than sorting by x-value — feed it a chronologically-sorted copy so
+      // the trend line doesn't zigzag backward through time.
+      const sortedStats = [...this.stats].sort((a, b) => a.ts - b.ts);
+
+      const outData = sortedStats.map((s) => [
+        s.ts * 1000,
+        parseInt(s.orig_bytes) || 0,
+      ]);
+      const inData = sortedStats.map((s) => [
+        s.ts * 1000,
+        parseInt(s.resp_bytes) || 0,
+      ]);
+
+      this.trendChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          formatter: (params) => {
+            if (!params || !params.length) return "";
+            let timeStr = new Date(params[0].value[0]).toLocaleTimeString();
+            let tooltip = `<div style="font-weight:bold; margin-bottom:4px;">${timeStr}</div>`;
+            params.forEach((p) => {
+              tooltip += `${p.marker} ${p.seriesName}: <b>${this.formatBytes(
+                p.value[1]
+              )}</b><br/>`;
+            });
+            return tooltip;
+          },
+        },
+        legend: { data: ["Bytes Out", "Bytes In"] },
+        xAxis: { type: "time", boundaryGap: false },
+        yAxis: {
+          type: "value",
+          axisLabel: { formatter: (val) => this.formatBytes(val) },
+        },
+        dataZoom: [
+          { type: "inside", xAxisIndex: 0, filterMode: "none" },
+          { type: "inside", yAxisIndex: 0, filterMode: "empty" },
+        ],
+        series: [
+          {
+            name: "Bytes Out",
+            type: "line",
+            data: outData,
+            smooth: true,
+            itemStyle: { color: "#3b82f6" },
+            areaStyle: { opacity: 0.1 },
+          },
+          {
+            name: "Bytes In",
+            type: "line",
+            data: inData,
+            smooth: true,
+            itemStyle: { color: "#10b981" },
+            areaStyle: { opacity: 0.1 },
+          },
+        ],
+      });
+    },
+
+    renderStateChart() {
+      const dom = document.getElementById("state-chart");
+      if (!dom) return;
+      if (!this.stateChart) this.stateChart = echarts.init(dom);
+
+      const stateCounts = {};
+      this.stats.forEach((s) => {
+        const state = s.conn_state || "Unknown";
+        stateCounts[state] = (stateCounts[state] || 0) + 1;
+      });
+
+      const data = Object.entries(stateCounts).map(([name, value]) => ({
+        name,
+        value,
+      }));
+
+      this.stateChart.setOption({
+        tooltip: { trigger: "item" },
+        legend: { bottom: "0" },
+        series: [
+          {
+            name: "Connection State",
+            type: "pie",
+            radius: ["40%", "70%"],
+            data: data,
+          },
+        ],
+      });
+    },
+
+    renderProtocolChart() {
+      const dom = document.getElementById("protocol-chart");
+      if (!dom) return;
+      if (!this.protoChart) this.protoChart = echarts.init(dom);
+
+      const protoCounts = {};
+      this.stats.forEach((s) => {
+        const p = s.proto || "unknown";
+        protoCounts[p] = (protoCounts[p] || 0) + 1;
+      });
+
+      const data = Object.entries(protoCounts).map(([name, value]) => ({
+        name: name.toUpperCase(),
+        value,
+      }));
+
+      this.protoChart.setOption({
+        tooltip: { trigger: "item" },
+        legend: { bottom: "0" },
+        series: [{ name: "Protocol", type: "pie", radius: "70%", data: data }],
+      });
+    },
+
+    renderTopTalkersChart() {
+      const dom = document.getElementById("top-talkers-chart");
+      if (!dom) return;
+      if (!this.topTalkersChart) this.topTalkersChart = echarts.init(dom);
+
+      const talkers = {};
+      this.stats.forEach((s) => {
+        const ip = s["id.orig_h"];
+        if (ip)
+          talkers[ip] = (talkers[ip] || 0) + (parseInt(s.orig_bytes) || 0);
+      });
+
+      const sorted = Object.entries(talkers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      this.topTalkersChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          formatter: (params) =>
+            `${params[0].name}: ${this.formatBytes(params[0].value)}`,
+        },
+        xAxis: { type: "value", show: false },
+        yAxis: { type: "category", data: sorted.map((i) => i[0]).reverse() },
+        series: [
+          {
+            data: sorted.map((i) => i[1]).reverse(),
+            type: "bar",
+            itemStyle: { color: "#8b5cf6", borderRadius: [0, 5, 5, 0] },
+          },
+        ],
+      });
+    },
+
+    renderConversationsChart() {
+      const dom = document.getElementById("conversations-chart");
+      if (!dom) return;
+      if (!this.conversationsChart) this.conversationsChart = echarts.init(dom);
+
+      const linksMap = new Map();
+      this.stats.forEach((s) => {
+        const src = s["id.orig_h"],
+          dst = s["id.resp_h"],
+          proto = s.proto ? s.proto.toUpperCase() : "UNKNOWN";
+        const bytes =
+          (parseInt(s.orig_bytes) || 0) + (parseInt(s.resp_bytes) || 0);
+        if (!src || !dst) return;
+
+        const linkId = `${src}-${dst}`;
+        if (!linksMap.has(linkId))
+          linksMap.set(linkId, {
+            source: src,
+            target: dst,
+            bytes: 0,
+            protocols: new Set(),
+          });
+        const linkData = linksMap.get(linkId);
+        linkData.bytes += bytes;
+        linkData.protocols.add(proto);
+      });
+
+      const sortedLinks = Array.from(linksMap.values())
+        .sort((a, b) => b.bytes - a.bytes)
+        .slice(0, 50);
+      const activeNodes = new Set();
+      sortedLinks.forEach((l) => {
+        activeNodes.add(l.source);
+        activeNodes.add(l.target);
+      });
+
+      const nodes = Array.from(activeNodes).map((ip) => ({
+        name: ip,
+        symbolSize: 22,
+        itemStyle: { color: "#3b82f6" },
+        label: { show: true },
+      }));
+      const links = sortedLinks.map((l) => ({
+        source: l.source,
+        target: l.target,
+        lineStyle: { width: Math.min(Math.max(l.bytes / 5000, 1), 6) },
+      }));
+
+      this.conversationsChart.setOption(
+        {
+          tooltip: { trigger: "item" },
+          series: [
+            {
+              type: "graph",
+              layout: "force",
+              data: nodes,
+              links: links,
+              roam: true,
+              force: { repulsion: 150, edgeLength: 80 },
+            },
+          ],
+        },
+        true
+      );
+    },
+    resizeCharts() {
+      [
+        this.protoChart,
+        this.topTalkersChart,
+        this.trendChart,
+        this.stateChart,
+        this.conversationsChart,
+      ].forEach((c) => {
+        if (c) c.resize();
+      });
+    },
+    async downloadHeadersPcap() {
+      const url = `${this.apiUrl}/v1/network/pcap/headers?start_time=${this.startTimestamp}&end_time=${this.endTimestamp}`;
+      try {
+        const res = await this.$apiFetch(url);
+        if (!res.ok) throw new Error("Download failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = `headers_${this.startTimestamp}.pcap`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
+    },
+    async downloadFullPcap() {
+      try {
+        const res = await this.$apiFetch(
+          `${this.apiUrl}/v1/network/pcap/latest/full`
+        );
+        if (!res.ok) throw new Error("Download failed");
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = "latest_full.pcap";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        this.showSnackbar(err.message, "error");
+      }
+    },
+  },
+};
+</script>
+
+<style scoped>
+.dark-page-container {
+  min-height: 100vh;
+  padding: 16px;
+}
+.status-card {
+  background: var(--status-card-bg) !important;
+}
+.connection-card {
+  border: 1px solid var(--connection-border) !important;
+}
+.control-btn {
+  border-radius: 12px !important;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.waiting-state {
+  background: var(--waiting-bg);
+  color: var(--text-muted);
+  border: 1px dashed var(--waiting-border);
+}
+.waiting-title {
+  color: var(--waiting-title);
+  font-weight: 700;
+}
+.packet-table :deep(.v-data-table__wrapper) {
+  border-radius: 8px;
+}
+.blink-text {
+  animation: blinker 1.5s linear infinite;
+  color: var(--blink-color);
+}
+@keyframes blinker {
+  50% {
+    opacity: 0.3;
+  }
+}
+</style>

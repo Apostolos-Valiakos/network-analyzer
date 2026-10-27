@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from scapy.all import rdpcap, IP, TCP, UDP
+from scapy.all import PcapReader, IP, TCP, UDP
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
 import networkx as nx
@@ -22,8 +22,6 @@ import community  # python-louvain
 # @return [pandas.DataFrame] A DataFrame where each row is an IP address and
 #         columns are the extracted features (bytes, packets, partners, ports, duration, etc.).
 def extract_features(pcap_file):
-    packets = rdpcap(pcap_file)
-
     stats = defaultdict(
         lambda: {
             "bytes_sent": 0,
@@ -36,25 +34,28 @@ def extract_features(pcap_file):
         }
     )
 
-    for pkt in packets:
-        if IP in pkt:
-            src = pkt[IP].src
-            dst = pkt[IP].dst
-            length = len(pkt)
+    # --- MEMORY SAFE FIX ---
+    # Stream the file one packet at a time instead of loading it all into RAM
+    with PcapReader(pcap_file) as packets:
+        for pkt in packets:
+            if IP in pkt:
+                src = pkt[IP].src
+                dst = pkt[IP].dst
+                length = len(pkt)
 
-            stats[src]["bytes_sent"] += length
-            stats[src]["packets_sent"] += 1
-            stats[src]["partners"].add(dst)
-            stats[src]["timestamps"].append(float(pkt.time))
+                stats[src]["bytes_sent"] += length
+                stats[src]["packets_sent"] += 1
+                stats[src]["partners"].add(dst)
+                stats[src]["timestamps"].append(float(pkt.time))
 
-            stats[dst]["bytes_received"] += length
-            stats[dst]["packets_received"] += 1
-            stats[dst]["partners"].add(src)
-            stats[dst]["timestamps"].append(float(pkt.time))
+                stats[dst]["bytes_received"] += length
+                stats[dst]["packets_received"] += 1
+                stats[dst]["partners"].add(src)
+                stats[dst]["timestamps"].append(float(pkt.time))
 
-            if TCP in pkt or UDP in pkt:
-                stats[src]["ports"].add(pkt.sport)
-                stats[dst]["ports"].add(pkt.dport)
+                if TCP in pkt or UDP in pkt:
+                    stats[src]["ports"].add(pkt.sport)
+                    stats[dst]["ports"].add(pkt.dport)
 
     # Build feature DataFrame
     data = []
@@ -327,11 +328,41 @@ def suggest_clusters_modularity(df, max_clusters=10):
 #         and a summary of cluster modularity results.
 def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2):
     df = extract_features(pcap_path)
+
+    if len(df) < 2:
+        raise ValueError(
+            f"Not enough unique IP endpoints to cluster "
+            f"(found {len(df)}, minimum 2 required). "
+            "Capture more traffic before running clustering."
+        )
+
     cluster_result = suggest_clusters_modularity(df, max_clusters=max_clusters)
     df = cluster_nodes(df, n_clusters=cluster_result["best_k"])
     anomalies = detect_anomalies(df, threshold=anomaly_threshold)
     graph_data = build_graph_data(df)
-    save_results(df, os.path.basename(pcap_path), "server/cluster_analysis")
+
+    # WP5: report anomalous cluster members as Notice::Info alerts
+    try:
+        from wp5_notices import emit_notice
+
+        for a in anomalies:
+            if a.get("anomaly"):
+                emit_notice(
+                    note="PENM::Anomalous_Cluster",
+                    msg=(
+                        f"{a['ip']} belongs to an anomalously small traffic "
+                        f"cluster (cluster {a['cluster']}, size <= {anomaly_threshold})"
+                    ),
+                    sub=os.path.basename(pcap_path),
+                    src=a["ip"],
+                    n=a["cluster"],
+                    identifier=f"anomalous-cluster:{a['ip']}",
+                )
+    except Exception:
+        pass  # alert emission must never break the analysis pipeline
+
+    _output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cluster_analysis")
+    save_results(df, os.path.basename(pcap_path), _output_dir)
 
     return {
         "clusters": anomalies,

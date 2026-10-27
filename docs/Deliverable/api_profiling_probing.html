@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PENM API Documentation</title>
+<style>
+  @page { size: A4; margin: 25mm 22mm 25mm 22mm; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: Calibri, "Segoe UI", Arial, sans-serif;
+    font-size: 11pt; line-height: 1.6; color: #111;
+    background: #fff; max-width: 170mm; margin: 0 auto; padding: 10mm 0;
+  }
+  h1 { font-size: 22pt; font-weight: 700; color: #1a3a6b; margin: 0 0 10pt; }
+  h2 { font-size: 13pt; font-weight: 700; color: #1a56a8; margin: 22pt 0 6pt;
+       border-bottom: 1.5pt solid #1a56a8; padding-bottom: 3pt; }
+  h3 { font-size: 11.5pt; font-weight: 700; font-style: italic;
+       color: #1a56a8; margin: 18pt 0 4pt; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul { margin: 4pt 0 8pt 16pt; }
+  li { margin-bottom: 3pt; }
+
+  .doc-header { border-bottom: 2pt solid #1a3a6b; padding-bottom: 12pt; margin-bottom: 16pt; }
+  .doc-meta   { font-size: 10pt; color: #555; margin: 2pt 0; }
+
+  .endpoint-title { display: flex; align-items: center; gap: 8pt; margin-bottom: 5pt; }
+  .method-badge {
+    display: inline-block; font-size: 9pt; font-weight: 700;
+    font-family: "Courier New", monospace; padding: 2pt 7pt;
+    border-radius: 3pt; color: #fff; white-space: nowrap;
+  }
+  .method-post { background: #1a56a8; }
+  .method-get  { background: #1e8c45; }
+  .endpoint-path { font-family: "Courier New", monospace; font-size: 10.5pt; font-weight: 700; }
+
+  .meta-row { font-size: 10.5pt; margin: 2pt 0; }
+  .meta-row .label { font-weight: 700; }
+  code {
+    font-family: "Courier New", monospace; font-size: 9.5pt;
+    background: #f0f0f0; padding: 1pt 4pt; border-radius: 2pt;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 12pt; }
+  th { background: #dce6f5; font-weight: 700; text-align: left; padding: 5pt 8pt;
+       border: 1pt solid #aabbdd; color: #1a3a6b; }
+  td { padding: 5pt 8pt; border: 1pt solid #c8d0dd; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f9fc; }
+  td.req-yes   { color: #c0392b; font-weight: 700; }
+  td.req-cond  { color: #b7600a; font-weight: 700; }
+  td.req-no    { color: #555; }
+  td.pname     { font-family: "Courier New", monospace; font-size: 9.5pt; }
+
+  .example-label { font-size: 9.5pt; font-weight: 700; color: #555; margin: 10pt 0 3pt; }
+  pre {
+    font-family: "Courier New", monospace; font-size: 8.5pt;
+    background: #f0f0f0; border: 1pt solid #ccc; border-left: 3pt solid #1a56a8;
+    padding: 8pt 10pt; margin: 0 0 12pt;
+    white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;
+    line-height: 1.45;
+  }
+
+  .note { border: 1pt solid #1a56a8; background: #eef4ff;
+          padding: 6pt 10pt; margin: 6pt 0 10pt; font-size: 10pt; border-radius: 2pt; }
+  .warn { border: 1pt solid #b7950b; background: #fefae6;
+          padding: 6pt 10pt; margin: 6pt 0 10pt; font-size: 10pt; border-radius: 2pt; }
+
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 20mm; } }
+</style>
+</head>
+<body>
+
+<!-- ── Cover ──────────────────────────────────────────────────── -->
+<div class="doc-header">
+  <h1>PENM API Documentation</h1>
+  <p class="doc-meta"><strong>Privacy Enhanced Network Monitor</strong> — Full Endpoint Reference</p>
+  <p class="doc-meta">University of Thessaly &nbsp;|&nbsp; XTRUST-6G &nbsp;|&nbsp; Version 1.0 &nbsp;|&nbsp; 2025</p>
+</div>
+
+<!-- ── Overview ───────────────────────────────────────────────── -->
+<p>
+The PENM API provides seven endpoints covering four functional areas: aggregated
+network traffic statistics, IP role snapshots, raw packet capture retrieval,
+IP role profiling, and active network probing. All endpoints require Bearer Token
+authentication and are accessible via the integrated Swagger UI at
+<code>/apidocs</code>.
+</p>
+<p>
+Text-based telemetry (network statistics and role snapshots) is returned in CSV
+format by default, using Zeek naming conventions and Unix Epoch timestamps, to
+ensure compatibility with SIEMs, Grafana, and data lake ingestion pipelines. A
+<code>format=json</code> query parameter switches these endpoints to JSON output.
+Binary PCAP responses use the standard <code>application/vnd.tcpdump.pcap</code>
+content type.
+</p>
+
+<h2>Authentication</h2>
+<p>
+All requests must include the <code>Authorization</code> header with a valid JWT
+obtained from <code>POST /auth/login</code>.
+</p>
+<pre>Authorization: Bearer &lt;YOUR_ACCESS_TOKEN&gt;</pre>
+
+<h2>Rate Limits</h2>
+<p>
+Endpoints 1–4 (monitoring and PCAP retrieval) share the global limit of
+<strong>300 requests per minute</strong>. The profiling endpoint (5) is limited
+to <strong>10 requests per minute</strong> due to its CPU-intensive processing.
+The active probing endpoints (6–7) are limited to <strong>5 requests per
+minute</strong> for the dispatch call. Clients should implement exponential
+back-off when HTTP 429 is received.
+</p>
+
+<h2>Timestamps &amp; Formats</h2>
+<ul>
+  <li><strong>Timestamps:</strong> All time-based parameters and response fields use Unix Epoch time (e.g., <code>1708426800.000000</code>).</li>
+  <li><strong>Default format:</strong> <code>text/csv</code> using Zeek field naming conventions for endpoints 1 and 2.</li>
+  <li><strong>JSON format:</strong> Pass <code>format=json</code> to receive <code>application/json</code> instead of CSV.</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>Endpoint Details</h2>
+
+<!-- ── Endpoint 1 ─────────────────────────────────────────── -->
+<h3>1. Get Network Statistics</h3>
+<p>
+Retrieve aggregated network traffic statistics within a specified timeframe.
+Records are drawn from the <code>flow_statistics</code> TimescaleDB hypertable,
+which is continuously populated by the Sensor VM's Zeek agent. The response
+includes per-flow originator and responder byte and packet counts mapped to
+Zeek's <code>conn.log</code> field naming conventions.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-get">GET</span>
+  <span class="endpoint-path">/v1/network/statistics</span>
+</div>
+<p class="meta-row"><span class="label">Default Content-Type:</span> text/csv</p>
+
+<p><strong>Query Parameters:</strong></p>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="pname">start_time</td><td>Float</td><td class="req-no">No</td>
+        <td>Unix Epoch start of the query window (default: <code>0</code>, i.e., all records).</td></tr>
+    <tr><td class="pname">end_time</td><td>Float</td><td class="req-no">No</td>
+        <td>Unix Epoch end of the query window (default: current UTC time).</td></tr>
+    <tr><td class="pname">limit</td><td>Integer</td><td class="req-no">No</td>
+        <td>Maximum number of rows to return. Range: 1–10 000. Default: <code>1000</code>.</td></tr>
+    <tr><td class="pname">format</td><td>String</td><td class="req-no">No</td>
+        <td>Response format. <code>"csv"</code> (default) or <code>"json"</code>.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Response Fields (Zeek-aligned):</strong></p>
+<ul>
+  <li><strong>ts</strong>: Flow timestamp (Unix Epoch float).</li>
+  <li><strong>id.orig_h</strong>: Source IP address.</li>
+  <li><strong>id.resp_h</strong>: Destination IP address.</li>
+  <li><strong>proto</strong>: Transport protocol (e.g., <code>tcp</code>, <code>udp</code>, <code>icmp</code>).</li>
+  <li><strong>conn_state</strong>: Connection state matching Zeek definitions (e.g., <code>S0</code>, <code>SF</code>, <code>REJ</code>).</li>
+  <li><strong>orig_bytes</strong>: Total payload bytes sent by the originator.</li>
+  <li><strong>resp_bytes</strong>: Total payload bytes sent by the responder.</li>
+  <li><strong>orig_pkts</strong>: Total packets sent by the originator.</li>
+  <li><strong>resp_pkts</strong>: Total packets sent by the responder.</li>
+</ul>
+
+<div class="example-label">Example Request</div>
+<pre>GET /v1/network/statistics?start_time=1708387200.0&amp;end_time=1708473600.0&amp;limit=500
+Authorization: Bearer &lt;TOKEN&gt;</pre>
+
+<!-- ── Endpoint 2 ─────────────────────────────────────────── -->
+<h3>2. Get Latest Role Snapshot</h3>
+<p>
+Retrieve the most recent classification of IP addresses and their assigned
+functional roles. Role snapshots are generated periodically by the 8-hour
+background scheduler or triggered manually. Each record includes the ML/heuristic
+confidence score and a human-readable reasoning string describing the evidence
+used for the classification.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-get">GET</span>
+  <span class="endpoint-path">/v1/network/roles/latest</span>
+</div>
+<p class="meta-row"><span class="label">Default Content-Type:</span> text/csv</p>
+
+<p><strong>Query Parameters:</strong></p>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="pname">limit</td><td>Integer</td><td class="req-no">No</td>
+        <td>Maximum number of IP records to return. Range: 1–10 000. Default: <code>1000</code>.</td></tr>
+    <tr><td class="pname">format</td><td>String</td><td class="req-no">No</td>
+        <td>Response format. <code>"csv"</code> (default) or <code>"json"</code>.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Response Fields:</strong></p>
+<ul>
+  <li><strong>ts</strong>: Unix Epoch timestamp of snapshot generation.</li>
+  <li><strong>id.orig_h</strong>: The IP address being evaluated.</li>
+  <li><strong>role</strong>: Assigned functional role (e.g., <code>gNB</code>, <code>AMF</code>, <code>UPF</code>, <code>UE</code>, <code>NEAR_RT_RIC</code>).</li>
+  <li><strong>confidence</strong>: Classification confidence score, 0.0–1.0.</li>
+  <li><strong>reasoning</strong>: Brief explanation of how the role was determined (e.g., <code>"Identified via NGAP Code 21"</code>).</li>
+</ul>
+
+<div class="example-label">Example Request</div>
+<pre>GET /v1/network/roles/latest?limit=100
+Authorization: Bearer &lt;TOKEN&gt;</pre>
+
+<div class="page-break"></div>
+
+<!-- ── Endpoint 3 ─────────────────────────────────────────── -->
+<h3>3. Get Timeframe PCAP (Headers Only)</h3>
+<p>
+Provides a binary <code>.pcap</code> file for a specific timeframe. The Sensor VM
+applies a snapshot length (<code>snaplen</code>) truncation so that each packet
+contains only its Ethernet, IP, and TCP/UDP headers — stripping the application
+payload. This reduces bandwidth and accelerates downstream flow analysis while
+preserving all metadata required for traffic classification.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-get">GET</span>
+  <span class="endpoint-path">/v1/network/pcap/headers</span>
+</div>
+<p class="meta-row"><span class="label">Response Content-Type:</span> application/vnd.tcpdump.pcap</p>
+
+<p><strong>Query Parameters:</strong></p>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="pname">start_time</td><td>Float</td><td class="req-yes">Yes</td>
+        <td>Unix Epoch timestamp for the start of the capture window.</td></tr>
+    <tr><td class="pname">end_time</td><td>Float</td><td class="req-yes">Yes</td>
+        <td>Unix Epoch timestamp for the end of the capture window.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Response:</strong> A downloadable binary <code>.pcap</code> file
+containing header-only packets for the requested timeframe.
+The filename is <code>headers_&lt;start_time_int&gt;.pcap</code>.</p>
+
+<div class="example-label">Example Request</div>
+<pre>GET /v1/network/pcap/headers?start_time=1708387200.0&amp;end_time=1708473600.0
+Authorization: Bearer &lt;TOKEN&gt;</pre>
+
+<!-- ── Endpoint 4 ─────────────────────────────────────────── -->
+<h3>4. Get Full Payload PCAP (Latest Snapshot)</h3>
+<p>
+Provides the complete binary <code>.pcap</code> file representing the most recent
+capture snapshot held by the Sensor VM. Unlike Endpoint 3, this file contains
+full application payloads for deep packet inspection. The file is streamed
+directly from the Sensor VM's ring-buffer storage to the caller without
+intermediate buffering on the application server.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-get">GET</span>
+  <span class="endpoint-path">/v1/network/pcap/latest/full</span>
+</div>
+<p class="meta-row"><span class="label">Response Content-Type:</span> application/vnd.tcpdump.pcap</p>
+
+<p><strong>Query Parameters:</strong> None.</p>
+
+<p><strong>Response:</strong> A downloadable binary <code>.pcap</code> file
+containing the complete latest snapshot from the Sensor VM ring buffer.</p>
+
+<div class="note">
+  <strong>Note:</strong> While there are no enforced rate limits on this endpoint
+  beyond the global 300 req/min, the file size may be up to 500 MB (one ring-buffer
+  segment). Clients should implement back-off strategies and process the response
+  as a stream to avoid memory exhaustion.
+</div>
+
+<div class="example-label">Example Request</div>
+<pre>GET /v1/network/pcap/latest/full
+Authorization: Bearer &lt;TOKEN&gt;</pre>
+
+<div class="page-break"></div>
+
+<!-- ── Endpoint 5 ─────────────────────────────────────────── -->
+<h3>5. IP Role Profiling (Full Pipeline)</h3>
+<p>
+Executes the complete rule-based IP role classification pipeline against a
+previously uploaded or captured PCAP file. The pipeline extracts per-flow features
+using TShark, identifies network function signatures (e.g., AMF NGAP exchanges,
+UPF GTP-U traffic, RRC signalling indicative of a gNB), and assigns a functional
+5G/O-RAN role and confidence score to each IP endpoint observed in the capture.
+</p>
+<p>
+The optional <code>selected_ips</code> filter restricts analysis to a specific
+subset of endpoints, which is useful when chaining this endpoint after the
+Agglomerative Clustering pipeline to profile only the IPs belonging to a cluster
+of interest.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-post">POST</span>
+  <span class="endpoint-path">/run_pipeline</span>
+</div>
+<p class="meta-row"><span class="label">Content-Type:</span> application/json</p>
+<p class="meta-row"><span class="label">Response Content-Type:</span> application/json</p>
+<p class="meta-row"><span class="label">Rate Limit:</span> 10 requests per minute per user</p>
+
+<p><strong>Request Body Parameters:</strong></p>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="pname">pcap_file_path</td><td>String</td><td class="req-yes">Yes</td>
+        <td>Filename of the target PCAP as returned by the upload or real-time capture
+        endpoints (e.g., <code>20250601_capture.pcap</code>). The caller must own the
+        file; a 403 is returned otherwise.</td></tr>
+    <tr><td class="pname">model_name</td><td>String</td><td class="req-yes">Yes</td>
+        <td>Classification model identifier. Pass the base filename without extension,
+        or <code>"rule_based"</code> as a generic fallback.</td></tr>
+    <tr><td class="pname">selected_ips</td><td>Array&lt;String&gt;</td><td class="req-no">No</td>
+        <td>Optional list of IP addresses to restrict analysis to. When omitted, all IPs
+        in the PCAP are profiled. When provided, only the specified addresses are
+        classified.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>JSON Response Fields:</strong></p>
+<ul>
+  <li><strong>status</strong>: <code>"success"</code> or <code>"failed"</code>.</li>
+  <li><strong>total_classified</strong>: Integer count of IP addresses that received a role assignment.</li>
+  <li><strong>processing_time</strong>: Pipeline wall-clock time in seconds (float).</li>
+  <li><strong>ip_roles</strong>: Object mapping each IP address to a classification object containing:
+    <ul>
+      <li><strong>role</strong>: Assigned functional role string (e.g., <code>"AMF"</code>, <code>"UPF"</code>, <code>"gNB"</code>, <code>"UE"</code>, <code>"NEAR_RT_RIC"</code>, <code>"Unidentified"</code>).</li>
+      <li><strong>confidence</strong>: Classification confidence score, 0.0–1.0.</li>
+    </ul>
+  </li>
+  <li><strong>rule_based_classification_summary</strong>: Array of role summary objects, each with:
+    <ul>
+      <li><strong>class_name</strong>: Role label string.</li>
+      <li><strong>count</strong>: Number of IPs assigned this role.</li>
+      <li><strong>ips</strong>: Array of IP address strings assigned this role.</li>
+    </ul>
+  </li>
+</ul>
+
+<div class="note">
+  <strong>Note:</strong> The pipeline runs in a separate OS process with a 600-second
+  timeout to prevent large captures from blocking the API worker. For captures
+  with a very high number of unique IP endpoints, processing time may approach
+  this limit.
+</div>
+
+<div class="example-label">Example Request</div>
+<pre>POST /run_pipeline
+Authorization: Bearer &lt;TOKEN&gt;
+Content-Type: application/json
+
+{
+  "pcap_file_path": "20250601120000_testbed.pcap",
+  "model_name":     "20250601120000_testbed",
+  "selected_ips":   ["10.45.0.1", "10.45.0.2", "10.45.0.5"]
+}</pre>
+
+<div class="example-label">Example Response (200 OK)</div>
+<pre>{
+  "status": "success",
+  "total_classified": 3,
+  "processing_time": 4.71,
+  "ip_roles": {
+    "10.45.0.1": { "role": "AMF",  "confidence": 0.90 },
+    "10.45.0.2": { "role": "UPF",  "confidence": 0.90 },
+    "10.45.0.5": { "role": "gNB",  "confidence": 0.90 }
+  },
+  "rule_based_classification_summary": [
+    { "class_name": "AMF", "count": 1, "ips": ["10.45.0.1"] },
+    { "class_name": "UPF", "count": 1, "ips": ["10.45.0.2"] },
+    { "class_name": "gNB", "count": 1, "ips": ["10.45.0.5"] }
+  ]
+}</pre>
+
+<div class="page-break"></div>
+
+<!-- ── Endpoint 6 ─────────────────────────────────────────── -->
+<h3>6. Active Probing — Dispatch Nmap Scan</h3>
+<p>
+Dispatches an asynchronous Nmap scan from the Sensor VM against one or more
+target IP addresses or CIDR ranges. The endpoint validates all input parameters
+against a strict allowlist (valid IPv4, CIDR, plain hostnames) before forwarding
+to the Sensor VM. The scan runs asynchronously and the request returns
+immediately with an acceptance acknowledgement. Results are retrieved via
+Endpoint 7.
+</p>
+<p>
+Three scan profiles are available: <strong>fast</strong> (Nmap <code>-F</code>,
+100 common ports), <strong>deep</strong> (Nmap <code>-sV</code>, service and
+version detection across all open ports — default), and <strong>vuln</strong>
+(version detection combined with the Vulners NSE script across 10,000 ports,
+producing known CVE identifiers per open service).
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-post">POST</span>
+  <span class="endpoint-path">/v1/scan/start</span>
+</div>
+<p class="meta-row"><span class="label">Content-Type:</span> application/json</p>
+<p class="meta-row"><span class="label">Response Content-Type:</span> application/json</p>
+<p class="meta-row"><span class="label">Rate Limit:</span> 5 requests per minute per user</p>
+
+<p><strong>Request Body Parameters:</strong></p>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="pname">target</td><td>String</td><td class="req-cond">Conditional</td>
+        <td>Single scan target: IPv4 address, CIDR range, or hostname
+        (e.g., <code>"10.45.0.0/24"</code>). Exactly one of <code>target</code>
+        or <code>targets</code> must be present.</td></tr>
+    <tr><td class="pname">targets</td><td>Array&lt;String&gt;</td><td class="req-cond">Conditional</td>
+        <td>List of individual IP addresses to scan (e.g., the keys from an
+        <code>ip_roles</code> profiling response). Exactly one of
+        <code>target</code> or <code>targets</code> must be present.</td></tr>
+    <tr><td class="pname">profile</td><td>String</td><td class="req-no">No</td>
+        <td>Scan profile: <code>"fast"</code>, <code>"deep"</code> (default),
+        or <code>"vuln"</code>.</td></tr>
+  </tbody>
+</table>
+
+<div class="warn">
+  <strong>Security:</strong> All string values are validated server-side against a
+  strict allowlist before being forwarded to the Sensor VM. Values containing shell
+  metacharacters or invalid patterns are rejected with HTTP 400.
+</div>
+
+<p><strong>Response Fields (202 Accepted):</strong></p>
+<ul>
+  <li><strong>status</strong>: Acknowledgement string (e.g., <code>"accepted"</code>).</li>
+  <li><strong>message</strong>: Human-readable confirmation that the scan was dispatched.</li>
+</ul>
+
+<div class="example-label">Example Request — single CIDR target</div>
+<pre>POST /v1/scan/start
+Authorization: Bearer &lt;TOKEN&gt;
+Content-Type: application/json
+
+{
+  "target":  "10.45.0.0/24",
+  "profile": "deep"
+}</pre>
+
+<div class="example-label">Example Request — multi-IP list from profiling output</div>
+<pre>POST /v1/scan/start
+Authorization: Bearer &lt;TOKEN&gt;
+Content-Type: application/json
+
+{
+  "targets": ["10.45.0.1", "10.45.0.2", "10.45.0.5"],
+  "profile": "vuln"
+}</pre>
+
+<div class="example-label">Example Response (202 Accepted)</div>
+<pre>{
+  "status":  "accepted",
+  "message": "Nmap scan started."
+}</pre>
+
+<!-- ── Endpoint 7 ─────────────────────────────────────────── -->
+<h3>7. Active Probing — Poll Scan Results</h3>
+<p>
+Retrieves the current status and, upon completion, the full results of the most
+recently dispatched Nmap scan from the Sensor VM. Poll this endpoint at regular
+intervals (recommended: every 5 seconds) after calling Endpoint 6, until
+<code>status</code> is <code>"completed"</code> or <code>"error"</code>. No
+scan-specific identifier is needed; the Sensor VM maintains a single active scan
+slot and always returns the result of the most recent job.
+</p>
+<div class="endpoint-title">
+  <span class="method-badge method-get">GET</span>
+  <span class="endpoint-path">/v1/scan/results</span>
+</div>
+<p class="meta-row"><span class="label">Response Content-Type:</span> application/json</p>
+
+<p><strong>Query Parameters:</strong> None.</p>
+
+<p><strong>Response Fields (200 OK):</strong></p>
+<ul>
+  <li><strong>status</strong>: Current state of the Nmap job:
+    <ul>
+      <li><code>"idle"</code> — No scan has been dispatched yet.</li>
+      <li><code>"running"</code> — Scan in progress; poll again shortly.</li>
+      <li><code>"completed"</code> — Scan finished; <code>results</code> array is populated.</li>
+      <li><code>"error"</code> — Scan failed; inspect <code>message</code>.</li>
+    </ul>
+  </li>
+  <li><strong>message</strong>: Human-readable status or error description.</li>
+  <li><strong>results</strong>: Array of host objects (present when <code>"completed"</code>), each containing:
+    <ul>
+      <li><strong>host</strong>: IP address of the scanned host.</li>
+      <li><strong>hostname</strong>: Resolved hostname, if available.</li>
+      <li><strong>state</strong>: Host reachability (e.g., <code>"up"</code>).</li>
+      <li><strong>ports</strong>: Array of open port objects, each with:
+        <ul>
+          <li><strong>port</strong>: Port number (integer).</li>
+          <li><strong>protocol</strong>: Transport protocol (<code>"tcp"</code> / <code>"udp"</code> / <code>"sctp"</code>).</li>
+          <li><strong>state</strong>: Port state (e.g., <code>"open"</code>).</li>
+          <li><strong>service</strong>: Service name as identified by Nmap.</li>
+          <li><strong>version</strong>: Service version string (populated for <code>"deep"</code> and <code>"vuln"</code> profiles).</li>
+          <li><strong>cves</strong>: Array of CVE identifier strings (populated only for <code>"vuln"</code> profile).</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<div class="note">
+  <strong>Polling guidance:</strong> A deep scan against a /24 subnet typically
+  completes within 2–5 minutes. A vulnerability scan may take up to 15 minutes
+  depending on the number of open services discovered.
+</div>
+
+<div class="example-label">Example Request</div>
+<pre>GET /v1/scan/results
+Authorization: Bearer &lt;TOKEN&gt;</pre>
+
+<div class="example-label">Example Response — scan completed (deep profile)</div>
+<pre>{
+  "status":  "completed",
+  "message": "Scan completed successfully.",
+  "results": [
+    {
+      "host":     "10.45.0.1",
+      "hostname": "amf.core.local",
+      "state":    "up",
+      "ports": [
+        { "port": 38412, "protocol": "sctp", "state": "open",
+          "service": "ngap",  "version": "Open5GS AMF 2.6.4", "cves": [] },
+        { "port": 7777,  "protocol": "tcp",  "state": "open",
+          "service": "sbi",   "version": "Open5GS HTTP/2 SBI",  "cves": [] }
+      ]
+    },
+    {
+      "host":     "10.45.0.2",
+      "hostname": "upf.core.local",
+      "state":    "up",
+      "ports": [
+        { "port": 2152, "protocol": "udp", "state": "open",
+          "service": "gtp-user", "version": "Open5GS UPF 2.6.4", "cves": [] }
+      ]
+    }
+  ]
+}</pre>
+
+</body>
+</html>

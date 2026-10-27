@@ -1,0 +1,54 @@
+tags:
+  - Continuous Monitoring
+summary: Get Timeframe PCAP (Headers Only)
+description: >
+  Proxies a GET to the Sensor VM's "/get-pcap" endpoint with
+  headers_only=true and the given time window, streaming back a
+  payload-stripped PCAP slice (headers only, no packet bodies) — useful
+  for lighter-weight timeframe inspection than the full-payload endpoint.
+produces:
+  - application/vnd.tcpdump.pcap
+security:
+  - Bearer: []
+parameters:
+  - name: start_time
+    in: query
+    type: string
+    required: true
+    description: Start timestamp (Unix epoch, as a string) for the slice.
+    example: "1789111200"
+  - name: end_time
+    in: query
+    type: string
+    required: true
+    description: End timestamp (Unix epoch, as a string) for the slice.
+    example: "1789114800"
+responses:
+  200:
+    description: >
+      A downloaded PCAP file (Content-Disposition: attachment;
+      filename=headers_<start_time>.pcap) containing packet headers only.
+  502:
+    description: The sensor responded, but not with HTTP 200.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Failed to retrieve PCAP from sensor"
+  503:
+    description: TCP connection to the sensor failed outright.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Sensor is unreachable"
+  504:
+    description: The sensor didn't respond within the 10-second timeout.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Sensor request timed out"

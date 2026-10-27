@@ -1,24 +1,25 @@
-# Use official lightweight Python image
 FROM python:3.10-slim
 
-# Create a working directory inside the container
 WORKDIR /app
 
-# 1. Copy requirements.txt first
-# This allows Docker to cache the installed dependencies step.
-# If you change your code but not requirements.txt, this step is skipped.
-COPY requirements.txt .
+# System packages
+#   libpcap0.8  – runtime library required by scapy for reading/writing PCAPs
+#   tshark      – required by pyshark for deep packet dissection
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpcap0.8 \
+        tshark \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Python dependencies
+# Install Python deps before copying source for better layer caching
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Copy the rest of the server code
-# Since the build context is the 'server' folder, this copies 
-# everything in that folder (app.py, etc.) into /app
 COPY . .
 
-# Expose port 5000
-EXPOSE 5000
+# Directories written at runtime — must exist inside the container
+RUN mkdir -p uploads generated_pcaps cluster_analysis results
 
-# Run the application
+EXPOSE 5555
+
 CMD ["python3", "app.py"]

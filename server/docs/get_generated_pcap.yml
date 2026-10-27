@@ -1,0 +1,36 @@
+tags:
+  - PCAP Management
+summary: Download Generated PCAP
+description: >
+  Downloads a previously uploaded/saved PCAP file as a binary attachment
+  (not JSON). Ownership is checked against the caller's JWT identity.
+produces:
+  - application/vnd.tcpdump.pcap
+security:
+  - Bearer: []
+parameters:
+  - name: filename
+    in: path
+    type: string
+    required: true
+    description: The name of the generated PCAP file to download.
+    example: "20260101120000_capture.pcap"
+responses:
+  200:
+    description: "The requested PCAP file as a binary attachment (Content-Disposition header: attachment)."
+  403:
+    description: The PCAP exists but belongs to a different user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access denied"
+  404:
+    description: File not found in the generated directory, or no matching PcapFile row for this filename/user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "File not found"

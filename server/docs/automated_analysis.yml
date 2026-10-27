@@ -1,0 +1,108 @@
+tags:
+  - Core Analysis
+summary: Automated PCAP Upload & Analysis
+description: >
+  Uploads a PCAP file, saves it, and runs the full pipeline in one call:
+  traffic/graph analysis, rule-based (or ML) IP role classification, and
+  O-RAN UE session extraction (IMSI/GUTI). This is the "one-shot" entry
+  point used by the Profiling step in the UI — for an already-uploaded
+  file, /run_pipeline (roles only) or /analyze-saved-pcap (traffic only)
+  are cheaper alternatives.
+
+  Rate limit: 5 requests per minute per authenticated user.
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+security:
+  - Bearer: []
+parameters:
+  - name: file
+    in: formData
+    type: file
+    required: true
+    description: The PCAP file to upload. Must have a .pcap extension.
+  - name: model_name
+    in: formData
+    type: string
+    required: false
+    default: rule_based
+    description: The ML or rule-based model to use for role classification.
+responses:
+  200:
+    description: Full analysis report including roles, graph data, and file download links.
+    schema:
+      type: object
+      properties:
+        filename:
+          type: string
+          description: The stored filename (timestamp-prefixed) — use with /run_pipeline, /clustering, etc.
+          example: "20260101120000_capture.pcap"
+        json:
+          type: string
+          description: Relative URL to download the classified roles as JSON.
+          example: "/save_roles?file=20260101120000_capture&type=json"
+        csv:
+          type: string
+          description: Relative URL to download the classified roles as CSV.
+          example: "/save_roles?file=20260101120000_capture&type=csv"
+        analysis:
+          type: object
+          properties:
+            total_packets:
+              type: integer
+              example: 18042
+            graph:
+              type: object
+              description: >
+                Force-directed conversation graph (same shape as
+                /analyze-saved-pcap's "graph" field: type, categories,
+                nodes[{name,value,category}], links[{source,target,value}]).
+        roles:
+          type: object
+          description: >
+            Map of IP address to its classified role string (plain string,
+            not the {role, confidence, reasoning} object — use /run_pipeline
+            if you need confidence/reasoning alongside the role).
+          additionalProperties:
+            type: string
+          example:
+            "10.0.0.5": "AMF"
+            "10.0.0.1": "gNB"
+            "10.244.0.77": "NEAR_RT_RIC"
+  400:
+    description: Missing file part, no file selected, or the file isn't a .pcap.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing file part"
+  401:
+    description: Missing or invalid JWT Bearer token.
+    schema:
+      type: object
+      properties:
+        msg:
+          type: string
+          example: "Missing Authorization Header"
+  429:
+    description: Rate limit exceeded — more than 5 requests per minute.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "5 per 1 minute"
+  500:
+    description: >
+      Pipeline processing failure — packet loading failed, role
+      classification failed, or an unexpected exception. The uploaded
+      PcapFile row is left in "PROCESSING" status; the transaction is
+      rolled back so no partial results are persisted.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

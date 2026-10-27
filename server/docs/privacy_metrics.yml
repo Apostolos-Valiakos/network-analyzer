@@ -1,0 +1,40 @@
+tags:
+  - Privacy
+summary: Privacy metrics with optional anonymisation transforms
+description: Applies pseudonymisation, generalisation and suppression to the records, then returns k-anonymity, l-diversity, t-closeness, re-identification risk, PPI and utility loss.
+consumes:
+  - application/json
+parameters:
+  - name: body
+    in: body
+    required: true
+    schema:
+      type: object
+      required: [records, identifiers]
+      properties:
+        records:
+          type: array
+          items: {type: object}
+        identifiers:
+          type: array
+          items: {type: string}
+        sensitive_attribute:
+          type: string
+        transformations:
+          type: object
+          properties:
+            pseudonymize: {type: array, items: {type: string}}
+            pseudonymization_mode: {type: string, enum: [deterministic, per_run, per_pilot]}
+            pseudonymization_technique: {type: string, enum: [hmac_sha256, sha256_salt, random_token, format_preserving_ip]}
+            generalize: {type: array, items: {type: string}}
+            generalize_profiles: {type: object}
+            suppress: {type: array, items: {type: string}}
+            suppress_thresholds: {type: object}
+            record_suppression_k:
+              type: integer
+              description: Drop rows whose QI class has fewer than k rows (0 = off).
+responses:
+  200:
+    description: Metrics computed.
+  400:
+    description: Invalid input.

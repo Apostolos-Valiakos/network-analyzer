@@ -1,0 +1,70 @@
+tags:
+  - Streaming Analysis
+summary: Start WebSocket Analysis
+description: >
+  Connects out to an external WebSocket source (e.g. the sensor's raw
+  packet publisher) for a fixed duration and captures the incoming
+  traffic. Returns immediately once the client thread is confirmed
+  started — it does not wait for the capture window to finish or return
+  analysis results directly; use the regular PCAP-based endpoints
+  afterward against whatever file this run produced.
+consumes:
+  - application/json
+produces:
+  - application/json
+security:
+  - Bearer: []
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - ws_url
+        - seconds
+      properties:
+        ws_url:
+          type: string
+          description: The WebSocket URL to connect to (e.g. the sensor's publisher.py).
+          example: "ws://10.6.1.155:5002"
+        seconds:
+          type: integer
+          description: Duration in seconds to capture traffic (1-3600).
+          example: 60
+responses:
+  202:
+    description: Pipeline started successfully.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "Accepted"
+        message:
+          type: string
+          example: "Pipeline started."
+  400:
+    description: >
+      Missing "ws_url"/"seconds", "seconds" isn't a valid integer, or
+      "seconds" is outside the 1-3600 range.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "Error"
+        message:
+          type: string
+          example: "seconds must be between 1 and 3600"
+  500:
+    description: Failed to connect to or start capturing from the given WebSocket URL.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "Failed"
+        message:
+          type: string
+          example: "Failed to start."

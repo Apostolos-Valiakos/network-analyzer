@@ -1,0 +1,86 @@
+tags:
+  - Continuous Monitoring
+summary: Get Network Statistics
+description: >
+  Retrieves raw flow records from the flow_statistics table (populated by
+  POST /v1/ingest/zeek) within a time window, newest first. Field names
+  use Zeek dot notation ("id.orig_h" etc.) to align with Grafana/Zeek
+  dashboard conventions.
+produces:
+  - application/json
+  - text/csv
+security:
+  - Bearer: []
+parameters:
+  - name: start_time
+    in: query
+    type: number
+    required: false
+    description: Start timestamp (Unix epoch float). Defaults to 0.
+    example: 1789111200
+  - name: end_time
+    in: query
+    type: number
+    required: false
+    description: End timestamp (Unix epoch float). Defaults to current time.
+    example: 1789114800
+  - name: limit
+    in: query
+    type: integer
+    required: false
+    default: 1000
+    description: Maximum number of records to return (1-10000).
+  - name: format
+    in: query
+    type: string
+    required: false
+    default: csv
+    enum: [json, csv]
+    description: Response format.
+responses:
+  200:
+    description: Returns the formatted network statistics (JSON array, or a downloadable CSV when format=csv).
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          ts:
+            type: number
+            description: Flow end timestamp (Unix epoch float).
+            example: 1789111234.5
+          id.orig_h:
+            type: string
+            example: "10.0.0.1"
+          id.resp_h:
+            type: string
+            example: "10.0.0.5"
+          proto:
+            type: string
+            example: "tcp"
+          conn_state:
+            type: string
+            description: Zeek connection state code (e.g. SF, REJ, S0).
+            example: "SF"
+          orig_bytes:
+            type: integer
+            example: 4096
+          resp_bytes:
+            type: integer
+            example: 8192
+          orig_pkts:
+            type: integer
+            example: 12
+          resp_pkts:
+            type: integer
+            example: 14
+  400:
+    description: >
+      Request processing error — invalid start_time/end_time/limit values,
+      or a database error.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

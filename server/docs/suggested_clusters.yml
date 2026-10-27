@@ -1,0 +1,102 @@
+tags:
+  - Clustering
+summary: Get Suggested Clustering Parameters
+description: >
+  Runs a clustering pass up to 10 clusters (fixed anomaly_threshold=2) and
+  returns only the modularity/importance summary — use this to preview the
+  suggested cluster count and hierarchy before committing to a full
+  POST /clustering call (which also persists the result and emits WP5
+  anomaly notices).
+produces:
+  - application/json
+security:
+  - Bearer: []
+parameters:
+  - name: file
+    in: query
+    type: string
+    required: true
+    description: The filename of the PCAP to analyze (must belong to the caller).
+    example: "20260101120000_capture.pcap"
+responses:
+  200:
+    description: Summary containing the best 'k', modularity scores, and cluster hierarchy.
+    schema:
+      type: object
+      properties:
+        best_k:
+          type: integer
+          description: The cluster count (2-10) that produced the highest modularity score.
+          example: 3
+        best_modularity:
+          type: number
+          example: 0.4123
+        modularity_scores:
+          type: array
+          description: Modularity score tested at every k from 2 to 10.
+          items:
+            type: object
+            properties:
+              k:
+                type: integer
+              modularity:
+                type: number
+          example: [{"k": 2, "modularity": 0.31}, {"k": 3, "modularity": 0.4123}, {"k": 4, "modularity": 0.38}]
+        cluster_hierarchy:
+          type: array
+          description: One entry per cluster (at best_k), sorted by importance score descending.
+          items:
+            type: object
+            properties:
+              cluster:
+                type: integer
+              size:
+                type: integer
+                description: Number of IPs in this cluster.
+              unique_partners_sum:
+                type: integer
+              edge_density:
+                type: number
+              traffic_score:
+                type: number
+              score:
+                type: number
+                description: "Importance score: (edge_density * 0.7) + (traffic_score * 0.3)."
+        mostImportantCluster:
+          type: integer
+          description: cluster id of the highest-scoring entry in cluster_hierarchy, or null if none.
+          example: 0
+  400:
+    description: Missing "file" query parameter.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "file required"
+  403:
+    description: The PCAP exists but belongs to a different user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access denied"
+  404:
+    description: PCAP file not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "File not found"
+  500:
+    description: >
+      Clustering analysis failed — commonly when the PCAP has fewer than 2
+      distinct IP endpoints.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Clustering analysis failed"

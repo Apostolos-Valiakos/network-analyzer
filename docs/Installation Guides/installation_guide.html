@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Analyzer – Installation Guide / Οδηγός Εγκατάστασης</title>
+<style>
+  @page { size: A4; margin: 25mm 20mm 25mm 20mm; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 11pt; line-height: 1.65; color: #111; background: #fff;
+    max-width: 170mm; margin: 0 auto; padding: 10mm 0;
+  }
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; border-bottom: 1.5pt solid #111; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  h4 { font-size: 11pt; margin: 12pt 0 3pt; font-style: italic; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul, ol { margin: 4pt 0 7pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { font-family: "Courier New", Courier, monospace; font-size: 10pt; background: #f4f4f4; padding: 0 2pt; }
+  pre  { font-family: "Courier New", Courier, monospace; font-size: 9pt; background: #f4f4f4;
+         border: 1pt solid #ccc; padding: 8pt; overflow-x: auto; white-space: pre; line-height: 1.35;
+         margin: 6pt 0 10pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; }
+  th, td { border: 1pt solid #aaa; padding: 4pt 6pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  a  { color: #1a56a8; }
+  .cover { text-align: center; padding: 20pt 0 14pt; border-bottom: 2pt solid #111; margin-bottom: 16pt; }
+  .cover .subtitle { font-size: 13pt; margin: 4pt 0; }
+  .cover .meta { font-size: 10pt; color: #444; margin: 3pt 0; }
+  .cover .version { font-size: 9.5pt; color: #666; }
+  .en { border-left: 3pt solid #1a56a8; padding-left: 8pt; margin-bottom: 6pt; }
+  .el { border-left: 3pt solid #c0392b; padding-left: 8pt; margin-bottom: 10pt; color: #1a1a1a; }
+  .lang-label { display: inline-block; font-size: 7.5pt; font-weight: bold; letter-spacing: .5pt;
+    border: 1pt solid; border-radius: 2pt; padding: 0 3pt; margin-bottom: 2pt; }
+  .lang-label.en-lbl { color: #1a56a8; border-color: #1a56a8; }
+  .lang-label.el-lbl { color: #c0392b; border-color: #c0392b; }
+  .diagram-box { border: 1.5pt solid #555; padding: 10pt; margin: 8pt 0 12pt; background: #fafafa; }
+  .diagram-title { font-weight: bold; font-size: 9.5pt; text-align: center; margin-bottom: 6pt; letter-spacing: .4pt; }
+  .note { border: 1pt solid #1a56a8; background: #eef4ff; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .warn { border: 1pt solid #c0392b; background: #fff0ee; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .tip  { border: 1pt solid #1e8c45; background: #f0fff4; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 15mm; } }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <img src="/6g_logo.png" alt="Network Analyzer Logo" width="72" onerror="this.style.display='none'">
+  <h1>Network Analyzer</h1>
+  <p class="subtitle">5G / 6G Network Traffic Analysis &amp; Intelligence Platform</p>
+  <p class="subtitle" lang="el">Πλατφόρμα Ανάλυσης &amp; Ευφυΐας Κίνησης Δικτύου 5G / 6G</p>
+  <p class="meta"><strong>Installation Guide / Οδηγός Εγκατάστασης</strong></p>
+  <p class="meta">University of Thessaly — Πανεπιστήμιο Θεσσαλίας</p>
+  <p class="version">Version 1.0 &nbsp;|&nbsp; 2025 &nbsp;|&nbsp; MIT License</p>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<h2>Table of Contents / Πίνακας Περιεχομένων</h2>
+<ol>
+  <li><a href="#sec-overview">Overview &amp; Deployment Topology / Επισκόπηση &amp; Τοπολογία</a></li>
+  <li><a href="#sec-backend">Backend Installation / Εγκατάσταση Backend</a></li>
+  <li><a href="#sec-frontend">Frontend Installation / Εγκατάσταση Frontend</a></li>
+  <li><a href="#sec-sensor">Sensor VM Installation / Εγκατάσταση VM Αισθητήρα</a></li>
+  <li><a href="#sec-verify">Verifying the Full Stack / Επαλήθευση Πλήρους Στοίβας</a></li>
+  <li><a href="#sec-service">Running as System Services / Υπηρεσίες Συστήματος</a></li>
+  <li><a href="#sec-trouble">Installation Troubleshooting / Αντιμετώπιση Προβλημάτων</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<!-- 1. OVERVIEW -->
+<h2 id="sec-overview">1. Overview &amp; Deployment Topology / Επισκόπηση &amp; Τοπολογία</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>A full deployment involves three machines (or processes). They can share one
+host for development; in production they are typically separated as shown.</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Μια πλήρης ανάπτυξη περιλαμβάνει τρεις μηχανές (ή διεργασίες). Για
+ανάπτυξη μπορούν να τρέχουν στον ίδιο υπολογιστή· σε παραγωγή συνήθως
+διαχωρίζονται όπως φαίνεται παρακάτω.</p>
+</div>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 1 / Σχήμα 1 – Deployment Topology / Τοπολογία Ανάπτυξης</div>
+<pre>
+  ┌─────────────────────────┐     ┌─────────────────────────┐
+  │   APPLICATION SERVER    │     │      SENSOR VM          │
+  │   Εξυπηρετητής Εφαρμ.  │     │      VM Αισθητήρα       │
+  │  ┌───────────────────┐  │     │  start_sensor.sh        │
+  │  │  Flask API :5555  │◄─┼─────┼─ zeek_agent.py          │
+  │  └─────────┬─────────┘  │     │  pcap_server.py :5005   │
+  │            │ SQLAlchemy │     │  Zeek + dumpcap         │
+  │  ┌─────────▼─────────┐  │     └─────────────────────────┘
+  │  │  PostgreSQL 14    │  │
+  │  │  + TimescaleDB    │  │     ┌─────────────────────────┐
+  │  └───────────────────┘  │     │     USER BROWSER        │
+  │  ┌───────────────────┐  │     │     Περιηγητής          │
+  │  │  Nuxt SPA  :3000  │◄─┼─────┼─ http://&lt;host&gt;:3000     │
+  │  └───────────────────┘  │     └─────────────────────────┘
+  └─────────────────────────┘
+</pre>
+</div>
+
+<h3>1.1 Ports &amp; Services / Θύρες &amp; Υπηρεσίες</h3>
+<table>
+  <thead>
+    <tr><th>Service / Υπηρεσία</th><th>Host / Μηχανή</th><th>Port / Θύρα</th><th>Protocol</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Flask API</td><td>Application server</td><td>5555</td><td>HTTP / WebSocket</td></tr>
+    <tr><td>Nuxt SPA</td><td>Application server</td><td>3000</td><td>HTTP</td></tr>
+    <tr><td>PostgreSQL</td><td>Application server</td><td>5432</td><td>TCP</td></tr>
+    <tr><td>PCAP Server</td><td>Sensor VM</td><td>5005</td><td>HTTP</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 2. BACKEND -->
+<h2 id="sec-backend">2. Backend Installation / Εγκατάσταση Backend (Flask API)</h2>
+
+<h3>2.1 System Requirements / Απαιτήσεις Συστήματος</h3>
+<table>
+  <thead>
+    <tr><th>Component</th><th>Minimum</th><th>Notes / Σημειώσεις</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>OS / ΛΣ</td><td>Ubuntu 22.04 LTS / Debian 12 / Windows 10+</td><td>Linux recommended for production / Linux συνιστάται</td></tr>
+    <tr><td>Python</td><td>3.11</td><td>3.12 also supported</td></tr>
+    <tr><td>RAM</td><td>2 GB</td><td>4 GB+ for large PCAPs / για μεγάλα PCAP</td></tr>
+    <tr><td>Disk / Δίσκος</td><td>10 GB free</td><td>For uploads and results</td></tr>
+    <tr><td>PostgreSQL</td><td>14</td><td>TimescaleDB extension required</td></tr>
+    <tr><td>tshark</td><td>3.x</td><td>Part of Wireshark package</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Install System Dependencies / Εγκατάσταση Εξαρτήσεων</h3>
+<pre>
+# Ubuntu / Debian
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip \
+    wireshark-common tshark postgresql postgresql-contrib
+</pre>
+
+<h4>Install TimescaleDB / Εγκατάσταση TimescaleDB</h4>
+<pre>
+sudo apt install -y gnupg postgresql-common apt-transport-https lsb-release wget
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+sudo apt install -y timescaledb-2-postgresql-14
+sudo timescaledb-tune --quiet --yes
+sudo systemctl restart postgresql
+</pre>
+
+<h3>2.3 Create PostgreSQL Database / Δημιουργία Βάσης Δεδομένων</h3>
+<pre>
+sudo -u postgres psql
+
+-- Inside psql / Μέσα στο psql:
+CREATE USER netanalyzer WITH PASSWORD 'choose_a_strong_password';
+CREATE DATABASE network_analyzer OWNER netanalyzer;
+\c network_analyzer
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\q
+</pre>
+
+<h3>2.4 Python Virtual Environment / Εικονικό Περιβάλλον Python</h3>
+<pre>
+cd server
+python3.11 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install flask-socketio        # not in requirements.txt — install separately
+</pre>
+
+<h3>2.5 Environment File / Αρχείο Περιβάλλοντος</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Copy <code>.env.example</code> to <code>.env</code> in the project root and
+fill in all values. The backend will refuse to start if
+<code>JWT_SECRET_KEY</code> is missing.</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Αντιγράψτε το <code>.env.example</code> σε <code>.env</code> στη ρίζα του
+έργου και συμπληρώστε όλες τις τιμές. Το backend αρνείται να εκκινήσει αν
+απουσιάζει το <code>JWT_SECRET_KEY</code>.</p>
+</div>
+
+<pre>
+cp .env.example .env
+nano .env
+</pre>
+
+<table>
+  <thead>
+    <tr><th>Variable</th><th>Required</th><th>Description / Περιγραφή</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td><code>postgresql://netanalyzer:pass@localhost:5432/network_analyzer</code></td></tr>
+    <tr><td><code>JWT_SECRET_KEY</code></td><td>Yes</td><td>Random 32+ char string. Generate: <code>python3 -c "import secrets; print(secrets.token_hex(32))"</code></td></tr>
+    <tr><td><code>INTERNAL_TOKEN</code></td><td>Yes</td><td>Shared with Sensor VM. Must match <code>SECRET_TOKEN</code> on sensor.</td></tr>
+    <tr><td><code>ALLOWED_ORIGINS</code></td><td>Yes</td><td>Comma-separated frontend origins, e.g. <code>http://localhost:3000</code></td></tr>
+    <tr><td><code>VUE_APP_API_BASE_URL</code></td><td>No</td><td>Frontend build-time API URL, e.g. <code>http://192.168.1.10:5555</code></td></tr>
+  </tbody>
+</table>
+
+<h3>2.6 Initialise Schema &amp; Create Admin User / Αρχικοποίηση Σχήματος &amp; Admin</h3>
+<pre>
+# Initialise database tables / Δημιουργία πινάκων βάσης
+python - &lt;&lt;'EOF'
+from app import app
+from models import db
+with app.app_context():
+    db.create_all()
+    print("Schema created / Σχήμα δημιουργήθηκε")
+EOF
+
+# Create first admin user / Δημιουργία πρώτου χρήστη admin
+python - &lt;&lt;'EOF'
+from app import app
+from models import db, User
+from werkzeug.security import generate_password_hash
+with app.app_context():
+    db.session.add(User(
+        username="admin",
+        password_hash=generate_password_hash("change_me_now"),
+        role="admin"
+    ))
+    db.session.commit()
+    print("Admin user created / Χρήστης admin δημιουργήθηκε")
+EOF
+</pre>
+
+<div class="warn">
+<strong>Warning / Προειδοποίηση:</strong> Change the admin password immediately
+after first login. / Αλλάξτε τον κωδικό admin αμέσως μετά την πρώτη σύνδεση.
+</div>
+
+<h3>2.7 Start the Backend / Εκκίνηση Backend</h3>
+<pre>
+python app.py
+# Running on http://0.0.0.0:5555
+# Swagger UI at http://0.0.0.0:5555/apidocs
+</pre>
+
+<div class="page-break"></div>
+
+<!-- 3. FRONTEND -->
+<h2 id="sec-frontend">3. Frontend Installation / Εγκατάσταση Frontend (Nuxt SPA)</h2>
+
+<h3>3.1 Install Node.js / Εγκατάσταση Node.js</h3>
+<pre>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version    # v20.x.x
+npm --version     # 10.x.x
+</pre>
+
+<h3>3.2 Configure &amp; Install / Διαμόρφωση &amp; Εγκατάσταση</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Set <code>VUE_APP_API_BASE_URL</code> in <code>.env</code> to the Flask API
+address reachable from the user's browser — not <code>127.0.0.1</code> if the
+API is on a different machine.</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Ορίστε το <code>VUE_APP_API_BASE_URL</code> στο <code>.env</code> στη
+διεύθυνση του Flask API που προσεγγίζει ο περιηγητής του χρήστη — όχι
+<code>127.0.0.1</code> αν το API βρίσκεται σε άλλη μηχανή.</p>
+</div>
+
+<pre>
+# .env
+VUE_APP_API_BASE_URL=http://192.168.1.10:5555
+</pre>
+<pre>
+npm install           # install dependencies / εγκατάσταση εξαρτήσεων
+npm run dev           # development hot-reload at http://localhost:3000
+npm run build         # production build
+npm run start         # production server at http://0.0.0.0:3000
+</pre>
+
+<h3>3.3 Optional Nginx Reverse Proxy / Προαιρετικό Nginx Reverse Proxy</h3>
+<pre>
+# /etc/nginx/sites-available/network-analyzer
+server {
+    listen 80;
+    server_name your.domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+
+    location /api/ {
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass http://127.0.0.1:5555;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+}
+</pre>
+<pre>
+sudo ln -s /etc/nginx/sites-available/network-analyzer /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+</pre>
+
+<div class="page-break"></div>
+
+<!-- 4. SENSOR VM -->
+<h2 id="sec-sensor">4. Sensor VM Installation / Εγκατάσταση VM Αισθητήρα (Host Files)</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>The Sensor VM is a Linux machine on the monitored network. It runs four
+components: <strong>Zeek IDS</strong> (parses traffic → <code>conn.log</code>),
+<strong>dumpcap</strong> (ring-buffer PCAP capture), <strong>zeek_agent.py</strong>
+(batches Zeek flows to the Flask API every 2 s or 50 records), and
+<strong>pcap_server.py</strong> (Flask on port 5005 serving on-demand PCAP
+slices).</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Το VM αισθητήρα είναι Linux μηχανή στο παρακολουθούμενο δίκτυο. Εκτελεί
+τέσσερα στοιχεία: <strong>Zeek IDS</strong> (αναλύει κυκλοφορία → <code>conn.log</code>),
+<strong>dumpcap</strong> (καταγραφή PCAP σε δακτύλιο), <strong>zeek_agent.py</strong>
+(αποστέλλει ροές Zeek στο Flask API κάθε 2 δλ ή 50 εγγραφές), και
+<strong>pcap_server.py</strong> (Flask στη θύρα 5005 για τμήματα PCAP κατ'
+απαίτηση).</p>
+</div>
+
+<h3>4.1 Install System Packages / Εγκατάσταση Πακέτων</h3>
+<pre>
+sudo apt update
+sudo apt install -y python3 python3-pip wireshark-common tshark nmap curl wget
+pip3 install requests flask
+</pre>
+
+<div class="note">
+<strong>EN:</strong> When prompted during Wireshark install — answer <strong>Yes</strong>
+to allow non-root packet capture, or run all sensor scripts as root.<br>
+<strong>ΕΛ:</strong> Κατά την εγκατάσταση Wireshark, απαντήστε <strong>Yes</strong>
+για λήψη πακέτων χωρίς root, αλλιώς εκτελείτε τα scripts ως root.
+</div>
+
+<h3>4.2 Install Zeek / Εγκατάσταση Zeek</h3>
+<pre>
+echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' \
+    | sudo tee /etc/apt/sources.list.d/security:zeek.list
+
+curl -fsSL https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key \
+    | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg &gt; /dev/null
+
+sudo apt update && sudo apt install -y zeek
+
+echo 'export PATH=$PATH:/opt/zeek/bin' >> ~/.bashrc
+source ~/.bashrc
+zeek --version    # verify / επαλήθευση
+</pre>
+
+<h3>4.3 Copy Sensor Files / Αντιγραφή Αρχείων Αισθητήρα</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Copy the three files from <code>Host Files/</code> to the sensor machine:</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Αντιγράψτε τα τρία αρχεία από τον κατάλογο <code>Host Files/</code> στο VM:</p>
+</div>
+
+<pre>
+# From the application server / Από τον εξυπηρετητή εφαρμογής
+scp "Host Files/start_sensor.sh" \
+    "Host Files/zeek_agent.py" \
+    "Host Files/pcap_server.py" \
+    user@sensor-ip:~/sensor/
+
+# On sensor VM / Στο VM αισθητήρα
+chmod +x ~/sensor/start_sensor.sh
+</pre>
+
+<h3>4.4 Configure the Sensor / Διαμόρφωση Αισθητήρα</h3>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>All sensor configuration is hardcoded at the top of each file — there is no
+<code>.env</code> on the sensor machine. Edit the values before deploying.</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Όλη η διαμόρφωση είναι hardcoded στην αρχή κάθε αρχείου — δεν υπάρχει
+αρχείο <code>.env</code> στο VM αισθητήρα. Επεξεργαστείτε τις τιμές πριν την
+ανάπτυξη.</p>
+</div>
+
+<h4>zeek_agent.py</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+ZEEK_LOG_PATH = "conn.log"
+HOST_API_URL  = "http://&lt;app-server-ip&gt;:5555/v1/ingest/zeek"
+SECRET_TOKEN  = "same_value_as_INTERNAL_TOKEN_in_backend_env"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>pcap_server.py</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+SECRET_TOKEN = "same_value_as_INTERNAL_TOKEN_in_backend_env"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>start_sensor.sh</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+HOST_IP="&lt;sensor-vm-ip&gt;"        # this machine's IP — excluded from capture
+SENSOR_PORTS="5000 or port 5001 or port 5005"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<div class="warn">
+<strong>EN:</strong> <code>SECRET_TOKEN</code> in both Python files must exactly
+match <code>INTERNAL_TOKEN</code> in the Flask backend <code>.env</code>. A
+mismatch causes HTTP 401 on every Zeek ingest request.<br>
+<strong>ΕΛ:</strong> Το <code>SECRET_TOKEN</code> και στα δύο Python αρχεία
+πρέπει να ταιριάζει <em>ακριβώς</em> με το <code>INTERNAL_TOKEN</code> του
+backend. Αναντιστοιχία προκαλεί HTTP 401 σε κάθε εισαγωγή Zeek.
+</div>
+
+<h3>4.5 Start the Sensor / Εκκίνηση Αισθητήρα</h3>
+<pre>
+cd ~/sensor
+./start_sensor.sh eth0    # replace eth0 with your interface / αντικαταστήστε με τη διεπαφή σας
+</pre>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 2 / Σχήμα 2 – Sensor VM Internal Flow / Εσωτερική Ροή VM Αισθητήρα</div>
+<pre>
+  Network Interface (promiscuous / Δεπαφή δικτύου, promiscuous mode)
+           │
+           ├──────────────────────────────────┐
+           │                                  │
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │   Zeek IDS      │                │   dumpcap       │
+  │ -C -i eth0      │                │ ring buffer     │
+  │ LogAscii JSON   │                │ 500 MB / file   │
+  └────────┬────────┘                │ 3 files max     │
+           │ conn.log (JSON)         └────────┬────────┘
+           │                                  │ generated_pcaps/
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │ zeek_agent.py   │                │ pcap_server.py  │
+  │ tail + batch    │                │ Flask :5005     │
+  │ 50 flows / 2 s  │                │ GET /get-pcap   │
+  └────────┬────────┘                └────────┬────────┘
+           │ POST /v1/ingest/zeek              │ on-demand slice
+           │ X-Internal-Token                  │ mergecap + editcap
+           ▼                                   ▼
+     Flask API :5555              Flask API :5555
+</pre>
+</div>
+
+<div class="tip">
+<strong>EN:</strong> To list network interfaces: <code>ip link show</code>.
+For passive monitoring without disrupting traffic, use a SPAN port or network
+TAP. The <code>-C</code> flag disables checksum verification — required on
+mirror ports.<br>
+<strong>ΕΛ:</strong> Λίστα διεπαφών: <code>ip link show</code>. Για παθητική
+παρακολούθηση χρησιμοποιήστε θύρα SPAN ή network TAP. Η σημαία <code>-C</code>
+απενεργοποιεί checksum — απαραίτητο σε θύρες καθρέφτη.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 5. VERIFY -->
+<h2 id="sec-verify">5. Verifying the Full Stack / Επαλήθευση Πλήρους Στοίβας</h2>
+
+<h3>5.1 Backend / Φ backend</h3>
+<pre>
+curl -s http://&lt;app-ip&gt;:5555/apidocs | grep -c "swagger"
+# Returns 1 if OK / Επιστρέφει 1 αν OK
+</pre>
+
+<h3>5.2 Frontend</h3>
+<p>
+<span class="lang-label en-lbl">EN</span> Browse to <code>http://&lt;app-ip&gt;:3000</code> and log in with admin credentials.<br>
+<span class="lang-label el-lbl">ΕΛ</span> Μεταβείτε στο <code>http://&lt;app-ip&gt;:3000</code> και συνδεθείτε με τα διαπιστευτήρια admin.
+</p>
+
+<h3>5.3 Zeek Ingestion / Εισαγωγή Zeek</h3>
+<pre>
+sudo -u postgres psql -d network_analyzer -c \
+    "SELECT COUNT(*) FROM flow_statistics;"
+# Row count increases every few seconds while sensor runs
+# Ο αριθμός γραμμών αυξάνεται κάθε λίγα δευτερόλεπτα
+</pre>
+
+<h3>5.4 PCAP Server / Εξυπηρετητής PCAP</h3>
+<pre>
+curl -s -o /dev/null -w "%{http_code}" \
+    -H "X-Internal-Token: &lt;INTERNAL_TOKEN&gt;" \
+    http://&lt;sensor-ip&gt;:5005/get-pcap
+# Should return 200 / Πρέπει να επιστρέψει 200
+</pre>
+
+<h3>5.5 End-to-End Checklist / Λίστα Ελέγχου End-to-End</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Test / Δοκιμή</th><th>Expected / Αναμενόμενο</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Browse <code>:5555/apidocs</code></td><td>Swagger UI loads / Φόρτωση Swagger UI</td></tr>
+    <tr><td>2</td><td>Browse <code>:3000/login</code></td><td>Login form / Φόρμα σύνδεσης</td></tr>
+    <tr><td>3</td><td>Login as admin</td><td>Home dashboard / Κεντρικό ταμπλό</td></tr>
+    <tr><td>4</td><td>Upload .pcap on Analyze page</td><td>Analysis results / Αποτελέσματα ανάλυσης</td></tr>
+    <tr><td>5</td><td>Open Monitoring, enable Live Mode</td><td>Flow rows update / Ενημέρωση γραμμών ροών</td></tr>
+    <tr><td>6</td><td>Send large transfer through monitored network</td><td>Alert snackbar in browser / Ειδοποίηση στον περιηγητή</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 6. SERVICES -->
+<h2 id="sec-service">6. Running as System Services / Υπηρεσίες Συστήματος (systemd)</h2>
+
+<span class="lang-label en-lbl">EN</span>
+<div class="en">
+<p>Use systemd unit files so all components restart automatically after a
+reboot.</p>
+</div>
+<span class="lang-label el-lbl">ΕΛ</span>
+<div class="el">
+<p>Χρησιμοποιήστε αρχεία μονάδας systemd ώστε όλα τα στοιχεία να
+επανεκκινούνται αυτόματα μετά από επανεκκίνηση.</p>
+</div>
+
+<h3>6.1 Flask API Service</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-api.service
+[Unit]
+Description=Network Analyzer Flask API
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer/server
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/opt/network-analyzer/server/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl daemon-reload
+sudo systemctl enable --now netanalyzer-api
+</pre>
+
+<h3>6.2 Nuxt Frontend Service</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-frontend.service
+[Unit]
+Description=Network Analyzer Nuxt Frontend
+After=network.target netanalyzer-api.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-frontend
+</pre>
+
+<h3>6.3 Sensor Service / Υπηρεσία Αισθητήρα</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-sensor.service
+[Unit]
+Description=Network Analyzer Sensor Node
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/sensor-user/sensor
+ExecStart=/bin/bash /home/sensor-user/sensor/start_sensor.sh eth0
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-sensor
+</pre>
+
+<div class="page-break"></div>
+
+<!-- 7. TROUBLESHOOT -->
+<h2 id="sec-trouble">7. Installation Troubleshooting / Αντιμετώπιση Προβλημάτων Εγκατάστασης</h2>
+
+<table>
+  <thead>
+    <tr><th>Symptom / Σύμπτωμα</th><th>Cause / Αιτία</th><th>Fix / Επίλυση</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>RuntimeError: JWT_SECRET_KEY must be set</code></td>
+      <td>.env not loaded or missing / Δεν φορτώθηκε ή λείπει</td>
+      <td>Confirm <code>.env</code> is in <code>server/</code> with <code>JWT_SECRET_KEY</code></td>
+    </tr>
+    <tr>
+      <td><code>psycopg2.OperationalError: could not connect</code></td>
+      <td>PostgreSQL not running / Δεν τρέχει</td>
+      <td><code>sudo systemctl start postgresql</code>; verify with <code>pg_isready</code></td>
+    </tr>
+    <tr>
+      <td><code>extension "timescaledb" does not exist</code></td>
+      <td>TimescaleDB not installed / Δεν εγκαταστάθηκε</td>
+      <td>Re-run TimescaleDB install steps / Επαναλάβετε τα βήματα εγκατάστασης</td>
+    </tr>
+    <tr>
+      <td><code>ModuleNotFoundError: No module named 'pyshark'</code></td>
+      <td>venv not activated / Δεν ενεργοποιήθηκε venv</td>
+      <td>Activate <code>.venv</code>; run <code>pip install -r requirements.txt</code></td>
+    </tr>
+    <tr>
+      <td>tshark errors during analysis</td>
+      <td>tshark not in PATH / Δεν βρίσκεται στο PATH</td>
+      <td><code>which tshark</code>; add Wireshark bin to PATH</td>
+    </tr>
+    <tr>
+      <td>Nuxt CORS error in browser</td>
+      <td>Origin not in <code>ALLOWED_ORIGINS</code></td>
+      <td>Add frontend URL to <code>ALLOWED_ORIGINS</code> in <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>Zeek does not produce <code>conn.log</code></td>
+      <td>Zeek not found or wrong interface / Λάθος διεπαφή</td>
+      <td><code>/opt/zeek/bin/zeek --version</code>; check interface with <code>ip a</code></td>
+    </tr>
+    <tr>
+      <td>zeek_agent.py: connection refused</td>
+      <td>Wrong <code>HOST_API_URL</code> or Flask API down</td>
+      <td>Verify Flask API is running; check <code>HOST_API_URL</code></td>
+    </tr>
+    <tr>
+      <td>pcap_server.py returns 401</td>
+      <td>Token mismatch / Αναντιστοιχία token</td>
+      <td>Copy exact same token to both <code>.env</code> files</td>
+    </tr>
+    <tr>
+      <td>dumpcap: permission denied</td>
+      <td>Not in wireshark group / Δεν ανήκει στην ομάδα wireshark</td>
+      <td><code>sudo usermod -aG wireshark $USER</code>; log out and back in</td>
+    </tr>
+    <tr>
+      <td><code>mergecap</code> / <code>editcap</code> not found</td>
+      <td>wireshark-common not installed</td>
+      <td><code>sudo apt install -y wireshark-common</code></td>
+    </tr>
+    <tr>
+      <td><code>npm install</code> EACCES error</td>
+      <td>Running as root or wrong npm prefix</td>
+      <td>Run as normal user; <code>npm config set prefix ~/.npm-global</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- FOOTER -->
+<hr style="margin: 30pt 0 10pt; border: none; border-top: 1pt solid #aaa;">
+<p style="text-align:center; font-size: 9pt; color: #555;">
+  Network Analyzer Installation Guide &nbsp;|&nbsp; &copy; 2025 University of Thessaly / Πανεπιστήμιο Θεσσαλίας &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; Version 1.0
+</p>
+
+</body>
+</html>

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Analyzer – User Manual</title>
+<style>
+  @page {
+    size: A4;
+    margin: 25mm 20mm 25mm 20mm;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 11pt;
+    line-height: 1.65;
+    color: #111;
+    background: #fff;
+    max-width: 170mm;
+    margin: 0 auto;
+    padding: 10mm 0;
+  }
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; border-bottom: 1.5pt solid #111; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  h4 { font-size: 11pt; margin: 12pt 0 3pt; font-style: italic; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul, ol { margin: 4pt 0 7pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { font-family: "Courier New", Courier, monospace; font-size: 10pt; background: #f4f4f4; padding: 0 2pt; }
+  pre  { font-family: "Courier New", Courier, monospace; font-size: 9pt; background: #f4f4f4;
+         border: 1pt solid #ccc; padding: 8pt; overflow-x: auto; white-space: pre; line-height: 1.35;
+         margin: 6pt 0 10pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; }
+  th, td { border: 1pt solid #aaa; padding: 4pt 6pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  a  { color: #1a56a8; }
+  .cover { text-align: center; padding: 20pt 0 14pt; border-bottom: 2pt solid #111; margin-bottom: 16pt; }
+  .cover .subtitle { font-size: 13pt; margin: 4pt 0; }
+  .cover .meta { font-size: 10pt; color: #444; margin: 3pt 0; }
+  .cover .version { font-size: 9.5pt; color: #666; }
+  .diagram-box { border: 1.5pt solid #555; padding: 10pt; margin: 8pt 0 12pt; background: #fafafa; }
+  .diagram-title { font-weight: bold; font-size: 9.5pt; text-align: center; margin-bottom: 6pt; letter-spacing: .4pt; }
+  .note { border: 1pt solid #1a56a8; background: #eef4ff; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .warn { border: 1pt solid #c0392b; background: #fff0ee; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .tip  { border: 1pt solid #1e8c45; background: #f0fff4; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 15mm; } }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <img src="/6g_logo.png" alt="Network Analyzer Logo" width="72" onerror="this.style.display='none'">
+  <h1>Network Analyzer</h1>
+  <p class="subtitle">5G / 6G Network Traffic Analysis &amp; Intelligence Platform</p>
+  <p class="meta"><strong>User Manual</strong></p>
+  <p class="meta">University of Thessaly</p>
+  <p class="version">Version 1.0 &nbsp;|&nbsp; 2025 &nbsp;|&nbsp; MIT License</p>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<h2>Table of Contents</h2>
+<ol>
+  <li><a href="#sec-intro">Introduction</a></li>
+  <li><a href="#sec-arch">System Architecture</a></li>
+  <li><a href="#sec-install">Installation &amp; Start-Up</a></li>
+  <li><a href="#sec-login">Authentication</a></li>
+  <li><a href="#sec-analyze">PCAP Upload &amp; Analysis</a></li>
+  <li><a href="#sec-cluster">Agglomerative Clustering</a></li>
+  <li><a href="#sec-realtime">Real-Time Streaming Analysis</a></li>
+  <li><a href="#sec-monitor">Continuous Monitoring</a></li>
+  <li><a href="#sec-api">API Reference</a></li>
+  <li><a href="#sec-admin">Administration</a></li>
+  <li><a href="#sec-troubleshoot">Troubleshooting</a></li>
+  <li><a href="#sec-glossary">Glossary</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<!-- 1. INTRODUCTION -->
+<h2 id="sec-intro">1. Introduction</h2>
+<p>
+Network Analyzer is an open-source research platform developed at the
+<strong>University of Thessaly</strong> for the deep inspection and classification
+of 5G and 6G network traffic. It ingests raw PCAP captures or a live Zeek
+telemetry stream, applies unsupervised machine-learning clustering and rule-based
+role assessment, and delivers interactive dashboards for researchers, security
+analysts, and network engineers.
+</p>
+<p>The platform addresses three primary research challenges:</p>
+<ol>
+  <li><strong>Traffic visibility</strong> — providing per-flow statistics, protocol
+      distribution, and interactive network graphs from arbitrary PCAP files.</li>
+  <li><strong>Behavioural classification</strong> — automatically grouping IP
+      endpoints by traffic behaviour using agglomerative clustering and assigning
+      5G/6G functional roles (UPF, AMF, gNB, UE, …) using a rule-based engine.</li>
+  <li><strong>Real-time situational awareness</strong> — streaming live Zeek
+      connection logs into a TimescaleDB hypertable and surfacing anomalies via
+      WebSocket-pushed alerts.</li>
+</ol>
+
+<!-- 2. ARCHITECTURE -->
+<h2 id="sec-arch">2. System Architecture</h2>
+<p>
+The system is structured in three tiers that communicate over REST and WebSocket
+(Socket.IO). An optional Host Sensor VM feeds live Zeek flow data and on-demand
+PCAP snapshots into the monitoring pipeline using a shared internal token.
+</p>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 1 – Three-Tier Architecture</div>
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│           Browser  (Nuxt 2 / Vue 2 SPA)                         │
+│  Analyze · Clustering · Real Time · Monitoring · Admin          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │  REST + WebSocket (Socket.IO)
+                           │  http://&lt;host&gt;:3000  →  :5555
+┌──────────────────────────▼──────────────────────────────────────┐
+│         Flask API  (server/app.py)   port 5555                  │
+│  JWT Auth · SocketIO · Swagger UI (/apidocs, public)            │
+│  PCAP analysis · Clustering · Role pipeline · Zeek ingest       │
+└────────────┬───────────────────────────┬────────────────────────┘
+             │ SQLAlchemy ORM             │ psycopg2 bulk insert
+┌────────────▼───────────────────────────▼────────────────────────┐
+│          PostgreSQL 14 + TimescaleDB                            │
+│  users · pcap_files · flow_statistics (hypertable)              │
+│  role_snapshots · ue_sessions · cluster_results                 │
+└──────────────────────────▲──────────────────────────────────────┘
+                           │  X-Internal-Token
+┌──────────────────────────┴──────────────────────────────────────┐
+│      Host Sensor VM  (Host Files/)   port 5005                  │
+│  zeek_agent.py  →  POST /v1/ingest/zeek                         │
+│  start_sensor.sh — tcpdump capture + Nmap async scans           │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<h3>2.1 Component Summary</h3>
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Component</th><th>Technologies</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Frontend</td><td>SPA framework</td><td>Nuxt 2, Vue 2, Vuetify 2</td></tr>
+    <tr><td>Frontend</td><td>Charts &amp; graphs</td><td>Apache ECharts, vue-echarts</td></tr>
+    <tr><td>Frontend</td><td>Real-time client</td><td>Socket.IO client</td></tr>
+    <tr><td>Backend</td><td>API server</td><td>Flask, Flask-SocketIO, Flask-JWT-Extended</td></tr>
+    <tr><td>Backend</td><td>Rate limiting</td><td>Flask-Limiter</td></tr>
+    <tr><td>Backend</td><td>Packet analysis</td><td>Scapy, PyShark / tshark, pandas</td></tr>
+    <tr><td>Backend</td><td>Clustering &amp; ML</td><td>scikit-learn, NetworkX, python-louvain</td></tr>
+    <tr><td>Database</td><td>Relational store</td><td>PostgreSQL 14, SQLAlchemy</td></tr>
+    <tr><td>Database</td><td>Time-series flows</td><td>TimescaleDB hypertable</td></tr>
+    <tr><td>Sensor VM</td><td>Flow telemetry</td><td>Zeek IDS, zeek_agent.py</td></tr>
+    <tr><td>Sensor VM</td><td>Packet capture</td><td>tcpdump, Nmap</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 3. INSTALLATION -->
+<h2 id="sec-install">3. Installation &amp; Start-Up</h2>
+
+<h3>3.1 Prerequisites</h3>
+<p>Before running the platform, ensure the following are installed on the server host:</p>
+<ul>
+  <li><strong>Python 3.11+</strong> — backend runtime</li>
+  <li><strong>Node.js 18+ and npm</strong> — frontend build toolchain</li>
+  <li><strong>PostgreSQL 14</strong> with the <strong>TimescaleDB</strong> extension enabled</li>
+  <li><strong>tshark / Wireshark</strong> — for PyShark-based PCAP decoding</li>
+  <li><strong>Zeek IDS</strong> — Sensor VM only, for live telemetry</li>
+  <li><strong>Nmap</strong> — Sensor VM only, for on-demand network scans</li>
+</ul>
+
+<h3>3.2 Environment Configuration</h3>
+<p>
+Copy <code>.env.example</code> to <code>.env</code> in the project root and fill
+in all required values. The backend reads this file at startup via
+<code>python-dotenv</code>. Never commit a populated <code>.env</code> to
+version control.
+</p>
+<pre>
+# .env (example values — replace before use)
+DATABASE_URL=postgresql://user:password@localhost:5432/network_analyzer
+JWT_SECRET_KEY=change_me_to_a_long_random_string
+INTERNAL_TOKEN=change_me_internal_token
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+VUE_APP_API_BASE_URL=http://127.0.0.1:5555
+</pre>
+
+<h3>3.3 Database Initialisation</h3>
+<pre>
+# Create the database and enable TimescaleDB
+psql -U postgres -c "CREATE DATABASE network_analyzer;"
+psql -U postgres -d network_analyzer -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+
+# Apply the ORM schema (run from the server/ directory)
+cd server
+python -c "from models import db; from app import app; app.app_context().push(); db.create_all()"
+</pre>
+
+<h3>3.4 Starting the Backend</h3>
+<pre>
+# From the project root
+cd server
+pip install -r requirements.txt
+python app.py
+# Server listens on http://0.0.0.0:5555
+</pre>
+
+<h3>3.5 Starting the Frontend</h3>
+<pre>
+# From the project root
+npm install
+npm run dev       # development — hot-reload on http://localhost:3000
+npm run build     # production build
+npm run start     # production server
+</pre>
+
+<div class="tip">
+<strong>Tip:</strong> Start the backend first, then the frontend. The Nuxt dev
+server proxies API calls to <code>http://127.0.0.1:5555</code> as configured
+in <code>nuxt.config.js</code>.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 4. AUTHENTICATION -->
+<h2 id="sec-login">4. Authentication</h2>
+<p>
+All pages except the public Swagger UI (<code>/apidocs</code>) require an
+authenticated session. The application uses JSON Web Tokens (JWT) with an
+8-hour expiry. When the token expires the user is redirected to the login page
+automatically.
+</p>
+
+<h3>4.1 Logging In</h3>
+<ol>
+  <li>Navigate to <code>http://&lt;host&gt;:3000/login</code>.</li>
+  <li>Enter your <strong>Username</strong> and <strong>Password</strong> and
+      press <strong>Sign In</strong> or hit Enter.</li>
+  <li>On success, the JWT is stored in the browser and you are redirected to
+      the home dashboard.</li>
+  <li>The header displays your username and a <strong>Logout</strong> button
+      that clears the token immediately.</li>
+</ol>
+<p>
+If you see an <em>"Invalid credentials"</em> error, verify your username and
+password. Contact your system administrator for account creation or password
+resets — there is no self-service registration.
+</p>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 2 – Login Flow</div>
+<pre>
+  Browser                       Flask API
+     │                              │
+     │  POST /auth/login            │
+     │  { username, password }      │
+     │─────────────────────────────►│
+     │                              │ bcrypt verify
+     │  200 { access_token }        │
+     │◄─────────────────────────────│
+     │                              │
+     │  Store token in Vuex/cookie  │
+     │                              │
+     │  GET /some-protected-route   │
+     │  Authorization: Bearer &lt;tok&gt; │
+     │─────────────────────────────►│
+     │                              │ JWT verify (8 h TTL)
+     │  200 { data }                │
+     │◄─────────────────────────────│
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 5. PCAP ANALYSIS -->
+<h2 id="sec-analyze">5. PCAP Upload &amp; Analysis</h2>
+<p>
+The <strong>Analyze</strong> page (<code>/analyze</code>) provides a one-step
+workflow: upload a <code>.pcap</code> file and receive a comprehensive analysis
+report — packet statistics, protocol distribution, conversation breakdown,
+interactive network graph, UE session extraction, and IP role assessment —
+all in a single API call.
+</p>
+
+<h3>5.1 Step-by-Step Workflow</h3>
+<ol>
+  <li>Click the file-input field labelled <em>"Select .pcap file"</em> and
+      choose a valid PCAP file from your local filesystem.</li>
+  <li>The file size is shown next to the filename for confirmation.</li>
+  <li>Click <strong>Analyse</strong>. A progress indicator appears while the
+      backend processes the capture.</li>
+  <li>Once complete, the <em>Total Packets</em> summary card appears along
+      with all analysis sections.</li>
+  <li>Use <strong>Save Roles as JSON</strong> or <strong>Save Roles as CSV</strong>
+      to export the role-assessment report for downstream tooling.</li>
+  <li><em>Clear cached results</em> removes the browser-stored previous results
+      so a fresh upload starts from scratch.</li>
+</ol>
+
+<h3>5.2 Analysis Sections</h3>
+<table>
+  <thead>
+    <tr><th>Section</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Total Packets</strong></td>
+      <td>Total count of captured packets in the file.</td>
+    </tr>
+    <tr>
+      <td><strong>Protocol Distribution</strong></td>
+      <td>Pie/bar chart showing relative prevalence of TCP, UDP, GTP, SCTP, ICMP, and other protocols.</td>
+    </tr>
+    <tr>
+      <td><strong>Conversation Statistics</strong></td>
+      <td>Per IP-pair traffic volume, packet count, and byte count.</td>
+    </tr>
+    <tr>
+      <td><strong>Network Graph</strong></td>
+      <td>Interactive force-directed graph; nodes = IP addresses, edge weight = traffic volume.</td>
+    </tr>
+    <tr>
+      <td><strong>IP Role Assessment</strong></td>
+      <td>Rule-based classification into 5G NF, O-RAN component, UE, external server, or unknown.</td>
+    </tr>
+    <tr>
+      <td><strong>UE Sessions</strong></td>
+      <td>Extracted 4G/5G UE sessions — IMSI, GUTI, assigned IPv4, timestamps.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+<strong>Note:</strong> Only <code>.pcap</code> files are accepted. PCAPNG files
+must be converted first using:<br>
+<code>tshark -F pcap -r input.pcapng -w output.pcap</code>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 6. CLUSTERING -->
+<h2 id="sec-cluster">6. Agglomerative Clustering</h2>
+<p>
+The <strong>Clustering</strong> page (<code>/clustering</code>) exposes an
+advanced three-step workflow for applying hierarchical agglomerative clustering
+to a PCAP that has already been uploaded and processed by the backend.
+</p>
+<p>
+Clustering groups IP endpoints by their traffic behaviour without requiring
+labelled training data (unsupervised learning). The platform uses
+<strong>graph modularity</strong> to automatically suggest the optimal number
+of clusters, so analysts do not need to guess.
+</p>
+
+<h3>6.1 Step 1 — Clustering</h3>
+<p>
+The stepper opens on the <em>Clustering</em> panel. The system has already
+computed a suggested cluster count based on the modularity score of the traffic
+graph. You may accept this suggestion or manually adjust the <em>Number of
+Clusters</em> slider. The dendrogram visualises how groups merge at each
+agglomerative linkage step; outlier IPs are flagged as anomalies.
+</p>
+
+<h3>6.2 Step 2 — Profiling</h3>
+<p>
+Select a cluster from the list to profile its member IPs. The profiling engine
+correlates port usage, connection patterns, and data volumes to assign each IP
+a probable 5G/6G functional role. Click <strong>Start Analysis</strong> with
+the desired cluster selected.
+</p>
+
+<h3>6.3 Step 3 — Results</h3>
+<p>
+The final results panel shows the complete role assessment for all clustered IPs.
+Download the PCAP for this session or export the role report as
+<code>JSON</code> or <code>CSV</code>.
+</p>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 3 – Clustering Workflow</div>
+<pre>
+  ┌──────────────────────────────────────────────────────────┐
+  │                    CLUSTERING PAGE                       │
+  │                                                          │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 1: Clustering                             │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  Suggested clusters (modularity): 4             │    │
+  │  │  [Adjust slider] ──●────────────── [1 … 20]     │    │
+  │  │                                                 │    │
+  │  │  [Dendrogram chart]   [Anomaly list]            │    │
+  │  │                              ↓ NEXT             │    │
+  │  └─────────────────────────────────────────────────┘    │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 2: Profiling                              │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  Select cluster ▾  [Cluster A  /  Cluster B]   │    │
+  │  │  [Start Analysis]                               │    │
+  │  │                              ↓ NEXT             │    │
+  │  └─────────────────────────────────────────────────┘    │
+  │  ┌─────────────────────────────────────────────────┐    │
+  │  │  Step 3: Results                                │    │
+  │  │  ─────────────────────────────────────────      │    │
+  │  │  IP Role table  [Download PCAP] [Save JSON/CSV] │    │
+  │  └─────────────────────────────────────────────────┘    │
+  └──────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 7. REAL-TIME -->
+<h2 id="sec-realtime">7. Real-Time Streaming Analysis</h2>
+<p>
+The <strong>Real Time</strong> page (<code>/realTime</code>) enables live packet
+capture from a remote WebSocket source. A network tap or sniffer streams raw
+packet data in Base64-encoded chunks to the platform, which reassembles them
+server-side into a coherent PCAP file for immediate analysis.
+</p>
+
+<h3>7.1 Workflow</h3>
+<ol>
+  <li>Enter the <strong>WebSocket URL</strong> of the remote capture agent
+      (e.g. <code>ws://192.168.1.10:8080</code>).</li>
+  <li>Click <strong>Connect</strong>. The status indicator turns green and
+      shows "Connected".</li>
+  <li>In the <em>Capture Controls</em> panel:
+    <ul>
+      <li>Click <strong>Get Interfaces</strong> to list available network
+          interfaces on the remote agent.</li>
+      <li>Select an interface from the dropdown.</li>
+      <li>Click <strong>Start Capture</strong> to begin recording.</li>
+    </ul>
+  </li>
+  <li>When sufficient data is collected, click <strong>Generate PCAP</strong>
+      (active only while capturing). The backend finalises the file and a
+      download link appears.</li>
+  <li>Optionally send the assembled PCAP directly into the analysis pipeline.</li>
+</ol>
+
+<div class="warn">
+<strong>Warning:</strong> The WebSocket source must be reachable from the
+browser. Firewall rules and NAT may need to be adjusted for cross-network
+deployments.
+</div>
+
+<!-- 8. CONTINUOUS MONITORING -->
+<h2 id="sec-monitor">8. Continuous Monitoring</h2>
+<p>
+The <strong>Continuous Monitoring</strong> dashboard
+(<code>/continuous_monitoring</code>) provides a live view of network flows
+stored in the TimescaleDB hypertable (<code>flow_statistics</code>). Data
+arrives from the Host Sensor VM via the Zeek agent and the
+<code>POST /v1/ingest/zeek</code> endpoint.
+</p>
+
+<h3>8.1 Timeframe Selection</h3>
+<p>
+Choose a start and end datetime to query historical flows, or enable
+<strong>Live Mode</strong> to continuously refresh data at a fixed interval.
+Click <strong>Apply</strong> to fetch.
+</p>
+
+<h3>8.2 Flow Statistics Table</h3>
+<p>
+A sortable, filterable table shows all recorded connections: source IP,
+destination IP, source/destination ports, protocol, bytes sent/received,
+packet count, and timestamp. Click any column header to sort
+ascending/descending.
+</p>
+
+<h3>8.3 Anomaly Alerts</h3>
+<p>
+The backend evaluates each ingested batch of flows and pushes WebSocket alerts
+to all connected clients when it detects:
+</p>
+<ul>
+  <li>Massive data transfers (&gt; 5 MB in a single flow)</li>
+  <li>Packet floods (&gt; 5 000 packets in a single flow)</li>
+  <li>Rejected connections (TCP RST / ICMP unreachable)</li>
+</ul>
+<p>
+Alerts appear as coloured snackbar notifications in the browser and are also
+logged server-side.
+</p>
+
+<h3>8.4 Nmap Scan Integration</h3>
+<p>
+Click <strong>Trigger Nmap Scan</strong> to instruct the Sensor VM to run an
+on-demand Nmap scan of the monitored subnet. Results are returned as a
+structured JSON object and displayed in the dashboard.
+</p>
+
+<h3>8.5 Export</h3>
+<p>
+Use the <strong>Download CSV / JSON</strong> buttons to export the currently
+displayed flow window for offline analysis.
+</p>
+
+<div class="page-break"></div>
+
+<!-- 9. API REFERENCE -->
+<h2 id="sec-api">9. API Reference</h2>
+<p>
+An interactive Swagger UI is served by the Flask backend at
+<code>http://&lt;host&gt;:5555/apidocs</code>. It documents every endpoint with
+parameters, request bodies, response schemas, and authentication requirements.
+No login is required to browse; endpoints that require a JWT token are marked
+with a lock icon. Use the <strong>Authorize</strong> button to supply your
+token for live interactive testing.
+</p>
+
+<h3>9.1 Endpoint Summary</h3>
+<table>
+  <thead>
+    <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>POST</td><td>/auth/login</td><td>—</td><td>Obtain JWT access token</td></tr>
+    <tr><td>POST</td><td>/auth/register</td><td>Admin JWT</td><td>Create new user account</td></tr>
+    <tr><td>POST</td><td>/upload</td><td>JWT</td><td>Upload PCAP file (multipart/form-data)</td></tr>
+    <tr><td>GET</td><td>/pcap/&lt;id&gt;/analysis</td><td>JWT</td><td>Retrieve full analysis for a PCAP</td></tr>
+    <tr><td>POST</td><td>/analyze</td><td>JWT</td><td>Upload &amp; run full analysis in one call</td></tr>
+    <tr><td>POST</td><td>/clustering/run</td><td>JWT</td><td>Run agglomerative clustering on a PCAP</td></tr>
+    <tr><td>GET</td><td>/clustering/result/&lt;filename&gt;</td><td>JWT</td><td>Download clustering output file</td></tr>
+    <tr><td>POST</td><td>/roles/save</td><td>JWT</td><td>Persist role assessment to database</td></tr>
+    <tr><td>POST</td><td>/streaming/start</td><td>JWT</td><td>Start WebSocket capture pipeline</td></tr>
+    <tr><td>POST</td><td>/pcap/chunk</td><td>JWT</td><td>Submit a Base64 chunk for PCAP assembly</td></tr>
+    <tr><td>POST</td><td>/v1/ingest/zeek</td><td>X-Internal-Token</td><td>Ingest Zeek flow batch from Sensor VM</td></tr>
+    <tr><td>GET</td><td>/v1/flows</td><td>JWT</td><td>Query flow_statistics hypertable</td></tr>
+    <tr><td>GET</td><td>/v1/alerts</td><td>JWT</td><td>Retrieve anomaly alerts</td></tr>
+    <tr><td>POST</td><td>/v1/scan/start</td><td>JWT</td><td>Trigger Nmap scan on Sensor VM</td></tr>
+    <tr><td>GET</td><td>/v1/scan/results</td><td>JWT</td><td>Retrieve latest Nmap scan results</td></tr>
+    <tr><td>GET</td><td>/apidocs</td><td>—</td><td>Swagger UI (public)</td></tr>
+  </tbody>
+</table>
+
+<h3>9.2 Authentication Header</h3>
+<pre>
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+</pre>
+
+<h3>9.3 Rate Limiting</h3>
+<p>
+Flask-Limiter enforces per-IP rate limits to protect the server from abuse.
+Exceeding the limit returns HTTP <code>429 Too Many Requests</code>. Consult
+the administrator for current thresholds.
+</p>
+
+<div class="page-break"></div>
+
+<!-- 10. ADMINISTRATION -->
+<h2 id="sec-admin">10. Administration</h2>
+<p>
+The <strong>Admin</strong> panel (<code>/admin</code>) is accessible only to
+users with the <code>admin</code> role.
+</p>
+
+<h3>10.1 User Management</h3>
+<ul>
+  <li>Create new user accounts by supplying a username, password, and role.</li>
+  <li>Deactivate or delete existing accounts.</li>
+  <li>Passwords are stored as bcrypt hashes — never in plain text.</li>
+</ul>
+
+<h3>10.2 System Overview</h3>
+<ul>
+  <li>View all uploaded PCAP files, their analysis status, and timestamps.</li>
+  <li>View stored role snapshots and cluster results.</li>
+  <li>Purge old files or database records for storage management.</li>
+</ul>
+
+<div class="warn">
+<strong>Security Note:</strong> The <code>X-Internal-Token</code> used by the
+Sensor VM must be kept secret and rotated regularly. Store it only in
+<code>.env</code> — never hardcode it in source code or commit it to version
+control.
+</div>
+
+<!-- 11. TROUBLESHOOTING -->
+<h2 id="sec-troubleshoot">11. Troubleshooting</h2>
+<table>
+  <thead>
+    <tr><th>Symptom</th><th>Likely Cause</th><th>Fix</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Login returns "Invalid credentials"</td>
+      <td>Wrong username/password or account disabled</td>
+      <td>Verify credentials; ask admin to reset or re-enable account</td>
+    </tr>
+    <tr>
+      <td>Upload fails with 413</td>
+      <td>PCAP exceeds server max upload size</td>
+      <td>Increase <code>MAX_CONTENT_LENGTH</code> in <code>app.py</code> or split the PCAP</td>
+    </tr>
+    <tr>
+      <td>Analysis hangs indefinitely</td>
+      <td>tshark not installed or not in PATH</td>
+      <td>Install Wireshark/tshark; verify with <code>tshark --version</code></td>
+    </tr>
+    <tr>
+      <td>Database connection error at startup</td>
+      <td><code>DATABASE_URL</code> not set or PostgreSQL not running</td>
+      <td>Check <code>.env</code>; verify with <code>pg_isready</code></td>
+    </tr>
+    <tr>
+      <td>TimescaleDB extension missing</td>
+      <td>Extension not enabled in the database</td>
+      <td>Run <code>CREATE EXTENSION IF NOT EXISTS timescaledb;</code> as superuser</td>
+    </tr>
+    <tr>
+      <td>WebSocket connection refused (Real Time page)</td>
+      <td>Remote agent not running or firewall blocking</td>
+      <td>Start the remote agent; open the WebSocket port in the firewall</td>
+    </tr>
+    <tr>
+      <td>Zeek ingest returns 401</td>
+      <td>Incorrect or missing <code>X-Internal-Token</code></td>
+      <td>Ensure Sensor VM <code>.env</code> matches server <code>INTERNAL_TOKEN</code></td>
+    </tr>
+    <tr>
+      <td>Rate limit 429 on API</td>
+      <td>Too many requests from client IP</td>
+      <td>Reduce request frequency or ask admin to raise the limit</td>
+    </tr>
+    <tr>
+      <td>Frontend shows blank page after login</td>
+      <td>CORS mismatch — origin not in <code>ALLOWED_ORIGINS</code></td>
+      <td>Add the frontend URL to <code>ALLOWED_ORIGINS</code> in <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>Clustering page shows no dendrogram</td>
+      <td>PCAP has too few unique IPs (&lt; 2)</td>
+      <td>Use a PCAP with more varied traffic for meaningful clustering</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 12. GLOSSARY -->
+<h2 id="sec-glossary">12. Glossary</h2>
+<table>
+  <thead>
+    <tr><th>Term</th><th>Definition</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>PCAP</strong></td><td>Packet CAPture — binary file format for network traffic recordings.</td></tr>
+    <tr><td><strong>JWT</strong></td><td>JSON Web Token — compact, signed token used for authentication.</td></tr>
+    <tr><td><strong>5G NF</strong></td><td>5G Network Function — logical component of the 5G Core (e.g. AMF, UPF, SMF).</td></tr>
+    <tr><td><strong>UE</strong></td><td>User Equipment — mobile device connected to the network (phone, tablet, IoT).</td></tr>
+    <tr><td><strong>gNB</strong></td><td>Next-Generation NodeB — 5G base station.</td></tr>
+    <tr><td><strong>GTP</strong></td><td>GPRS Tunnelling Protocol — encapsulation protocol used in 4G/5G user plane.</td></tr>
+    <tr><td><strong>Zeek</strong></td><td>Network analysis framework that generates structured connection logs from live traffic.</td></tr>
+    <tr><td><strong>TimescaleDB</strong></td><td>PostgreSQL extension optimised for time-series data; adds hypertables and time-bucketing.</td></tr>
+    <tr><td><strong>Agglomerative Clustering</strong></td><td>Bottom-up hierarchical clustering that merges the two most similar clusters at each step.</td></tr>
+    <tr><td><strong>Modularity</strong></td><td>Graph-theory metric that measures the quality of a community partition.</td></tr>
+    <tr><td><strong>Anomaly</strong></td><td>IP address or flow that deviates significantly from normal behaviour.</td></tr>
+    <tr><td><strong>O-RAN</strong></td><td>Open Radio Access Network — open-interface radio access architecture for 5G/6G.</td></tr>
+    <tr><td><strong>IMSI</strong></td><td>International Mobile Subscriber Identity — unique 15-digit identifier for a SIM.</td></tr>
+    <tr><td><strong>GUTI</strong></td><td>Globally Unique Temporary Identifier — privacy-preserving temporary UE identifier.</td></tr>
+    <tr><td><strong>Hypertable</strong></td><td>TimescaleDB table automatically partitioned by time for high-throughput time-series writes.</td></tr>
+    <tr><td><strong>Nmap</strong></td><td>Network Mapper — open-source tool for network discovery and security auditing.</td></tr>
+  </tbody>
+</table>
+
+<!-- FOOTER -->
+<hr style="margin: 30pt 0 10pt; border: none; border-top: 1pt solid #aaa;">
+<p style="text-align:center; font-size: 9pt; color: #555;">
+  Network Analyzer User Manual &nbsp;|&nbsp; &copy; 2025 University of Thessaly &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; Version 1.0
+</p>
+
+</body>
+</html>

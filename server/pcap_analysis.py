@@ -1,126 +1,88 @@
-from scapy.all import rdpcap, IP
+from scapy.all import PcapReader, IP
 from scapy.data import IP_PROTOS
-import re
 from scapy.layers.inet import IP
 
 
 ##
-# Loads a PCAP file from the specified path.
-#
-# @param [str] filepath The absolute or relative path to the PCAP file.
-# @return [tuple] (packets: scapy.plist.PacketList, error: str|None)
-def load_pcap(filepath):
-    """Load PCAP file and return packets."""
-    try:
-        packets = rdpcap(filepath)
-        return packets, None
-    except Exception as e:
-        return None, str(e)
-
-
-from scapy.layers.inet import IP, IP_PROTOS
-
-
-##
-# Analyzes the protocols associated with traffic sent by each IP address.
-# It prioritizes higher-level layer names (e.g., TCP, HTTP) over raw IP protocol numbers.
-#
-# @param [scapy.plist.PacketList] packets A list of Scapy packet objects.
-# @return [dict] A dictionary mapping source IP addresses (str) to a sorted list of
-#         protocol names (list of str) they used.
-def analyze_protocols(packets):
-    """Return a dict mapping each IP to the set of protocol names it sends."""
-    ip_protocols = {}
-
-    for pkt in packets:
-        if IP not in pkt:
-            continue
-
-        src = pkt[IP].src
-
-        # Get all layer names after IP
-        protocol_layers = [
-            layer.__name__
-            for layer in pkt.layers()
-            if layer not in (pkt.__class__, IP)  # Skip Ethernet/IP base
-        ]
-
-        # If we still want to fall back to proto number if no higher layers found
-        if protocol_layers:
-            proto_name = " -> ".join(protocol_layers)
-        else:
-            try:
-                proto_name = IP_PROTOS[pkt[IP].proto]
-            except Exception:
-                proto_name = f"UNKNOWN({pkt[IP].proto})"
-
-        ip_protocols.setdefault(src, set()).add(proto_name)
-
-    # Convert sets to sorted lists
-    return {ip: sorted(protos) for ip, protos in ip_protocols.items()}
-
-
-##
-# Identifies and counts packets exchanged between pairs of IP addresses.
-# Conversation keys are sorted tuples of (ip1, ip2). Counts are directional.
-#
-# @param [scapy.plist.PacketList] packets A list of Scapy packet objects.
-# @return [dict] A dictionary where keys are sorted IP address tuples (str, str)
-#         and values are dictionaries counting packets in each direction
-#         (e.g., {'ip1_to_ip2': count, 'ip2_to_ip1': count}).
-def analyze_conversations(packets):
-    """Return a dict describing conversations between IPs and packet counts."""
-    conversations = {}
-
-    for pkt in packets:
-        if IP not in pkt:
-            continue
-
-        src = pkt[IP].src
-        dst = pkt[IP].dst
-
-        # Create a canonical key for the conversation (IPs sorted alphabetically)
-        key = tuple(sorted([src, dst]))
-        if key not in conversations:
-            conversations[key] = {
-                f"{key[0]}_to_{key[1]}": 0,
-                f"{key[1]}_to_{key[0]}": 0,
-            }
-
-        # Count packets sent in the right direction
-        if src < dst:
-            # src is the first element in the sorted key
-            conversations[key][f"{src}_to_{dst}"] += 1
-        else:
-            # src is the second element in the sorted key
-            conversations[key][f"{src}_to_{dst}"] += 1
-
-    return conversations
-
-
-##
-# Orchestrates the PCAP analysis pipeline: loads the file, analyzes protocols,
-# and analyzes conversations.
+# Orchestrates the PCAP analysis pipeline using a memory-efficient streaming approach.
+# REFACTOR: Replaced rdpcap() with PcapReader() to fix Critical Memory Issue.
+# REFACTOR: Merged protocol and conversation analysis into a single pass.
 #
 # @param [str] filepath The path to the PCAP file.
-# @return [tuple] (result: dict|None, error: str|None) A dictionary containing
-#         'total_packets', 'ip_protocols', and 'conversations' data, or an error string.
+# @return [tuple] (result: dict|None, error: str|None)
 def initialize_analysis(filepath):
-    """Load the PCAP, run all analysis functions, and return combined results."""
-    packets, error = load_pcap(filepath)
-    if error:
-        return None, error
+    """
+    Load the PCAP in a stream, run analysis in one pass, and return combined results.
+    """
+    total_packets = 0
+    ip_protocols = {}  # Format: {ip: set(protocols)}
+    conversations = {}  # Format: { (ip1, ip2): { 'ip1_to_ip2': 0, ... } }
 
-    total_packets = len(packets)
-    ip_protocols = analyze_protocols(packets)
-    conversations = analyze_conversations(packets)
-    # ue_sessions = analyze_ue_sessions(packets)
+    try:
+        # Use PcapReader to stream packets one by one (Low RAM usage)
+        with PcapReader(filepath) as reader:
+            for pkt in reader:
+                total_packets += 1
+
+                # We only care about IP packets for this analysis
+                if IP not in pkt:
+                    continue
+
+                src = pkt[IP].src
+                dst = pkt[IP].dst
+
+                # --- 1. Protocol Analysis Logic ---
+                # Get all layer names after IP
+                protocol_layers = [
+                    layer.__name__
+                    for layer in pkt.layers()
+                    if layer not in (pkt.__class__, IP)  # Skip Ethernet/IP base
+                ]
+
+                # Fallback to proto number if no higher layers found
+                if protocol_layers:
+                    proto_name = " -> ".join(protocol_layers)
+                else:
+                    try:
+                        proto_name = IP_PROTOS[pkt[IP].proto]
+                    except Exception:
+                        proto_name = f"UNKNOWN({pkt[IP].proto})"
+
+                # Add to set (we convert to list at the end)
+                if src not in ip_protocols:
+                    ip_protocols[src] = set()
+                ip_protocols[src].add(proto_name)
+
+                # --- 2. Conversation Analysis Logic ---
+                # Create a canonical key for the conversation (IPs sorted alphabetically)
+                key = tuple(sorted([src, dst]))
+
+                if key not in conversations:
+                    conversations[key] = {
+                        f"{key[0]}_to_{key[1]}": 0,
+                        f"{key[1]}_to_{key[0]}": 0,
+                    }
+
+                # Count packets sent in the specific direction
+                direction_key = f"{src}_to_{dst}"
+                if direction_key in conversations[key]:
+                    conversations[key][direction_key] += 1
+
+    except Exception as e:
+        return None, f"Error processing PCAP: {str(e)}"
+
+    # Post-processing: Convert sets to sorted lists for JSON serialization
+    final_protocols = {ip: sorted(list(protos)) for ip, protos in ip_protocols.items()}
+
+    # Convert conversation tuple keys to string representation if needed,
+    # but Python dicts can handle tuple keys (JSON cannot).
+    # The frontend expects a dictionary, usually we serialize this in app.py.
+    # We will return the raw dict here.
 
     result = {
         "total_packets": total_packets,
-        "ip_protocols": ip_protocols,
+        "ip_protocols": final_protocols,
         "conversations": conversations,
-        # 'ue_sessions': ue_sessions
     }
 
     return result, None

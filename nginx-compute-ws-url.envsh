@@ -1,0 +1,26 @@
+#!/bin/sh
+# .envsh (not .sh): nginx's official entrypoint SOURCES *.envsh files into
+# its own shell, unlike a plain executable *.sh which runs as a throwaway
+# subprocess — anything exported there is lost the instant that subprocess
+# exits, before the later 20-envsubst-on-templates.sh step ever sees it.
+# (That was the actual bug the first version of this file had — exported
+# in a subprocess, invisible everywhere else, so ${API_BASE_URL_WS} in the
+# template was never substituted and nginx failed to start.) Being sourced
+# also means this must NOT set shell options like `set -e`/`-u` — that
+# would change the surrounding entrypoint script's behavior too, not just
+# this file's own few lines. Still needs the executable bit regardless of
+# extension (chmod +x — see the Dockerfile) — a non-executable .envsh is
+# silently skipped ("Ignoring ..., not executable"), not sourced.
+#
+# Runs before nginx's own 20-envsubst-on-templates.sh (which processes
+# /etc/nginx/templates/*.template into conf.d/ — an official feature of the
+# nginx:stable-alpine base image, triggered automatically by its default
+# entrypoint). Derives a ws(s):// form of API_BASE_URL so the CSP template
+# can allow the Socket.IO WebSocket upgrade origin alongside the http(s)://
+# one used for the initial handshake/polling transport — continuous_
+# monitoring.vue opens its socket against API_BASE_URL, not WS_URL (WS_URL
+# is a different, unrelated raw websocket used only by realTime.vue against
+# the Sensor's publisher.py).
+
+API_BASE_URL="${API_BASE_URL:-http://localhost:5555}"
+export API_BASE_URL_WS="$(printf '%s' "$API_BASE_URL" | sed -e 's#^http://#ws://#' -e 's#^https://#wss://#')"

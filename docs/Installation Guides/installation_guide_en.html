@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Analyzer – Installation Guide</title>
+<style>
+  @page { size: A4; margin: 25mm 20mm 25mm 20mm; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 11pt; line-height: 1.65; color: #111; background: #fff;
+    max-width: 170mm; margin: 0 auto; padding: 10mm 0;
+  }
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; border-bottom: 1.5pt solid #111; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  h4 { font-size: 11pt; margin: 12pt 0 3pt; font-style: italic; }
+  p  { margin: 0 0 7pt; text-align: justify; }
+  ul, ol { margin: 4pt 0 7pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { font-family: "Courier New", Courier, monospace; font-size: 10pt; background: #f4f4f4; padding: 0 2pt; }
+  pre  { font-family: "Courier New", Courier, monospace; font-size: 9pt; background: #f4f4f4;
+         border: 1pt solid #ccc; padding: 8pt; overflow-x: auto; white-space: pre; line-height: 1.35;
+         margin: 6pt 0 10pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; }
+  th, td { border: 1pt solid #aaa; padding: 4pt 6pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  a  { color: #1a56a8; }
+  .cover { text-align: center; padding: 20pt 0 14pt; border-bottom: 2pt solid #111; margin-bottom: 16pt; }
+  .cover .subtitle { font-size: 13pt; margin: 4pt 0; }
+  .cover .meta { font-size: 10pt; color: #444; margin: 3pt 0; }
+  .cover .version { font-size: 9.5pt; color: #666; }
+  .diagram-box { border: 1.5pt solid #555; padding: 10pt; margin: 8pt 0 12pt; background: #fafafa; }
+  .diagram-title { font-weight: bold; font-size: 9.5pt; text-align: center; margin-bottom: 6pt; letter-spacing: .4pt; }
+  .note { border: 1pt solid #1a56a8; background: #eef4ff; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .warn { border: 1pt solid #c0392b; background: #fff0ee; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .tip  { border: 1pt solid #1e8c45; background: #f0fff4; padding: 7pt 10pt; margin: 8pt 0; border-radius: 2pt; }
+  .step-box { border: 1pt solid #888; border-left: 4pt solid #1a56a8; padding: 7pt 10pt; margin: 6pt 0; background: #fafafa; }
+  .page-break { page-break-after: always; }
+  @media screen { body { padding: 10mm 15mm; } }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <img src="/6g_logo.png" alt="Network Analyzer Logo" width="72" onerror="this.style.display='none'">
+  <h1>Network Analyzer</h1>
+  <p class="subtitle">5G / 6G Network Traffic Analysis &amp; Intelligence Platform</p>
+  <p class="meta"><strong>Installation Guide</strong></p>
+  <p class="meta">University of Thessaly</p>
+  <p class="version">Version 1.0 &nbsp;|&nbsp; 2025 &nbsp;|&nbsp; MIT License</p>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<h2>Table of Contents</h2>
+<ol>
+  <li><a href="#sec-overview">Overview &amp; Deployment Topology</a></li>
+  <li><a href="#sec-backend">Backend Installation (Flask API)</a></li>
+  <li><a href="#sec-frontend">Frontend Installation (Nuxt SPA)</a></li>
+  <li><a href="#sec-sensor">Sensor VM Installation (Host Files)</a></li>
+  <li><a href="#sec-verify">Verifying the Full Stack</a></li>
+  <li><a href="#sec-service">Running as System Services</a></li>
+  <li><a href="#sec-trouble">Installation Troubleshooting</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<!-- 1. OVERVIEW -->
+<h2 id="sec-overview">1. Overview &amp; Deployment Topology</h2>
+<p>
+A full deployment involves three separate machines (or processes). Each can run
+on the same host for development, but in a production scenario they are typically
+separated as shown below.
+</p>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 1 – Deployment Topology</div>
+<pre>
+  ┌─────────────────────────┐     ┌─────────────────────────┐
+  │   APPLICATION SERVER    │     │      SENSOR VM          │
+  │                         │     │                         │
+  │  ┌───────────────────┐  │     │  start_sensor.sh        │
+  │  │  Flask API :5555  │◄─┼─────┼─ zeek_agent.py          │
+  │  └─────────┬─────────┘  │     │  pcap_server.py :5005   │
+  │            │ SQLAlchemy │     │  Zeek + dumpcap         │
+  │  ┌─────────▼─────────┐  │     └─────────────────────────┘
+  │  │  PostgreSQL 14    │  │
+  │  │  + TimescaleDB    │  │     ┌─────────────────────────┐
+  │  └───────────────────┘  │     │     USER BROWSER        │
+  │                         │     │                         │
+  │  ┌───────────────────┐  │     │  http://&lt;host&gt;:3000     │
+  │  │  Nuxt SPA  :3000  │◄─┼─────┼─ Analyze / Cluster /   │
+  │  └───────────────────┘  │     │  Monitor / Admin        │
+  └─────────────────────────┘     └─────────────────────────┘
+</pre>
+</div>
+
+<h3>1.1 Quick-Reference: Ports &amp; Services</h3>
+<table>
+  <thead>
+    <tr><th>Service</th><th>Host</th><th>Port</th><th>Protocol</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Flask API</td><td>Application server</td><td>5555</td><td>HTTP / WebSocket</td></tr>
+    <tr><td>Nuxt SPA</td><td>Application server</td><td>3000</td><td>HTTP</td></tr>
+    <tr><td>PostgreSQL</td><td>Application server</td><td>5432</td><td>TCP</td></tr>
+    <tr><td>PCAP Server</td><td>Sensor VM</td><td>5005</td><td>HTTP</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 2. BACKEND -->
+<h2 id="sec-backend">2. Backend Installation (Flask API)</h2>
+
+<h3>2.1 System Requirements</h3>
+<table>
+  <thead>
+    <tr><th>Component</th><th>Minimum</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>OS</td><td>Ubuntu 22.04 LTS / Debian 12 / Windows 10+</td><td>Linux recommended for production</td></tr>
+    <tr><td>Python</td><td>3.11</td><td>3.12 also supported</td></tr>
+    <tr><td>RAM</td><td>2 GB</td><td>4 GB+ recommended for large PCAPs</td></tr>
+    <tr><td>Disk</td><td>10 GB free</td><td>For uploaded PCAPs and results</td></tr>
+    <tr><td>PostgreSQL</td><td>14</td><td>Must have TimescaleDB extension</td></tr>
+    <tr><td>tshark</td><td>3.x</td><td>Part of the Wireshark package</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Install System Dependencies</h3>
+
+<h4>Ubuntu / Debian</h4>
+<pre>
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip \
+    wireshark-common tshark \
+    postgresql postgresql-contrib
+</pre>
+
+<h4>Install TimescaleDB</h4>
+<pre>
+# Add TimescaleDB repository
+sudo apt install -y gnupg postgresql-common apt-transport-https lsb-release wget
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+
+# Install for PostgreSQL 14
+sudo apt install -y timescaledb-2-postgresql-14
+
+# Tune PostgreSQL for TimescaleDB
+sudo timescaledb-tune --quiet --yes
+
+# Restart PostgreSQL
+sudo systemctl restart postgresql
+</pre>
+
+<h3>2.3 Create the PostgreSQL Database</h3>
+<pre>
+# Switch to the postgres superuser
+sudo -u postgres psql
+
+-- Inside psql:
+CREATE USER netanalyzer WITH PASSWORD 'choose_a_strong_password';
+CREATE DATABASE network_analyzer OWNER netanalyzer;
+\c network_analyzer
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\q
+</pre>
+
+<h3>2.4 Set Up the Python Environment</h3>
+<pre>
+# From the project root
+cd server
+
+# Create an isolated virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# Install all Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Flask-SocketIO is required but not in requirements.txt — install it now
+pip install flask-socketio
+</pre>
+
+<div class="note">
+<strong>Note:</strong> On some systems <code>pyshark</code> requires
+<code>tshark</code> to be in <code>PATH</code>. Verify with:
+<code>tshark --version</code>. If not found, add the Wireshark bin directory
+to your system PATH.
+</div>
+
+<h3>2.5 Configure the Environment File</h3>
+<p>
+Copy <code>.env.example</code> from the project root to <code>.env</code> and
+fill in every value. The backend will refuse to start if
+<code>JWT_SECRET_KEY</code> is absent.
+</p>
+<pre>
+cp .env.example .env
+nano .env   # or use any text editor
+</pre>
+
+<table>
+  <thead>
+    <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>PostgreSQL connection string, e.g. <code>postgresql://netanalyzer:password@localhost:5432/network_analyzer</code></td></tr>
+    <tr><td><code>JWT_SECRET_KEY</code></td><td>Yes</td><td>Long random string (min 32 chars). Generate with: <code>python3 -c "import secrets; print(secrets.token_hex(32))"</code></td></tr>
+    <tr><td><code>INTERNAL_TOKEN</code></td><td>Yes</td><td>Shared secret between Flask API and Sensor VM. Must match <code>SECRET_TOKEN</code> on the sensor.</td></tr>
+    <tr><td><code>ALLOWED_ORIGINS</code></td><td>Yes</td><td>Comma-separated list of frontend origins, e.g. <code>http://localhost:3000,http://192.168.1.10:3000</code></td></tr>
+    <tr><td><code>VUE_APP_API_BASE_URL</code></td><td>No</td><td>Used by the frontend build; set here for convenience. e.g. <code>http://192.168.1.10:5555</code></td></tr>
+  </tbody>
+</table>
+
+<h3>2.6 Initialise the Database Schema</h3>
+<pre>
+# Still inside server/ with .venv activated
+python - &lt;&lt;'EOF'
+from app import app
+from models import db
+with app.app_context():
+    db.create_all()
+    print("Schema created successfully.")
+EOF
+</pre>
+
+<h3>2.7 Create the First Admin User</h3>
+<pre>
+python - &lt;&lt;'EOF'
+from app import app
+from models import db, User
+from werkzeug.security import generate_password_hash
+with app.app_context():
+    user = User(
+        username="admin",
+        password_hash=generate_password_hash("change_me_now"),
+        role="admin"
+    )
+    db.session.add(user)
+    db.session.commit()
+    print("Admin user created.")
+EOF
+</pre>
+
+<div class="warn">
+<strong>Warning:</strong> Change the admin password immediately after first login.
+The password above is a placeholder only.
+</div>
+
+<h3>2.8 Start the Backend</h3>
+<pre>
+# From server/ with .venv activated
+python app.py
+
+# Expected output:
+# * Running on http://0.0.0.0:5555
+# * Swagger UI available at http://0.0.0.0:5555/apidocs
+</pre>
+
+<div class="tip">
+<strong>Tip:</strong> To run the backend from the project root using the npm
+script alias:<br>
+<code>npm run api</code> &nbsp; (calls <code>python3 server/app.py</code>)
+</div>
+
+<div class="page-break"></div>
+
+<!-- 3. FRONTEND -->
+<h2 id="sec-frontend">3. Frontend Installation (Nuxt SPA)</h2>
+
+<h3>3.1 System Requirements</h3>
+<table>
+  <thead>
+    <tr><th>Component</th><th>Minimum</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Node.js</td><td>18 LTS</td><td>20 LTS also supported</td></tr>
+    <tr><td>npm</td><td>9</td><td>Installed with Node.js</td></tr>
+    <tr><td>RAM</td><td>1 GB</td><td>2 GB+ for the build step</td></tr>
+  </tbody>
+</table>
+
+<h4>Install Node.js (Ubuntu / Debian)</h4>
+<pre>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version   # should print v20.x.x
+npm --version    # should print 10.x.x
+</pre>
+
+<h3>3.2 Configure the Frontend Environment</h3>
+<p>
+The frontend reads <code>VUE_APP_API_BASE_URL</code> at build time to know
+where the Flask API lives. Set it in <code>.env</code> at the project root
+(same file as the backend):
+</p>
+<pre>
+# .env  (project root)
+VUE_APP_API_BASE_URL=http://192.168.1.10:5555
+</pre>
+
+<div class="warn">
+<strong>Important:</strong> If the Flask API is on a different machine from the
+browser, use the API server's LAN IP (or domain name) — not
+<code>127.0.0.1</code>. The browser must be able to reach this address
+directly.
+</div>
+
+<h3>3.3 Install Node Dependencies</h3>
+<pre>
+# From the project root
+npm install
+</pre>
+
+<h3>3.4 Development Mode (Hot-Reload)</h3>
+<pre>
+npm run dev
+# Nuxt dev server starts on http://localhost:3000
+# Changes to .vue files reload the browser automatically.
+</pre>
+
+<h3>3.5 Production Build &amp; Start</h3>
+<pre>
+# Build the optimised bundle
+npm run build
+
+# Start the production SSR server
+npm run start
+# Listens on http://0.0.0.0:3000
+</pre>
+
+<h3>3.6 Optional: Nginx Reverse Proxy</h3>
+<p>
+For production it is recommended to place Nginx in front of both the Nuxt
+server (port 3000) and the Flask API (port 5555) so that both are accessible
+on standard HTTP/HTTPS ports.
+</p>
+<pre>
+# /etc/nginx/sites-available/network-analyzer
+server {
+    listen 80;
+    server_name your.domain.com;
+
+    # Frontend
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+
+    # Flask API + WebSocket
+    location /api/ {
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass http://127.0.0.1:5555;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+}
+</pre>
+<pre>
+sudo ln -s /etc/nginx/sites-available/network-analyzer /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+</pre>
+
+<div class="page-break"></div>
+
+<!-- 4. SENSOR VM -->
+<h2 id="sec-sensor">4. Sensor VM Installation (Host Files)</h2>
+<p>
+The Sensor VM is a Linux machine physically connected to (or mirroring) the
+network you want to monitor. It runs three components:
+</p>
+<ul>
+  <li><strong>Zeek IDS</strong> — parses live traffic and writes <code>conn.log</code> in JSON format.</li>
+  <li><strong>dumpcap</strong> — captures raw packets into a rolling ring-buffer of PCAP files.</li>
+  <li><strong>zeek_agent.py</strong> — tails <code>conn.log</code> and batches flow records to the Flask API every 2 seconds (or 50 records, whichever comes first).</li>
+  <li><strong>pcap_server.py</strong> — lightweight Flask server on port 5005 that serves PCAP slices to the application server on demand.</li>
+</ul>
+
+<h3>4.1 System Requirements</h3>
+<table>
+  <thead>
+    <tr><th>Component</th><th>Minimum</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>OS</td><td>Ubuntu 22.04 LTS / Debian 12</td><td>Must be Linux — shell scripts use bash</td></tr>
+    <tr><td>Python</td><td>3.10+</td><td>For zeek_agent.py and pcap_server.py</td></tr>
+    <tr><td>Zeek</td><td>6.x (LTS)</td><td>Installed to <code>/opt/zeek/</code></td></tr>
+    <tr><td>Wireshark CLI</td><td>3.x</td><td>Provides dumpcap, mergecap, editcap</td></tr>
+    <tr><td>Nmap</td><td>7.x</td><td>Required for on-demand network scans</td></tr>
+    <tr><td>NIC</td><td>1 Gbps+</td><td>Must be in promiscuous mode for passive capture</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 Install System Packages</h3>
+<pre>
+sudo apt update
+sudo apt install -y python3 python3-pip wireshark-common tshark nmap curl wget
+</pre>
+
+<div class="note">
+<strong>Note:</strong> When prompted during Wireshark installation
+<em>"Should non-superusers be able to capture packets?"</em> — answer
+<strong>Yes</strong> if you want to run dumpcap without sudo. Otherwise the
+sensor scripts must be run as root.
+</div>
+
+<h3>4.3 Install Zeek</h3>
+<pre>
+# Add the Zeek package repository (Ubuntu 22.04 example)
+echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' \
+    | sudo tee /etc/apt/sources.list.d/security:zeek.list
+
+curl -fsSL https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key \
+    | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg &gt; /dev/null
+
+sudo apt update
+sudo apt install -y zeek
+
+# Add Zeek to PATH
+echo 'export PATH=$PATH:/opt/zeek/bin' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify
+zeek --version
+</pre>
+
+<h3>4.4 Install Python Dependencies for Sensor Scripts</h3>
+<pre>
+pip3 install requests flask
+</pre>
+
+<h3>4.5 Copy Sensor Files to the VM</h3>
+<p>
+Copy the three files from the <code>Host Files/</code> directory of the project
+to a working directory on the Sensor VM (e.g. <code>~/sensor/</code>):
+</p>
+<pre>
+# From the application server (using scp)
+scp "Host Files/start_sensor.sh" \
+    "Host Files/zeek_agent.py" \
+    "Host Files/pcap_server.py" \
+    user@sensor-vm-ip:~/sensor/
+</pre>
+<pre>
+# On the Sensor VM — make the shell script executable
+chmod +x ~/sensor/start_sensor.sh
+</pre>
+
+<h3>4.6 Configure the Sensor</h3>
+<p>
+All sensor configuration is hardcoded at the top of each file — there is no
+<code>.env</code> file on the sensor machine. Open each file and replace the
+placeholder values before deploying.
+</p>
+
+<h4>zeek_agent.py — top of file</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+ZEEK_LOG_PATH = "conn.log"
+HOST_API_URL  = "http://&lt;application-server-ip&gt;:5555/v1/ingest/zeek"
+SECRET_TOKEN  = "same_value_as_INTERNAL_TOKEN_in_backend_env"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>pcap_server.py — top of file</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+SECRET_TOKEN = "same_value_as_INTERNAL_TOKEN_in_backend_env"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<h4>start_sensor.sh — top of file</h4>
+<pre>
+# ─── Configuration ────────────────────────────────────────────────────────────
+HOST_IP="&lt;sensor-vm-ip&gt;"        # this machine's IP — excluded from capture
+SENSOR_PORTS="5000 or port 5001 or port 5005"
+# ──────────────────────────────────────────────────────────────────────────────
+</pre>
+
+<div class="warn">
+<strong>Important:</strong> <code>SECRET_TOKEN</code> in both Python files must
+be exactly the same string as <code>INTERNAL_TOKEN</code> in the Flask backend's
+<code>.env</code>. A mismatch will cause all Zeek flow ingestion to fail with
+HTTP 401.
+</div>
+
+<h3>4.7 Start the Sensor</h3>
+<pre>
+cd ~/sensor
+
+# Run the sensor on your chosen network interface
+# Replace 'eth0' with the actual interface name (use 'ip link' to list interfaces)
+./start_sensor.sh eth0
+</pre>
+
+<p>
+Successful output looks like:
+</p>
+<pre>
+[*] Cleaning up old PCAP and log files...
+
+ Starting Sensor Node on interface: eth0
+
+[*] Starting dumpcap (Ring Buffer)...
+[*] Starting Zeek...
+[*] Starting PCAP Server (Port 5005)...
+[*] Starting Zeek Agent...
+
+------------------------------------------------
+
+Sensor is active! Press [CTRL+C] to stop.
+
+------------------------------------------------
+</pre>
+
+<p>Press <strong>Ctrl+C</strong> to stop all sensor processes cleanly.</p>
+
+<h3>4.8 What Each Component Does</h3>
+
+<div class="diagram-box">
+<div class="diagram-title">Figure 2 – Sensor VM Internal Flow</div>
+<pre>
+  Network Interface (promiscuous mode)
+           │
+           ├──────────────────────────────────┐
+           │                                  │
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │   Zeek IDS      │                │   dumpcap       │
+  │ -C -i eth0      │                │ ring buffer     │
+  │ LogAscii JSON   │                │ 500 MB / file   │
+  └────────┬────────┘                │ 3 files max     │
+           │ conn.log (JSON lines)   └────────┬────────┘
+           │                                  │ generated_pcaps/
+  ┌────────▼────────┐                ┌────────▼────────┐
+  │ zeek_agent.py   │                │ pcap_server.py  │
+  │ tail + batch    │                │ Flask :5005     │
+  │ 50 flows / 2 s  │                │ GET /get-pcap   │
+  └────────┬────────┘                └────────┬────────┘
+           │ POST /v1/ingest/zeek              │ on-demand slice
+           │ X-Internal-Token                  │ (mergecap + editcap)
+           ▼                                   ▼
+     Flask API :5555              Flask API :5555
+   (flow_statistics DB)         (snapshot download)
+</pre>
+</div>
+
+<h3>4.9 Finding Your Network Interface Name</h3>
+<pre>
+ip link show
+# or
+ip a
+# Look for an interface that is UP and connected, e.g. eth0, enp0s3, ens3
+</pre>
+
+<div class="tip">
+<strong>Tip:</strong> For passive monitoring without disrupting traffic, place
+the sensor on a network mirror port (SPAN) or use a network TAP. The
+<code>-C</code> flag passed to Zeek disables checksum verification, which is
+necessary when capturing from mirror ports.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 5. VERIFY -->
+<h2 id="sec-verify">5. Verifying the Full Stack</h2>
+
+<h3>5.1 Backend Health Check</h3>
+<pre>
+# From any machine on the network
+curl -s http://&lt;app-server-ip&gt;:5555/apidocs | grep -c "swagger"
+# Should return 1 (Swagger UI HTML is present)
+</pre>
+
+<h3>5.2 Frontend Health Check</h3>
+<p>
+Open a browser and navigate to <code>http://&lt;app-server-ip&gt;:3000</code>.
+You should see the login page. Log in with the admin credentials created in
+Section 2.7.
+</p>
+
+<h3>5.3 Zeek Flow Ingestion Check</h3>
+<pre>
+# On the application server — query the flow_statistics table
+sudo -u postgres psql -d network_analyzer -c \
+    "SELECT COUNT(*) FROM flow_statistics;"
+# Row count should increase every few seconds while the sensor is running.
+</pre>
+
+<h3>5.4 PCAP Server Check</h3>
+<pre>
+# From the application server — request the latest PCAP from the sensor
+curl -s -o /dev/null -w "%{http_code}" \
+    -H "X-Internal-Token: &lt;your-INTERNAL_TOKEN&gt;" \
+    http://&lt;sensor-ip&gt;:5005/get-pcap
+# Should return 200
+</pre>
+
+<h3>5.5 End-to-End Checklist</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Test</th><th>Expected Result</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Browse to <code>http://&lt;app&gt;:5555/apidocs</code></td><td>Swagger UI loads</td></tr>
+    <tr><td>2</td><td>Browse to <code>http://&lt;app&gt;:3000/login</code></td><td>Login form appears</td></tr>
+    <tr><td>3</td><td>Login with admin credentials</td><td>Redirect to home dashboard</td></tr>
+    <tr><td>4</td><td>Upload a <code>.pcap</code> file on the Analyze page</td><td>Analysis results appear</td></tr>
+    <tr><td>5</td><td>Open Continuous Monitoring, enable Live Mode</td><td>Flow rows appear and update</td></tr>
+    <tr><td>6</td><td>Generate a WebSocket alert (send a large file through monitored network)</td><td>Alert snackbar appears in browser</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 6. SERVICES -->
+<h2 id="sec-service">6. Running as System Services (systemd)</h2>
+<p>
+For production deployments, use systemd unit files so that the backend, frontend,
+and sensor restart automatically after a reboot.
+</p>
+
+<h3>6.1 Flask API Service</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-api.service
+[Unit]
+Description=Network Analyzer Flask API
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer/server
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/opt/network-analyzer/server/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl daemon-reload
+sudo systemctl enable --now netanalyzer-api
+sudo systemctl status netanalyzer-api
+</pre>
+
+<h3>6.2 Nuxt Frontend Service</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-frontend.service
+[Unit]
+Description=Network Analyzer Nuxt Frontend
+After=network.target netanalyzer-api.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/network-analyzer
+EnvironmentFile=/opt/network-analyzer/.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-frontend
+</pre>
+
+<h3>6.3 Sensor Service</h3>
+<pre>
+# /etc/systemd/system/netanalyzer-sensor.service
+[Unit]
+Description=Network Analyzer Sensor Node
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/sensor-user/sensor
+ExecStart=/bin/bash /home/sensor-user/sensor/start_sensor.sh eth0
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+<pre>
+sudo systemctl enable --now netanalyzer-sensor
+</pre>
+
+<div class="note">
+<strong>Note:</strong> Replace <code>eth0</code> with your actual interface
+name. The sensor service runs as root because raw packet capture with dumpcap
+typically requires elevated privileges unless the system is explicitly
+configured otherwise.
+</div>
+
+<div class="page-break"></div>
+
+<!-- 7. TROUBLESHOOT -->
+<h2 id="sec-trouble">7. Installation Troubleshooting</h2>
+
+<table>
+  <thead>
+    <tr><th>Symptom</th><th>Likely Cause</th><th>Fix</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>RuntimeError: JWT_SECRET_KEY environment variable must be set</code></td>
+      <td><code>.env</code> not loaded or variable missing</td>
+      <td>Confirm <code>.env</code> is in <code>server/</code> and contains <code>JWT_SECRET_KEY</code></td>
+    </tr>
+    <tr>
+      <td><code>psycopg2.OperationalError: could not connect to server</code></td>
+      <td>PostgreSQL not running or wrong <code>DATABASE_URL</code></td>
+      <td>Run <code>sudo systemctl start postgresql</code>; verify <code>pg_isready</code></td>
+    </tr>
+    <tr>
+      <td><code>ERROR: extension "timescaledb" does not exist</code></td>
+      <td>TimescaleDB package not installed or wrong PostgreSQL version</td>
+      <td>Re-run TimescaleDB install steps; confirm PG version with <code>psql --version</code></td>
+    </tr>
+    <tr>
+      <td><code>ModuleNotFoundError: No module named 'pyshark'</code></td>
+      <td>Virtual environment not activated or <code>pip install</code> not run</td>
+      <td>Activate <code>.venv</code> and re-run <code>pip install -r requirements.txt</code></td>
+    </tr>
+    <tr>
+      <td>tshark errors during PCAP analysis</td>
+      <td><code>tshark</code> not in PATH or version mismatch</td>
+      <td>Run <code>which tshark</code>; add Wireshark bin to PATH if missing</td>
+    </tr>
+    <tr>
+      <td><code>npm install</code> fails with EACCES</td>
+      <td>npm global directory permissions issue</td>
+      <td>Run as your user (not root); or fix npm prefix: <code>npm config set prefix ~/.npm-global</code></td>
+    </tr>
+    <tr>
+      <td>Nuxt dev server can't reach Flask API (CORS error in browser)</td>
+      <td>Frontend origin not in <code>ALLOWED_ORIGINS</code></td>
+      <td>Add <code>http://localhost:3000</code> to <code>ALLOWED_ORIGINS</code> in <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>Zeek does not produce <code>conn.log</code></td>
+      <td>Zeek not installed at <code>/opt/zeek/bin/zeek</code> or interface wrong</td>
+      <td>Run <code>which zeek</code> or <code>/opt/zeek/bin/zeek --version</code>; check interface name with <code>ip a</code></td>
+    </tr>
+    <tr>
+      <td>Sensor: zeek_agent.py exits immediately with connection refused</td>
+      <td><code>HOST_API_URL</code> points to wrong host/port, or Flask API is down</td>
+      <td>Verify Flask API is running; check <code>HOST_API_URL</code> at the top of <code>zeek_agent.py</code></td>
+    </tr>
+    <tr>
+      <td>pcap_server.py returns 401 to the application server</td>
+      <td><code>SECRET_TOKEN</code> on sensor ≠ <code>INTERNAL_TOKEN</code> on backend</td>
+      <td>Copy the exact same token string to the top of <code>zeek_agent.py</code> and <code>pcap_server.py</code>, and to <code>INTERNAL_TOKEN</code> in the backend <code>.env</code></td>
+    </tr>
+    <tr>
+      <td>dumpcap: permission denied</td>
+      <td>User not in <code>wireshark</code> group</td>
+      <td>Run <code>sudo usermod -aG wireshark $USER</code> then log out and back in</td>
+    </tr>
+    <tr>
+      <td><code>mergecap</code> or <code>editcap</code> not found</td>
+      <td>Only <code>tshark</code> installed, not full Wireshark CLI tools</td>
+      <td>Run <code>sudo apt install -y wireshark-common</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- FOOTER -->
+<hr style="margin: 30pt 0 10pt; border: none; border-top: 1pt solid #aaa;">
+<p style="text-align:center; font-size: 9pt; color: #555;">
+  Network Analyzer Installation Guide &nbsp;|&nbsp; &copy; 2025 University of Thessaly &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; Version 1.0
+</p>
+
+</body>
+</html>
