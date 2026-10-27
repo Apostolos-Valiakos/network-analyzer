@@ -10,14 +10,14 @@ Full step-by-step guide for deploying the Privacy Enhanced Network Monitor
 You do **not** need to create the database, user, or tables manually.
 Docker and the app handle everything:
 
-| Step | Who does it | When |
-|---|---|---|
-| Create the `network_analyzer` database | TimescaleDB container (via env vars) | On first `docker compose up` |
-| Create the `postgres` superuser with your password | TimescaleDB container | On first `docker compose up` |
-| Create all tables (`users`, `pcap_files`, `cluster_results`, …) | `app.py → db.create_all()` | Every time the backend starts |
-| Enable TimescaleDB extension | `app.py` | Every time the backend starts |
-| Create `flow_statistics` hypertable | `app.py` | Every time the backend starts |
-| Run `ALTER TABLE` column migrations | `app.py → _startup_migrations()` | Every time the backend starts |
+| Step                                                            | Who does it                          | When                          |
+| --------------------------------------------------------------- | ------------------------------------ | ----------------------------- |
+| Create the `network_analyzer` database                          | TimescaleDB container (via env vars) | On first `docker compose up`  |
+| Create the `postgres` superuser with your password              | TimescaleDB container                | On first `docker compose up`  |
+| Create all tables (`users`, `pcap_files`, `cluster_results`, …) | `app.py → db.create_all()`           | Every time the backend starts |
+| Enable TimescaleDB extension                                    | `app.py`                             | Every time the backend starts |
+| Create `flow_statistics` hypertable                             | `app.py`                             | Every time the backend starts |
+| Run `ALTER TABLE` column migrations                             | `app.py → _init_db()`                | Every time the backend starts |
 
 ---
 
@@ -110,10 +110,11 @@ cd ~/penm
 ## 3 — Configure the `.env` file
 
 The `.env` file in the project root is read by `docker compose` to fill in
-variable values. A template is already present; copy it and edit it:
+variable values. `.env` itself is never committed (it holds real secrets) —
+`.env.example` is the tracked template. Create your real `.env` from it:
 
 ```bash
-cp .env .env.backup    # keep the original as reference
+cp .env.example .env
 ```
 
 Open `.env` in your editor and set the following values:
@@ -127,6 +128,7 @@ python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_hex(32)); pr
 ```
 
 Example output (yours will be different — use your own):
+
 ```
 JWT_SECRET_KEY=4a7f3c9b2d1e8a6f0c5b9d3e7f2a4c8b1e5d9f3a7c2b6e0d4f8a1c5b9e3d7f2a
 SECRET_TOKEN=9b3e7f1a5c2d8e4b0f6a3c9e2d7b5f1a4c8b2e6d0f3a7c9b1e5d2f8a4c7b3e6d
@@ -162,16 +164,23 @@ ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
 # If your Linux machine has a real IP (e.g. 192.168.1.50) and you need
 # to access the app from another machine, change localhost to that IP.
 API_BASE_URL=http://localhost:5555
-WS_URL=ws://10.6.2.135:5002   # IP of the Sensor VM running publisher.py
+WS_URL=ws://192.168.1.50:5002   # IP of the Sensor VM running publisher.py — not this Docker host
 ```
 
 > **Important:** `API_BASE_URL` and `WS_URL` are **baked into the frontend
 > image at build time**. If you change them after building, you must rebuild
 > the frontend image:
+>
 > ```bash
 > docker compose build frontend
 > docker compose up -d frontend
 > ```
+>
+> The frontend's Content-Security-Policy (which governs what origins the
+> browser will let the app call out to) is derived from these same two
+> values automatically at container startup — you don't need to edit
+> `nginx.conf` by hand for a new `API_BASE_URL`/`WS_URL`, rebuilding the
+> frontend image is genuinely the only step.
 
 ### 3.3 How `DATABASE_URL` is constructed (you do NOT set it manually)
 
@@ -218,11 +227,11 @@ docker compose up --build -d
 
 ## 5 — Access the application
 
-| URL | What you see |
-|---|---|
-| `http://localhost` | PENM frontend (login page) |
-| `http://localhost:5555/apidocs` | Swagger / Flasgger API docs |
-| `http://localhost:5432` | PostgreSQL (connect with pgAdmin or `psql`) |
+| URL                             | What you see                                |
+| ------------------------------- | ------------------------------------------- |
+| `http://localhost`              | PENM frontend (login page)                  |
+| `http://localhost:5555/apidocs` | Swagger / Flasgger API docs                 |
+| `127.0.0.1:5432`                | PostgreSQL (connect with pgAdmin or `psql`) — bound to loopback only, not reachable from other machines |
 
 ### Connect to the database with `psql` (optional verification)
 
@@ -305,12 +314,12 @@ sudo ufw reload
 
 ## 9 — Summary of required Linux packages
 
-| Package | Why |
-|---|---|
-| `docker-ce` | Docker container runtime |
-| `docker-ce-cli` | `docker` command-line tool |
-| `containerd.io` | Low-level container runtime |
-| `docker-buildx-plugin` | Multi-platform image builds |
+| Package                 | Why                          |
+| ----------------------- | ---------------------------- |
+| `docker-ce`             | Docker container runtime     |
+| `docker-ce-cli`         | `docker` command-line tool   |
+| `containerd.io`         | Low-level container runtime  |
+| `docker-buildx-plugin`  | Multi-platform image builds  |
 | `docker-compose-plugin` | `docker compose` sub-command |
 
 Everything else (Python, Node.js, Nginx, PostgreSQL, TimescaleDB) runs

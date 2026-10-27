@@ -1,22 +1,74 @@
 tags:
   - Continuous Monitoring
 summary: Get Latest Role Snapshot
-description: Retrieves the most recent role assessments from the continuous monitoring tables.
+description: >
+  Retrieves the most recent role-assessment snapshot from the
+  RoleSnapshot table (all rows sharing the single latest "ts" value).
+  This table is populated by a periodic snapshot scheduler; if it has
+  never run, or the table is empty, the response is an empty result
+  rather than an error.
+produces:
+  - application/json
+  - text/csv
+security:
+  - Bearer: []
 parameters:
   - name: limit
     in: query
     type: integer
     required: false
     default: 1000
-    description: Maximum number of records to return.
+    description: Maximum number of records to return (1-10000).
   - name: format
     in: query
     type: string
     required: false
     default: csv
-    description: Response format (json or csv).
+    enum: [json, csv]
+    description: Response format.
 responses:
   200:
-    description: Returns the latest role assessments.
+    description: >
+      Returns the latest role assessments. With format=json, a JSON array
+      (empty array "[]" if no snapshot exists yet). With format=csv
+      (default), a downloadable CSV — EXCEPT when no snapshot exists yet,
+      in which case the response is the plain text "No data" (not CSV) at
+      200.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          ts:
+            type: number
+            description: Snapshot timestamp (Unix epoch).
+            example: 1789111200
+          id.orig_h:
+            type: string
+            description: IP address (field name matches Zeek dot notation).
+            example: "10.244.0.77"
+          role:
+            type: string
+            example: "NEAR_RT_RIC"
+          confidence:
+            type: number
+            example: 0.95
+          reasoning:
+            type: string
+            example: "E2AP control-plane traffic observed as the RIC side of the association."
+  400:
+    description: The "limit" parameter is out of the allowed 1-10000 range.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "limit must be between 1 and 10000"
   500:
-    description: Internal server error.
+    description: Internal server error (e.g. database query failure).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

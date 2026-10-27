@@ -341,6 +341,26 @@ def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2)
     anomalies = detect_anomalies(df, threshold=anomaly_threshold)
     graph_data = build_graph_data(df)
 
+    # WP5: report anomalous cluster members as Notice::Info alerts
+    try:
+        from wp5_notices import emit_notice
+
+        for a in anomalies:
+            if a.get("anomaly"):
+                emit_notice(
+                    note="PENM::Anomalous_Cluster",
+                    msg=(
+                        f"{a['ip']} belongs to an anomalously small traffic "
+                        f"cluster (cluster {a['cluster']}, size <= {anomaly_threshold})"
+                    ),
+                    sub=os.path.basename(pcap_path),
+                    src=a["ip"],
+                    n=a["cluster"],
+                    identifier=f"anomalous-cluster:{a['ip']}",
+                )
+    except Exception:
+        pass  # alert emission must never break the analysis pipeline
+
     _output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cluster_analysis")
     save_results(df, os.path.basename(pcap_path), _output_dir)
 

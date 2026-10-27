@@ -435,28 +435,44 @@
             >
           </div>
 
-          <template v-if="scanResults && Object.keys(scanResults).length > 0">
-            <h4 class="text-h6 font-weight-bold mb-3 mt-4 text-success">
-              <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>Scan
-              Completed
-            </h4>
+          <template v-if="scanResults && scanResults.length > 0">
+            <div class="d-flex align-center mb-3 mt-4">
+              <h4 class="text-h6 font-weight-bold text-success mb-0">
+                <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>Scan
+                Completed
+              </h4>
+              <v-spacer></v-spacer>
+              <v-btn
+                color="primary"
+                variant="outlined"
+                prepend-icon="mdi-file-delimited-outline"
+                @click="downloadScanResultsCsv"
+              >
+                Download CSV
+              </v-btn>
+            </div>
             <v-expansion-panels variant="accordion">
               <v-expansion-panel
-                v-for="(data, ip) in scanResults"
-                :key="ip"
+                v-for="hostResult in scanResults"
+                :key="hostResult.host"
                 class="mb-2"
               >
                 <v-expansion-panel-title class="font-weight-bold text-indigo">
                   <v-icon start color="indigo">mdi-server-network</v-icon> Host:
-                  {{ ip }}
+                  {{ hostResult.host }}
+                  <span
+                    v-if="hostResult.hostname"
+                    class="text-caption text-grey ml-2"
+                    >({{ hostResult.hostname }})</span
+                  >
                   <v-chip size="small" color="info" class="ml-4"
-                    >{{ data.services.length }} Services Found</v-chip
+                    >{{ hostResult.ports.length }} Open Ports</v-chip
                   >
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <v-data-table
                     :headers="serviceHeaders"
-                    :items="data.services"
+                    :items="hostResult.ports"
                     density="compact"
                     class="elevation-1 mt-2"
                     hide-default-footer
@@ -472,42 +488,27 @@
                       >
                     </template>
 
-                    <template v-slot:item.cpes="{ item }">
-                      <div v-if="item.cpes.length">
-                        <v-chip
-                          v-for="cpe in item.cpes"
-                          :key="cpe"
-                          size="x-small"
-                          color="grey-darken-2"
-                          variant="outlined"
-                          class="mr-1 mt-1"
-                          >{{ cpe }}</v-chip
-                        >
-                      </div>
-                      <span v-else class="text-caption text-grey font-italic"
-                        >No CPEs detected</span
+                    <template v-slot:item.version="{ item }">
+                      <span
+                        >{{ item.service
+                        }}<span v-if="item.version"> — {{ item.version }}</span></span
                       >
                     </template>
 
-                    <template v-slot:item.scripts="{ item }">
-                      <div v-if="item.scripts && item.scripts.length">
-                        <v-alert
-                          v-for="script in item.scripts"
-                          :key="script.id"
-                          density="compact"
-                          type="error"
-                          variant="tonal"
-                          class="mt-2 text-caption"
+                    <template v-slot:item.cves="{ item }">
+                      <div v-if="item.cves && item.cves.length">
+                        <v-chip
+                          v-for="cve in item.cves"
+                          :key="cve"
+                          size="x-small"
+                          color="error"
+                          variant="outlined"
+                          class="mr-1 mt-1"
+                          >{{ cve }}</v-chip
                         >
-                          <strong>{{ script.id }}</strong
-                          >:
-                          <pre style="white-space: pre-wrap; font-size: 10px">{{
-                            script.output
-                          }}</pre>
-                        </v-alert>
                       </div>
                       <span v-else class="text-caption text-grey font-italic"
-                        >No vulnerabilities detected</span
+                        >No known CVEs</span
                       >
                     </template>
                   </v-data-table>
@@ -607,10 +608,9 @@ export default {
         { text: "Assigned IP Addresses", value: "ips", sortable: false },
       ],
       serviceHeaders: [
-        { text: "Port", value: "port", width: "12%" },
-        { text: "Service", value: "name", width: "15%" },
-        { text: "CPE Info", value: "cpes", width: "25%" },
-        { text: "NSE Script Output", value: "scripts", width: "48%" },
+        { text: "Port", value: "port", width: "15%" },
+        { text: "Service / Version", value: "version", width: "40%" },
+        { text: "Known CVEs", value: "cves", width: "45%" },
       ],
       exportLimit: null,
     };
@@ -740,7 +740,7 @@ export default {
         });
         const data = await response.json();
         if (!response.ok)
-          throw new Error(data.error || "Failed to start background scan.");
+          throw new Error(data.message || "Failed to start background scan.");
 
         this.pollScanResults();
       } catch (error) {
@@ -759,18 +759,18 @@ export default {
 
           if (data.status === "completed") {
             clearInterval(this.scanInterval);
-            this.scanResults = data.data;
+            this.scanResults = data.results;
             this.scanStatus = "completed";
-          } else if (data.status === "failed") {
+          } else if (data.status === "error") {
             clearInterval(this.scanInterval);
             this.scanError =
-              data.error || "The background scan encountered an error.";
+              data.message || "The background scan encountered an error.";
             this.scanStatus = "failed";
           }
         } catch (error) {
           console.error("Polling error:", error);
         }
-      }, 5000);
+      }, 30000);
     },
 
     // ----------------------------------------
@@ -831,6 +831,60 @@ export default {
         this.showSnackbar(err.message, "error");
       }
     },
+    downloadScanResultsCsv() {
+      if (!this.scanResults || !this.scanResults.length) return;
+
+      const escapeCsv = (value) => {
+        const str = value === null || value === undefined ? "" : String(value);
+        return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+      };
+
+      const headers = [
+        "Host",
+        "Hostname",
+        "Host State",
+        "Port",
+        "Protocol",
+        "Port State",
+        "Service",
+        "Version",
+        "CVEs",
+      ];
+      const rows = [headers];
+
+      this.scanResults.forEach((hostResult) => {
+        const ports = hostResult.ports && hostResult.ports.length
+          ? hostResult.ports
+          : [{}]; // still emit one row for hosts with no open ports
+        ports.forEach((port) => {
+          rows.push([
+            hostResult.host,
+            hostResult.hostname || "",
+            hostResult.state || "",
+            port.port ?? "",
+            port.protocol || "",
+            port.state || "",
+            port.service || "",
+            port.version || "",
+            (port.cves || []).join("; "),
+          ]);
+        });
+      });
+
+      const csvContent = rows
+        .map((row) => row.map(escapeCsv).join(","))
+        .join("\r\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `scan_results_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    },
     getLocalISOString(date) {
       const offset = date.getTimezoneOffset() * 60000;
       return new Date(date - offset).toISOString().slice(0, 16);
@@ -870,11 +924,17 @@ export default {
       if (!dom) return;
       if (!this.trendChart) this.trendChart = echarts.init(dom);
 
-      const outData = this.stats.map((s) => [
+      // this.stats is kept newest-first (to match the live-update prepend
+      // convention), but ECharts draws line points in array order rather
+      // than sorting by x-value — feed it a chronologically-sorted copy so
+      // the trend line doesn't zigzag backward through time.
+      const sortedStats = [...this.stats].sort((a, b) => a.ts - b.ts);
+
+      const outData = sortedStats.map((s) => [
         s.ts * 1000,
         parseInt(s.orig_bytes) || 0,
       ]);
-      const inData = this.stats.map((s) => [
+      const inData = sortedStats.map((s) => [
         s.ts * 1000,
         parseInt(s.resp_bytes) || 0,
       ]);

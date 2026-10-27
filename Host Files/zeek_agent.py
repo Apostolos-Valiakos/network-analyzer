@@ -30,18 +30,28 @@ FLUSH_INTERVAL = 2.0  # ...or send whatever we have every 2 seconds.
 
 
 def send_batch(batch):
-    """Sends a list of flow dictionaries to the Host API securely."""
+    """Sends a list of flow dictionaries to the Host API securely.
+
+    Returns True if the batch was accepted and should be cleared, False if
+    it should be kept and retried on the next send (e.g. rate-limited or
+    the host was briefly unreachable) — a batch is never dropped on the
+    floor just because one send attempt failed.
+    """
     if not batch:
-        return
+        return True
 
     headers = {"X-Internal-Token": SECRET_TOKEN, "Content-Type": "application/json"}
     payload = {"flows": batch}
 
     try:
         response = requests.post(HOST_API_URL, json=payload, headers=headers, timeout=5)
-        response.raise_for_status()
+        if response.status_code == 200:
+            return True
+        logger.warning("Host rejected batch: %s - %s", response.status_code, response.text)
+        return False
     except requests.exceptions.RequestException as e:
         logger.warning("Agent network error: %s", e)
+        return False
 
 
 def tail_zeek_log():
@@ -68,8 +78,8 @@ def tail_zeek_log():
             # If there's no new line yet, check if we need to flush a partial batch
             if not line:
                 if batch and (time.time() - last_flush) > FLUSH_INTERVAL:
-                    send_batch(batch)
-                    batch = []
+                    if send_batch(batch):
+                        batch = []
                     last_flush = time.time()
                 time.sleep(0.5)  # Rest briefly before checking for new lines again
                 continue
@@ -84,8 +94,8 @@ def tail_zeek_log():
 
             # 3. Send the batch if it reached the size limit
             if len(batch) >= BATCH_SIZE:
-                send_batch(batch)
-                batch = []
+                if send_batch(batch):
+                    batch = []
                 last_flush = time.time()
 
 

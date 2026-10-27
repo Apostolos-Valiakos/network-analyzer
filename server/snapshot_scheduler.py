@@ -11,7 +11,6 @@ from Preprocess import run_ip_role_pipeline
 
 logger = logging.getLogger(__name__)
 
-VM_URL = "http://127.0.0.1:5005/get-pcap"
 SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 
 
@@ -24,7 +23,8 @@ def run_role_snapshot(app):
         start_time = end_time - 300
 
         # Ask VM for slice
-        vm_url = f"http://127.0.0.1:5005/get-pcap?start_time={start_time}&end_time={end_time}"
+        sensor_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005")
+        vm_url = f"{sensor_url}/get-pcap?start_time={start_time}&end_time={end_time}"
         headers = {"X-Internal-Token": SECRET_TOKEN}
 
         try:

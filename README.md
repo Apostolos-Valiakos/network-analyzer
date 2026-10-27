@@ -269,7 +269,7 @@ network-analyzer/
 │   ├── agglomerative_clustering.py
 │   ├── pcap_analysis.py
 │   ├── Preprocess.py    # IP role classification pipeline
-│   ├── role_assessment.py
+│   ├── role_engine.py   # Evidence-based IP role assessment (DPI)
 │   ├── graph_builder.py
 │   ├── ueAnalysis.py
 │   └── snapshot_scheduler.py

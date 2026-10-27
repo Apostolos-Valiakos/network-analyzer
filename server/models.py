@@ -107,6 +107,11 @@ class IpRole(db.Model):
     role = db.Column(db.String(100))
     confidence = db.Column(db.Float, default=0.0)
     reasoning = db.Column(db.Text)
+    # Engine version that produced this row; rows from older engines ("" for
+    # legacy) are invalidated and re-analyzed on next lookup.
+    engine_version = db.Column(
+        db.String(20), nullable=False, server_default="", default=""
+    )
 
 
 class UeSession(db.Model):

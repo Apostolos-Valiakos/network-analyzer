@@ -1,42 +1,114 @@
 import subprocess
-import json
 import logging
 import os
 from typing import List, Tuple, Optional, Dict, Any
-from models import db, PcapFile, IpRole
+
+from role_engine import get_or_compute_roles, roles_as_strings
 
 logger = logging.getLogger(__name__)
 
 
 ##
-# Runs tshark on a PCAP file and loads the resulting JSON output.
-# Optimization: Checks for existing .json dump on disk first.
-def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
-    """Runs tshark and loads the JSON output, handling errors."""
+# Only the fields PacketProcessor turns into ML features. A single
+# `-T fields` pass stays at a few MB / seconds even for 100k+ packet captures;
+# the old `-T json -V` dump was ~6 KB per packet and timed out on large files.
+_FEATURE_FIELDS = ["frame.time_epoch", "frame.len", "frame.protocols", "ip.src"]
+FEATURE_CACHE_SUFFIX = ".features.tsv"
+_TSHARK_TIMEOUT = 300
 
-    export_path = pcap_file + ".packets.json"
-    if os.path.exists(export_path):
+
+def _packet_src_ip(protocols: List[str], src_tokens: List[str]) -> str:
+    """
+    Picks the packet's own source IP from every ip.src occurrence: the last
+    IP header (the inner one on GTP-U frames), but never one quoted inside an
+    ICMP error. Matches what the previous JSON-based extraction produced.
+    """
+    if "icmp" in protocols:
+        own_headers = protocols[: protocols.index("icmp")].count("ip")
+        if 0 < own_headers <= len(src_tokens):
+            return src_tokens[own_headers - 1]
+    return src_tokens[-1]
+
+
+def _parse_feature_lines(output: str) -> List[Dict[str, Any]]:
+    records = []
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if len(parts) < len(_FEATURE_FIELDS) or not parts[3]:
+            continue  # non-IPv4 frame
+        protocols = parts[2].split(":") if parts[2] else []
         try:
-            with open(export_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
+            records.append(
+                {
+                    "timestamp": float(parts[0] or 0),
+                    "src_ip": _packet_src_ip(protocols, parts[3].split(",")),
+                    "packet_len": int(parts[1] or 0),
+                    "protocol": protocols[-1] if protocols else "Unknown",
+                }
+            )
+        except ValueError:
+            continue
+    return records
+
+
+def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Runs one tshark field pass and returns a feature record per IPv4 frame:
+    {"timestamp", "src_ip", "packet_len", "protocol"}. The raw tshark output
+    is cached next to the pcap so repeated analyses skip tshark.
+    """
+    cache_path = pcap_file + FEATURE_CACHE_SUFFIX
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                return _parse_feature_lines(f.read())
+        except OSError:
             pass
 
-    cmd = ["tshark", "-r", pcap_file, "-T", "json", "-V"]
+    cmd = ["tshark", "-r", pcap_file, "-T", "fields"]
+    for field in _FEATURE_FIELDS:
+        cmd += ["-e", field]
+    # Every ip.src occurrence (outer, GTP-U inner, ICMP-quoted) comma-joined;
+    # _packet_src_ip picks the right one.
+    cmd += ["-E", "separator=/t", "-E", "occurrence=a", "-E", "aggregator=,"]
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
-        packets = json.loads(result.stdout)
-
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(packets, f, indent=2)
-
-        return packets
-
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_TSHARK_TIMEOUT,
+        )
     except subprocess.TimeoutExpired:
-        logger.warning("tshark timed out on %s", pcap_file)
+        logger.error("tshark timed out after %ds on %s", _TSHARK_TIMEOUT, pcap_file)
         return None
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+    except FileNotFoundError:
+        logger.error("tshark not found on PATH — cannot load packets")
         return None
+
+    if result.returncode != 0:
+        if not result.stdout:
+            logger.error(
+                "tshark failed on %s (exit %d): %s",
+                pcap_file, result.returncode, result.stderr.strip(),
+            )
+            return None
+        # e.g. exit 14 "cut short in the middle of a packet": every complete
+        # packet was still read, so the output is usable.
+        logger.warning(
+            "tshark exit %d on %s, using partial output: %s",
+            result.returncode, pcap_file, result.stderr.strip(),
+        )
+
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            f.write(result.stdout)
+    except OSError:
+        logger.warning("Could not write feature cache %s", cache_path)
+
+    return _parse_feature_lines(result.stdout)
 
 
 def get_cached_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
@@ -44,173 +116,12 @@ def get_cached_packets(pcap_file: str) -> Optional[List[Dict[str, Any]]]:
 
 
 ##
-# OPTIMIZED: Single-Pass Role Identification.
-# Combines 5 separate TShark calls into 1 to drastically improve speed.
+# Role identification is delegated to the evidence-based engine in
+# role_engine.py (direction-aware rules, confidence, reasoning, versioned
+# DB cache). This wrapper keeps the legacy string-dict interface.
 def get_comprehensive_ip_roles(pcap_file: str) -> Dict[str, str]:
-    """
-    Analyzes the PCAP to identify IP roles using a single TShark pass.
-    """
-    identified_roles = {}
-    pcap_record = None  # FIX: Initialize to prevent UnboundLocalError
-
-    # --- 1. Database Cache Lookup ---
-    try:
-        pcap_record = PcapFile.query.filter_by(file_path=pcap_file).first()
-        if pcap_record:
-            stored_roles = IpRole.query.filter_by(pcap_id=pcap_record.id).all()
-            if stored_roles:
-                logger.info("Loaded %d roles from database cache", len(stored_roles))
-                return {r.ip_address: r.role for r in stored_roles}
-    except Exception as e:
-        # Expected in background threads without app context
-        logger.debug("Database lookup skipped (no app context): %s", e)
-
-    # --- 2. Single-Pass Deep Packet Inspection ---
-    logger.info("Performing single-pass DPI on %s", pcap_file)
-
-    # We extract ALL necessary fields in one go.
-    # Fields: IP Src/Dst, Proto Codes, HTTP Headers, TCP Ports
-    cmd = [
-        "tshark",
-        "-r",
-        pcap_file,
-        "-T",
-        "fields",
-        "-e",
-        "ip.src",
-        "-e",
-        "ip.dst",
-        "-e",
-        "ngap.procedureCode",
-        "-e",
-        "e2ap.procedureCode",
-        "-e",
-        "pfcp.msg_type",
-        "-e",
-        "http2.header.value",
-        "-e",
-        "tcp.dstport",
-        "-E",
-        "separator=|",  # Use pipe separator to handle spaces in headers
-        "-E",
-        "occurrence=f",  # Take first occurrence to keep output clean
-    ]
-
-    sbi_signatures = {
-        "/namf": "AMF",
-        "/nsmf": "SMF",
-        "/nudm": "UDM",
-        "/nnrf": "NRF",
-        "/nausf": "AUSF",
-        "/npcf": "PCF",
-        "/nnef": "NEF",
-        "/nscp": "SCP",
-    }
-
-    # O-RAN Candidates sets
-    redis_candidates = set()  # Port 6379
-    e2t_candidates = set()  # Port 38000
-    all_seen_ips = set()
-
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        for line in proc.stdout.splitlines():
-            if not line.strip():
-                continue
-
-            parts = line.split("|")
-            # Ensure we have enough parts (pad with empty strings if missing)
-            if len(parts) < 7:
-                parts += [""] * (7 - len(parts))
-
-            src, dst, ngap, e2ap, pfcp, http_val, tcp_port = parts[:7]
-
-            if not src or not dst:
-                continue
-
-            all_seen_ips.add(src)
-            all_seen_ips.add(dst)
-
-            # --- Logic: Control Plane Codes ---
-            if ngap == "21":
-                identified_roles.update({src: "gNB", dst: "AMF"})
-            if e2ap == "1":
-                identified_roles.update({src: "E2_NODE", dst: "NEAR_RT_RIC"})
-            if pfcp == "50":
-                identified_roles.update({src: "SMF", dst: "UPF"})
-
-            # --- Logic: SBI (HTTP/2) ---
-            if http_val:
-                for sig, role in sbi_signatures.items():
-                    if sig in http_val and dst not in identified_roles:
-                        identified_roles[dst] = role
-                        break
-
-            # --- Logic: O-RAN Ports ---
-            if tcp_port == "6379":
-                if "redis_ip" not in identified_roles:
-                    identified_roles["redis_ip_placeholder"] = dst  # Marker
-                redis_candidates.add(src)
-            elif tcp_port == "38000":
-                if "e2t_ip" not in identified_roles:
-                    identified_roles["e2t_ip_placeholder"] = dst  # Marker
-                e2t_candidates.add(src)
-
-    except subprocess.TimeoutExpired:
-        logger.warning("tshark DPI timed out on %s", pcap_file)
-    except Exception as e:
-        logger.exception("DPI error on %s", pcap_file)
-
-    # --- 3. Resolve O-RAN Complex Roles ---
-    # Redis & E2T Servers (Destinations)
-    # Note: We used placeholders above to store the server IPs found via destination
-    # We now map them cleanly if they aren't already identified
-    for ip, role in list(identified_roles.items()):
-        if role == "redis_ip_placeholder":
-            identified_roles[ip] = "REDIS"
-        if role == "e2t_ip_placeholder":
-            identified_roles[ip] = "E2T"
-
-    # Client Logic
-    common_clients = redis_candidates.intersection(e2t_candidates)
-    if common_clients:
-        ric_client = sorted(list(common_clients))[0]
-        identified_roles[ric_client] = "NEAR_RT_RIC"  # It talks to both
-
-    # E2 Nodes talk to E2T but are not the RIC
-    for ip in e2t_candidates:
-        if ip not in identified_roles:
-            identified_roles[ip] = "E2_NODE"
-
-    # --- 4. Catch-All ---
-    for ip in all_seen_ips:
-        if ip not in identified_roles:
-            identified_roles[ip] = "Unidentified"
-
-    # --- 5. Save Results to Database ---
-    if pcap_record:
-        try:
-            new_role_objects = []
-            for ip, role in identified_roles.items():
-                # Avoid duplicates if logic runs twice
-                new_role_objects.append(
-                    IpRole(
-                        pcap_id=pcap_record.id,
-                        ip_address=ip,
-                        role=role,
-                        reasoning="Optimized TShark DPI",
-                    )
-                )
-
-            if new_role_objects:
-                db.session.bulk_save_objects(new_role_objects)
-                db.session.commit()
-                logger.info("Cached %d roles to database", len(new_role_objects))
-        except Exception as e:
-            logger.exception("Failed to cache roles to database")
-            db.session.rollback()
-
-    return identified_roles
+    """Analyzes the PCAP to identify IP roles. Returns {ip: role}."""
+    return roles_as_strings(get_or_compute_roles(pcap_file))
 
 
 # --- Helper functions that reuse the main logic to avoid re-running TShark ---
@@ -233,22 +144,6 @@ def get_amf_ip(pcap_file: str) -> Optional[str]:
     return amf
 
 
-def get_unique_rrc_ips(pcap_file: str) -> List[str]:
-    # Extract RRC specifically if needed, or rely on previous roles
-    # For RRC specifically, we might still need a tiny separate call
-    # if we strictly need 'nr-rrc' filter, but usually extracting all IPs is enough.
-    # Keeping original logic for safety but can be optimized further.
-    cmd = ["tshark", "-r", pcap_file, "-Y", "nr-rrc", "-T", "fields", "-e", "ip.dst"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        return sorted(list(set(result.stdout.splitlines())))
-    except subprocess.TimeoutExpired:
-        logger.warning("tshark rrc lookup timed out on %s", pcap_file)
-        return []
-    except Exception:
-        return []
-
-
 def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
     # This is now handled inside get_comprehensive_ip_roles
     # We return a dummy dict or re-parse if absolutely necessary for legacy support
@@ -256,7 +151,9 @@ def recognize_oran_ips_roles(pcap_file: str) -> Dict[str, Optional[str]]:
     roles = get_comprehensive_ip_roles(pcap_file)
     return {
         "e2t_ip": next((k for k, v in roles.items() if v == "E2T"), None),
-        "redis_ip": next((k for k, v in roles.items() if v == "REDIS"), None),
+        "redis_ip": next(
+            (k for k, v in roles.items() if v in ("REDIS", "INFRA_REDIS")), None
+        ),
         "ric_client_ip": next(
             (k for k, v in roles.items() if v == "NEAR_RT_RIC"), None
         ),

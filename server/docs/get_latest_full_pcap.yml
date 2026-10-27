@@ -1,9 +1,45 @@
 tags:
   - Continuous Monitoring
 summary: Get Latest Full Payload PCAP
-description: Proxies a request to the VM sensor to retrieve the most recent full payload PCAP.
+description: >
+  Proxies a GET to the Sensor VM's own "/get-pcap" endpoint (SENSOR_URL env
+  var + "/get-pcap") and streams back the most recent full-payload PCAP
+  slice from the sensor's ring buffer, unmodified. This is a live pull from
+  the sensor, not a stored file — every call gets whatever the sensor has
+  right now.
+produces:
+  - application/vnd.tcpdump.pcap
+security:
+  - Bearer: []
 responses:
   200:
-    description: A downloaded PCAP file containing full packet payloads.
-  500:
-    description: Failed to retrieve PCAP from sensor.
+    description: >
+      A downloaded PCAP file (Content-Disposition: attachment;
+      filename=latest_full.pcap) containing full packet payloads.
+  502:
+    description: The sensor responded, but not with HTTP 200 (its own error was proxied through as this generic message).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Failed to retrieve PCAP from sensor"
+  503:
+    description: >
+      TCP connection to the sensor failed outright (wrong SENSOR_URL,
+      sensor process down, or network path broken between the app server
+      and the Sensor VM).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Sensor is unreachable"
+  504:
+    description: The sensor didn't respond within the 10-second timeout.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Sensor request timed out"

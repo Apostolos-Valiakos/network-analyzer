@@ -1,31 +1,184 @@
 tags:
   - Clustering
 summary: Run Agglomerative Clustering
-description: Analyzes a saved PCAP file to cluster network traffic and detect anomalies.
+description: >
+  Groups the IPs in a PCAP into traffic-behavior clusters (agglomerative
+  clustering over per-IP features: packets/bytes sent+received, unique
+  partner count), auto-selects the cluster count that maximizes graph
+  modularity (tested from 2 up to "clusters"), and flags small clusters as
+  anomalous. Requires at least 2 unique IP endpoints in the file.
+
+  Also emits a WP5 "PENM::Anomalous_Cluster" notice per anomalous IP
+  (best-effort; failures here never fail the request), and persists the
+  result keyed by PCAP so a later GET to the same PCAP's ClusterResult
+  returns this run's output.
+produces:
+  - application/json
+security:
+  - Bearer: []
 parameters:
   - in: body
     name: body
     required: true
     schema:
       type: object
+      required:
+        - file
       properties:
         file:
           type: string
-          description: The filename of the PCAP to analyze.
+          description: The filename of the PCAP to analyze (must belong to the caller).
+          example: "20260101120000_capture.pcap"
         clusters:
           type: integer
           default: 4
-          description: The maximum number of clusters to form.
+          description: Maximum cluster count to test (2-20 inclusive); the best-modularity k <= this value is used.
+          example: 4
         anomaly_threshold:
           type: number
           default: 2
-          description: Threshold for marking traffic as anomalous.
+          description: Clusters with size <= this value are flagged anomalous.
+          example: 2
 responses:
   200:
     description: Clustering analysis results.
+    schema:
+      type: object
+      properties:
+        clusters:
+          type: array
+          description: One entry per IP, with its assigned cluster and anomaly flag.
+          items:
+            type: object
+            properties:
+              ip:
+                type: string
+                example: "10.0.0.7"
+              cluster:
+                type: integer
+                example: 2
+              anomaly:
+                type: boolean
+                description: True when this IP's cluster size is <= anomaly_threshold.
+                example: true
+        graphData:
+          type: object
+          description: Force-directed graph, one node per IP, edges between IPs in the same cluster.
+          properties:
+            type:
+              type: string
+              example: "force"
+            categories:
+              type: array
+              items:
+                type: object
+              example: [{"name": "Cluster 0", "keyword": {}, "base": "IP"}]
+            nodes:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "10.0.0.7"
+                  value:
+                    type: integer
+                    example: 1
+                  category:
+                    type: integer
+                    description: Cluster id this node belongs to.
+                    example: 2
+            links:
+              type: array
+              items:
+                type: object
+                properties:
+                  source:
+                    type: integer
+                  target:
+                    type: integer
+                  value:
+                    type: integer
+                    example: 1
+        clusterSummary:
+          type: object
+          description: Same shape as GET /suggested_clusters's 200 response.
+          properties:
+            best_k:
+              type: integer
+              example: 3
+            best_modularity:
+              type: number
+              example: 0.4123
+            modularity_scores:
+              type: array
+              description: Modularity tested at every k from 2 up to "clusters".
+              items:
+                type: object
+                properties:
+                  k:
+                    type: integer
+                  modularity:
+                    type: number
+              example: [{"k": 2, "modularity": 0.31}, {"k": 3, "modularity": 0.4123}]
+            cluster_hierarchy:
+              type: array
+              description: One entry per cluster, sorted by importance score descending.
+              items:
+                type: object
+                properties:
+                  cluster:
+                    type: integer
+                  size:
+                    type: integer
+                    description: Number of IPs in this cluster.
+                  unique_partners_sum:
+                    type: integer
+                  edge_density:
+                    type: number
+                  traffic_score:
+                    type: number
+                    description: log1p of total packets sent+received within the cluster.
+                  score:
+                    type: number
+                    description: "Importance score: (edge_density * 0.7) + (traffic_score * 0.3)."
+            mostImportantCluster:
+              type: integer
+              description: cluster id of the highest-scoring entry in cluster_hierarchy, or null if none.
+              example: 0
   400:
-    description: JSON body required.
+    description: >
+      Missing JSON body, or "clusters"/"anomaly_threshold" out of the
+      allowed range (clusters must be 2-20, anomaly_threshold must be >= 0).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "clusters must be an integer between 2 and 20"
+  403:
+    description: The PCAP exists but belongs to a different user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access denied"
   404:
     description: PCAP file not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "PCAP not found"
   500:
-    description: Clustering process failed.
+    description: >
+      Clustering process failed — commonly "Not enough unique IP endpoints
+      to cluster" when the PCAP has fewer than 2 distinct IPs.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

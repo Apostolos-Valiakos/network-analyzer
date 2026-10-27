@@ -7,11 +7,8 @@ import json
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from rrc_utils import (
-    get_cached_packets,
-    get_comprehensive_ip_roles,
-    get_unique_rrc_ips,
-)
+from rrc_utils import get_cached_packets
+from role_engine import get_or_compute_roles, roles_as_strings
 
 
 class PacketProcessor:
@@ -23,59 +20,22 @@ class PacketProcessor:
     def __init__(self, pcap_file):
         self.pcap_file = pcap_file
         self.extracted_data = []
-        self.ip_roles = {}
 
-        # --- 1. Fast Role Identification (via TShark) ---
+        # --- 1. Role Identification (evidence-based engine, via TShark) ---
+        # UE detection now happens inside the engine (GTP-U inner IPs, raw RRC).
         print(f"Loading roles for {pcap_file}...")
-        self.ip_roles = get_comprehensive_ip_roles(pcap_file)
-
-        # Ensure UEs are marked (if not identified by other means)
-        ue_ips = get_unique_rrc_ips(pcap_file)
-        for ip in ue_ips:
-            if self.ip_roles.get(ip) == "Unidentified" or ip not in self.ip_roles:
-                self.ip_roles[ip] = "UE"
-
-    def _process_packet(self, pkt_dict):
-        """
-        Extracts features from a single packet dictionary.
-        Optimized to be lightweight.
-        """
-        try:
-            layers = pkt_dict.get("_source", {}).get("layers", {})
-            frame_layer = layers.get("frame", {})
-            ip_layer = layers.get("ip")
-
-            if not ip_layer:
-                return
-
-            src_ip = ip_layer.get("ip.src")
-
-            # Fast Feature Extraction
-            features = {
-                "timestamp": float(frame_layer.get("frame.time_epoch", 0)),
-                "src_ip": src_ip,
-                "packet_len": int(frame_layer.get("frame.len", 0)),
-            }
-
-            # Protocol Extraction
-            protocols = frame_layer.get("frame.protocols", "").split(":")
-            features["protocol"] = protocols[-1] if protocols else "Unknown"
-
-            self.extracted_data.append(features)
-
-        except Exception:
-            pass
+        self.assessments = get_or_compute_roles(pcap_file)
+        self.ip_roles = roles_as_strings(self.assessments)
 
     def parse_pcap(self, packets=None):
+        # get_cached_packets already yields per-packet feature records
+        # (timestamp, src_ip, packet_len, protocol) via a tshark field pass.
         if packets is None:
             packets = get_cached_packets(self.pcap_file)
             if packets is None:
                 return self.extracted_data, self.ip_roles
 
-        # Processing loop
-        for pkt_dict in packets:
-            self._process_packet(pkt_dict)
-
+        self.extracted_data.extend(packets)
         return self.extracted_data, self.ip_roles
 
 
@@ -179,7 +139,7 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
         with app.app_context():
             start_time = time.time()
 
-            # 1. Load Packets (Optimized: reads from disk JSON if available)
+            # 1. Load packet features (tshark field pass, cached next to the pcap)
             packets = get_cached_packets(pcap_file_path)
             if packets is None:
                 result_queue.put(
@@ -219,13 +179,29 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
             with open(f"{results_dir}/{base}.json", "w") as f:
                 json.dump(summary, f, indent=4)
 
+            most_frequent_class = (
+                max(summary, key=lambda x: x["count"])["class_name"]
+                if summary
+                else None
+            )
+
             result_queue.put(
                 {
                     "status": "success",
                     "total_classified": len(ip_roles),
+                    "most_frequent_class": most_frequent_class,
                     "processing_time": round(time.time() - start_time, 2),
                     "rule_based_classification_summary": summary,
                     "ip_roles": ip_roles,
+                    "ip_role_details": {
+                        ip: {
+                            "role": a.role,
+                            "confidence": a.confidence,
+                            "reasoning": a.reasoning,
+                        }
+                        for ip, a in processor.assessments.items()
+                        if ip in ip_roles
+                    },
                 }
             )
     except Exception as e:
@@ -235,18 +211,33 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
         result_queue.put({"status": "failed", "message": str(e)})
 
 
-def run_ip_role_pipeline(pcap_file_path, model_name, selected_ips=None):
-    """
-    Entry point called by app.py
-    """
+def _run_pipeline_blocking(pcap_file_path, model_name, selected_ips=None):
+    """Blocking subprocess wrapper — must be called from a real OS thread."""
     queue = mp.Queue()
     process = mp.Process(
         target=_pipeline_worker, args=(pcap_file_path, model_name, queue, selected_ips)
     )
     process.start()
     try:
-        # Increased timeout to 600s, though optimization should make it much faster
-        return queue.get(timeout=600)
+        result = queue.get(timeout=600)
+        process.join(timeout=5)
+        return result
     except mp.queues.Empty:
         process.terminate()
+        process.join(timeout=5)
         return {"status": "failed", "message": "Pipeline Timeout"}
+
+
+def run_ip_role_pipeline(pcap_file_path, model_name, selected_ips=None):
+    """
+    Entry point called by app.py.
+    Runs the blocking subprocess in a real OS thread via eventlet.tpool so
+    the Eventlet event loop is not blocked while the pipeline executes.
+    """
+    try:
+        import eventlet.tpool
+        return eventlet.tpool.execute(
+            _run_pipeline_blocking, pcap_file_path, model_name, selected_ips
+        )
+    except ImportError:
+        return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)

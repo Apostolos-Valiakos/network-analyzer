@@ -5,6 +5,7 @@ import io
 import re
 import subprocess
 import threading
+import xml.etree.ElementTree as ET
 from flask import Flask, request, send_file, jsonify
 
 logging.basicConfig(
@@ -22,7 +23,7 @@ app = Flask(__name__)
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
 # ──────────────────────────────────────────────────────────────────────────────
 
-PCAP_DIR = "generated_pcaps"
+PCAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_pcaps")
 os.makedirs(PCAP_DIR, exist_ok=True)
 
 @app.before_request
@@ -84,46 +85,129 @@ def get_pcap():
         if os.path.exists(out_filename):
             os.remove(out_filename)
 
-_SAFE_NMAP_ARGS = re.compile(r'^[a-zA-Z0-9 ./\-]+$')
+# ── Active probing (Nmap) — matches docs/Deliverable/api_profiling_probing.html ──
+
+_SAFE_TARGET = re.compile(r'^[a-zA-Z0-9.\-/]+$')
+_CVE_PATTERN = re.compile(r"CVE-\d{4}-\d+")
+
+# "fast": Fast Scan (-F)
+# "deep": version detection across all open ports (default)
+# "vuln": version detection + Vulners NSE script across 10,000 ports
+_SCAN_PROFILES = {
+    "fast": ["-F"],
+    "deep": ["-sV"],
+    "vuln": ["-sV", "--script", "vulners", "-p", "1-10000"],
+}
+
+_SCAN_TIMEOUT = 1200  # 20 min — vuln scans can take up to ~15 min per the docs
 
 _scan_lock = threading.Lock()
-_scan_result = {"status": "idle", "output": "", "error": ""}
+_scan_result = {"status": "idle", "message": "No scan has been dispatched yet.", "results": []}
 
 
-def _run_nmap(target, args):
+def _parse_nmap_xml(xml_text):
+    results = []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return results
+
+    for host_el in root.findall("host"):
+        status_el = host_el.find("status")
+        state = status_el.get("state") if status_el is not None else "unknown"
+
+        addr_el = host_el.find("address")
+        host_ip = addr_el.get("addr") if addr_el is not None else None
+        if not host_ip:
+            continue
+
+        hostname = None
+        hostname_el = host_el.find("hostnames/hostname")
+        if hostname_el is not None:
+            hostname = hostname_el.get("name")
+
+        ports = []
+        ports_el = host_el.find("ports")
+        if ports_el is not None:
+            for port_el in ports_el.findall("port"):
+                port_state_el = port_el.find("state")
+                port_state = port_state_el.get("state") if port_state_el is not None else "unknown"
+                if port_state != "open":
+                    continue
+
+                service_el = port_el.find("service")
+                service_name = service_el.get("name", "") if service_el is not None else ""
+                product = service_el.get("product", "") if service_el is not None else ""
+                version_str = service_el.get("version", "") if service_el is not None else ""
+                version = " ".join(v for v in [product, version_str] if v).strip()
+
+                cves = set()
+                for script_el in port_el.findall("script"):
+                    cves.update(_CVE_PATTERN.findall(script_el.get("output", "")))
+
+                ports.append({
+                    "port": int(port_el.get("portid")),
+                    "protocol": port_el.get("protocol"),
+                    "state": port_state,
+                    "service": service_name,
+                    "version": version,
+                    "cves": sorted(cves),
+                })
+
+        results.append({
+            "host": host_ip,
+            "hostname": hostname,
+            "state": state,
+            "ports": ports,
+        })
+
+    return results
+
+
+def _run_nmap(target_list, profile):
     global _scan_result
     try:
-        cmd = ["nmap"] + args.split() + [target]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        cmd = ["nmap", "-oX", "-"] + _SCAN_PROFILES[profile] + target_list
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_SCAN_TIMEOUT)
+        results = _parse_nmap_xml(proc.stdout)
         with _scan_lock:
-            _scan_result = {"status": "done", "output": proc.stdout, "error": proc.stderr}
+            _scan_result = {"status": "completed", "message": "Scan completed successfully.", "results": results}
     except subprocess.TimeoutExpired:
         with _scan_lock:
-            _scan_result = {"status": "error", "output": "", "error": "Scan timed out"}
+            _scan_result = {"status": "error", "message": "Scan timed out.", "results": []}
     except Exception as e:
         with _scan_lock:
-            _scan_result = {"status": "error", "output": "", "error": str(e)}
+            _scan_result = {"status": "error", "message": str(e), "results": []}
 
 
 @app.route("/run-nmap-async", methods=["POST"])
 def run_nmap_async():
     data = request.get_json(silent=True) or {}
-    target = data.get("target", "")
-    args = data.get("args", "-sV")
+    target = data.get("target")
+    targets = data.get("targets")
+    profile = data.get("profile", "deep")
 
-    if not target or not _SAFE_NMAP_ARGS.match(target):
-        return jsonify({"error": "Invalid target"}), 400
-    if not _SAFE_NMAP_ARGS.match(args):
-        return jsonify({"error": "Invalid args"}), 400
+    if bool(target) == bool(targets):  # exactly one of target/targets must be present
+        return jsonify({"status": "error", "message": "Exactly one of 'target' or 'targets' must be present."}), 400
+
+    target_list = [target] if target else targets
+    if not isinstance(target_list, list) or not target_list:
+        return jsonify({"status": "error", "message": "'targets' must be a non-empty array."}), 400
+    for t in target_list:
+        if not isinstance(t, str) or not _SAFE_TARGET.match(t):
+            return jsonify({"status": "error", "message": f"Invalid target: {t!r}"}), 400
+
+    if profile not in _SCAN_PROFILES:
+        return jsonify({"status": "error", "message": f"Invalid profile: {profile!r}"}), 400
 
     with _scan_lock:
         _scan_result["status"] = "running"
-        _scan_result["output"] = ""
-        _scan_result["error"] = ""
+        _scan_result["message"] = "Scan in progress."
+        _scan_result["results"] = []
 
-    thread = threading.Thread(target=_run_nmap, args=(target, args), daemon=True)
+    thread = threading.Thread(target=_run_nmap, args=(target_list, profile), daemon=True)
     thread.start()
-    return jsonify({"status": "running"}), 202
+    return jsonify({"status": "accepted", "message": "Nmap scan started."}), 202
 
 
 @app.route("/get-nmap-results", methods=["GET"])
@@ -134,4 +218,4 @@ def get_nmap_results():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5005)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5005")))

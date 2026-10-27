@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env before any os.getenv() calls
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import csv
 import io
 import subprocess
@@ -44,8 +44,9 @@ from models import db, PcapFile, FlowStatistic, RoleSnapshot, IpRole, UeSession,
 from pcap_analysis import initialize_analysis
 from ueAnalysis import initialize_analysis_for_ue
 from graph_builder import build_graph_json
-from role_assessment import analyze_packets_and_assign_roles_optimized
 from pcap_generator_service import handle_pcap_chunk
+from pcap_repair import trim_incomplete_tail
+from rrc_utils import FEATURE_CACHE_SUFFIX
 from agglomerative_clustering import (
     analyze_pcap_for_clustering,
     save_results as save_clustering_results,
@@ -110,7 +111,7 @@ swagger_template = {
 swagger = Swagger(app, template=swagger_template)
 
 jwt = JWTManager(app)
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, async_mode="threading")
 CORS(
     app,
     resources={r"/*": {"origins": ALLOWED_ORIGINS}},
@@ -160,6 +161,7 @@ def _init_db():
         db.session.rollback()
 
     try:
+        db.session.execute(db.text("SET LOCAL lock_timeout = '500ms'"))
         db.session.execute(db.text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"
         ))
@@ -183,20 +185,40 @@ def _init_db():
         ))
         db.session.commit()
     except Exception as e:
-        logger.warning("Schema migration warning: %s", e)
+        logger.warning("Schema migration skipped (lock timeout or already applied): %s", e)
+        db.session.rollback()
+
+    # ip_roles.engine_version — additive column, dialect-agnostic guard so it
+    # also applies to the sqlite test database.
+    try:
+        _insp = db.inspect(db.engine)
+        _ip_role_cols = {c["name"] for c in _insp.get_columns("ip_roles")}
+        if "engine_version" not in _ip_role_cols:
+            db.session.execute(db.text(
+                "ALTER TABLE ip_roles ADD COLUMN engine_version VARCHAR(20) NOT NULL DEFAULT ''"
+            ))
+            db.session.commit()
+            logger.info("Added ip_roles.engine_version column")
+    except Exception as e:
+        logger.warning("ip_roles.engine_version migration skipped: %s", e)
         db.session.rollback()
 
     _admin_username = os.getenv("ADMIN_USERNAME")
     _admin_password = os.getenv("ADMIN_PASSWORD")
     if _admin_username and _admin_password:
-        if not User.query.filter_by(is_admin=True).first():
-            db.session.add(User(
-                username=_admin_username,
-                password_hash=generate_password_hash(_admin_password),
-                is_admin=True,
-            ))
-            db.session.commit()
-            logger.info("Seeded admin user: %s", _admin_username)
+        try:
+            db.session.execute(db.text("SET LOCAL lock_timeout = '500ms'"))
+            if not User.query.filter_by(is_admin=True).first():
+                db.session.add(User(
+                    username=_admin_username,
+                    password_hash=generate_password_hash(_admin_password),
+                    is_admin=True,
+                ))
+                db.session.commit()
+                logger.info("Seeded admin user: %s", _admin_username)
+        except Exception:
+            logger.warning("Admin seeding skipped (lock timeout — will retry on next boot)")
+            db.session.rollback()
 
 _MAX_DB_RETRIES = 12
 _DB_RETRY_DELAY = 5  # seconds between attempts
@@ -250,10 +272,13 @@ def _is_safe_scan_param(value: str) -> bool:
 
 
 def _cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
-    """Deletes stale tshark .packets.json cache files older than max_age_seconds."""
+    """Deletes stale tshark cache files (.features.tsv, legacy .packets.json)
+    older than max_age_seconds."""
     now = datetime.now().timestamp()
     for directory in [PCAP_GEN_OUTPUT_DIR, UPLOAD_FOLDER]:
-        for path in Path(directory).glob("*.packets.json"):
+        caches = list(Path(directory).glob("*" + FEATURE_CACHE_SUFFIX))
+        caches += Path(directory).glob("*.packets.json")
+        for path in caches:
             try:
                 if now - path.stat().st_mtime > max_age_seconds:
                     path.unlink()
@@ -279,6 +304,24 @@ def _check_pcap_ownership(filename: str, user_id: int):
     if pcap.user_id != user_id:
         return None, (jsonify({"error": "Access denied"}), 403)
     return pcap, None
+
+
+class AnalysisFailed(Exception):
+    """Analysis step failed; the message is safe to show to the user."""
+
+
+def _mark_pcap_error(pcap_id) -> None:
+    """Flags a pcap as ERROR after a failed analysis, keeping any earlier result."""
+    if not pcap_id:
+        return
+    try:
+        record = db.session.get(PcapFile, pcap_id)
+        if record:
+            record.status = "ERROR"
+            db.session.commit()
+    except Exception:
+        logger.exception("Could not mark pcap %s as ERROR", pcap_id)
+        db.session.rollback()
 
 
 # ==========================
@@ -402,6 +445,7 @@ def save_pcap_stream():
         if is_final:
             pcap_record.status = "COMPLETED"
             if os.path.exists(pcap_record.file_path):
+                trim_incomplete_tail(pcap_record.file_path)
                 pcap_record.file_size = os.path.getsize(pcap_record.file_path)
 
         db.session.commit()
@@ -494,7 +538,9 @@ def automated_analysis():
     unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
     pcap_path = Path(PCAP_GEN_OUTPUT_DIR) / unique_name
     file.save(str(pcap_path))
+    trim_incomplete_tail(str(pcap_path))
 
+    pcap_id = None
     try:
         pcap_record = PcapFile(
             filename=unique_name,
@@ -507,16 +553,17 @@ def automated_analysis():
         )
         db.session.add(pcap_record)
         db.session.commit()
+        pcap_id = pcap_record.id
 
         analysis_result, err = initialize_analysis(str(pcap_path))
         if err:
-            raise RuntimeError(f"Analysis failed: {err}")
+            raise AnalysisFailed(f"Analysis failed: {err}")
 
         model_name = request.form.get("model_name", "rule_based")
         report = run_ip_role_pipeline(str(pcap_path), model_name)
 
         if report.get("status") != "success":
-            raise RuntimeError(f"ML Pipeline failed: {report.get('message')}")
+            raise AnalysisFailed(f"ML Pipeline failed: {report.get('message')}")
 
         ue_data = initialize_analysis_for_ue(str(pcap_path))
         if ue_data:
@@ -554,9 +601,15 @@ def automated_analysis():
         }
         return jsonify(response), 200
 
+    except AnalysisFailed as e:
+        logger.error("automated_analysis failed: %s", e)
+        db.session.rollback()
+        _mark_pcap_error(pcap_id)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         logger.exception("automated_analysis failed")
         db.session.rollback()
+        _mark_pcap_error(pcap_id)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -602,7 +655,7 @@ def clustering_analysis():
         existing = ClusterResult.query.filter_by(pcap_id=pcap.id).first()
         if existing:
             existing.result_json = result
-            existing.created_at = datetime.utcnow()
+            existing.created_at = datetime.now(timezone.utc)
         else:
             db.session.add(ClusterResult(
                 user_id=uid,
@@ -728,8 +781,13 @@ def run_pipeline_endpoint():
     try:
         report = run_ip_role_pipeline(str(full_path), model, data.get("selected_ips"))
         if report.get("status") == "success" and "ip_roles" in report:
+            details = report.get("ip_role_details", {})
             report["ip_roles"] = {
-                ip: {"role": role, "confidence": 0.90}
+                ip: {
+                    "role": role,
+                    "confidence": details.get(ip, {}).get("confidence", 0.0),
+                    "reasoning": details.get(ip, {}).get("reasoning", ""),
+                }
                 for ip, role in report["ip_roles"].items()
             }
         status = 200 if report.get("status") == "success" else 500
@@ -795,6 +853,7 @@ SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 
 
 @app.route("/v1/ingest/zeek", methods=["POST"])
+@limiter.exempt
 @swag_from("docs/ingest_zeek.yml")
 def ingest_zeek():
     """Receives JSON flow batches from the VM Zeek Agent."""
@@ -1097,7 +1156,7 @@ def export_network_statistics():
         # 4. Return CSV Download (Dictionary keys automatically become dot-notation headers)
         return generate_csv_response(results, f"{filename}.csv")
 
-    except Exception as e:
+    except Exception:
         logger.exception("export_network_statistics failed")
         return jsonify({"error": "Internal server error"}), 400
 
@@ -1134,6 +1193,22 @@ def analyze_live():
         model_name = os.path.splitext(os.path.basename(latest_file))[0]
 
         results = run_ip_role_pipeline(latest_file, model_name, selected_ips=None)
+
+        # WP5: unidentified devices on the live network are worth an alert
+        try:
+            from wp5_notices import emit_notice
+
+            for ip, role in (results.get("ip_roles") or {}).items():
+                if role == "Unidentified":
+                    emit_notice(
+                        note="PENM::Unidentified_Device",
+                        msg=f"Device {ip} is active on the network but matches no known 5G/O-RAN role",
+                        sub=os.path.basename(latest_file),
+                        src=ip,
+                        identifier=f"unidentified-device:{ip}",
+                    )
+        except Exception:
+            logger.exception("WP5 notice emission failed in analyze_live")
 
         # Delete the file after the pipeline completes
         if os.path.exists(latest_file):
@@ -1183,10 +1258,50 @@ def get_scan_results():
 
     try:
         response = requests.get(vm_url, headers=headers, timeout=10)
+        _emit_scan_notice(response)
         return jsonify(response.json()), response.status_code
     except Exception:
         logger.exception("get_scan_results: failed to reach VM")
         return jsonify({"error": "Failed to reach VM"}), 500
+
+
+def _emit_scan_notice(response):
+    """WP5: emit one Notice::Info per completed nmap scan (dedup by results hash).
+
+    This endpoint is polled by the frontend, so the notice is keyed on a
+    hash of the scan results — the same finished scan only alerts once.
+    Matches the documented /v1/scan/results shape: {status, message, results:
+    [{host, hostname, state, ports: [{port, protocol, state, service,
+    version, cves}]}]}.
+    """
+    try:
+        result = response.json()
+        if result.get("status") != "completed":
+            return
+        from hashlib import sha256
+        from wp5_notices import emit_notice
+
+        hosts = result.get("results") or []
+        open_ports = [
+            f"{host.get('host')}:{port.get('port')}/{port.get('protocol')} {port.get('service', '')}".strip()
+            for host in hosts
+            for port in host.get("ports", [])
+        ]
+        if not open_ports:
+            return
+        summary = json.dumps(hosts, sort_keys=True)
+        emit_notice(
+            note="PENM::Service_Scan_Report",
+            msg=(
+                f"Nmap service inspection completed: {len(open_ports)} open "
+                f"port(s) across {len(hosts)} host(s)"
+            ),
+            sub="; ".join(open_ports[:10]) or None,
+            n=len(open_ports),
+            identifier=f"nmap-scan:{sha256(summary.encode()).hexdigest()[:16]}",
+        )
+    except Exception:
+        logger.exception("WP5 notice emission failed in get_scan_results")
 
 
 # ==========================================
@@ -1303,9 +1418,11 @@ def reanalyze_pcap(pcap_id):
     try:
         analysis_result, err = initialize_analysis(str(filepath))
         if err:
-            raise RuntimeError(err)
+            raise AnalysisFailed(f"Analysis failed: {err}")
 
         report = run_ip_role_pipeline(str(filepath), "rule_based")
+        if report.get("status") != "success":
+            raise AnalysisFailed(f"Role pipeline failed: {report.get('message')}")
 
         stored_result = {
             "total_packets": analysis_result["total_packets"],
@@ -1316,9 +1433,15 @@ def reanalyze_pcap(pcap_id):
         record.status = "COMPLETED"
         db.session.commit()
         return jsonify(stored_result), 200
+    except AnalysisFailed as e:
+        logger.error("reanalyze_pcap failed: %s", e)
+        db.session.rollback()
+        _mark_pcap_error(pcap_id)
+        return jsonify({"error": str(e)}), 500
     except Exception:
         logger.exception("reanalyze_pcap failed")
         db.session.rollback()
+        _mark_pcap_error(pcap_id)
         return jsonify({"error": "Analysis failed"}), 500
 
 
@@ -1369,4 +1492,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "5555"))
     start_scheduler(app)
     # app.run(host="0.0.0.0", debug=True, port=port, use_reloader=False)
-    socketio.run(app, host="0.0.0.0", debug=True, port=port, use_reloader=False)
+    socketio.run(
+        app, host="0.0.0.0", debug=True, port=port, use_reloader=False,
+        allow_unsafe_werkzeug=True,
+    )

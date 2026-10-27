@@ -30,20 +30,39 @@ fi
 
 INTERFACE=$1
 
+# Run from the script's folder so generated_pcaps/ and tuning.zeek resolve the
+# same way for dumpcap, Zeek and pcap_server.py.
+cd "$SCRIPT_DIR" || exit 1
+
+PCAP_DIR="$SCRIPT_DIR/generated_pcaps"
+
 echo -e "\n[*] Cleaning up old PCAP and log files..."
-mkdir -p generated_pcaps
-sudo rm -rf generated_pcaps/*
+mkdir -p "$PCAP_DIR"
+sudo rm -rf "$PCAP_DIR"/*
 rm -f conn.log
+
+if [ ! -d "$PCAP_DIR" ] || [ ! -w "$PCAP_DIR" ]; then
+    echo -e "\n[!] $PCAP_DIR is missing or not writable by $(whoami)."
+    echo -e "    Fix with: sudo chown -R $(whoami): \"$PCAP_DIR\"\n"
+    exit 1
+fi
 
 echo -e "\n Starting Sensor Node on interface: $INTERFACE"
 
 FILTER="not (host $HOST_IP and (port $SENSOR_PORTS))"
 
-echo -e "\n[*] Starting dumpcap (Ring Buffer)..."
+echo -e "\n[*] Capture filter: $FILTER"
+echo -e "\n[*] Starting dumpcap (Ring Buffer)... (log: dumpcap.log)"
 /usr/bin/dumpcap -i $INTERFACE -b filesize:500000 -b files:3 \
-  -w generated_pcaps/continuous_capture.pcap \
-  -f "$FILTER" > /dev/null 2>&1 &
+  -w "$PCAP_DIR/continuous_capture.pcap" \
+  -f "$FILTER" > dumpcap.log 2>&1 &
 DUMPCAP_PID=$!
+
+sleep 1
+if ! kill -0 $DUMPCAP_PID 2>/dev/null; then
+    echo -e "\n[!] dumpcap exited immediately. Output:"
+    cat dumpcap.log
+fi
 
 echo -e "\n[*] Starting Zeek..."
 sudo /opt/zeek/bin/zeek -C -i $INTERFACE LogAscii::use_json=T tuning.zeek -f "$FILTER" > /dev/null 2>&1 &
@@ -52,7 +71,7 @@ ZEEK_PID=$!
 sleep 2 
 
 echo -e "\n[*] Starting PCAP Server (Port 5005)..."
-python3 pcap_server.py > /dev/null 2>&1 &
+python3 pcap_server.py > pcap_server.log 2>&1 &
 PCAP_PID=$!
 
 echo -e "\n[*] Starting Zeek Agent..."

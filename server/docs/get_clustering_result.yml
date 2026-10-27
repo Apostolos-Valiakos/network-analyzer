@@ -1,15 +1,38 @@
 tags:
   - Clustering
 summary: Download clustering result
-description: Retrieves a saved clustering output file (CSV or JSON) by its filename.
+description: >
+  Downloads a clustering output file (CSV or JSON, as saved by
+  POST /save-results) by its exact stored filename. Ownership is checked
+  against the caller's JWT identity via the ClusterResult row.
+produces:
+  - application/json
+  - text/csv
+security:
+  - Bearer: []
 parameters:
   - name: filename
     in: path
     type: string
     required: true
-    description: The name of the file to retrieve.
+    description: The name of the file to retrieve, exactly as returned in "download_url" by POST /save-results.
+    example: "cluster_42.json"
 responses:
   200:
-    description: The requested file.
+    description: The requested file's raw content (JSON or CSV, per its extension).
+  403:
+    description: The file exists but was saved by a different user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access denied"
   404:
-    description: File not found.
+    description: No ClusterResult row matches this filename.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "File not found"

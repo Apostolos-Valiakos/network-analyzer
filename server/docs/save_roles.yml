@@ -1,21 +1,58 @@
 tags:
   - Core Analysis
 summary: Download assigned IP roles
-description: Downloads the assigned roles for a specific analysis run in either JSON or CSV format.
+description: >
+  Downloads the role-classification file for a specific analysis run
+  (written to server/results/<base>.json by the role pipeline), in either
+  JSON or CSV form. This is what the "json"/"csv" links returned by
+  POST /automated-analysis point to. Ownership is checked against the
+  corresponding "<base>.pcap" PcapFile row.
+produces:
+  - application/json
+  - text/csv
+security:
+  - Bearer: []
 parameters:
   - name: file
     in: query
     type: string
     required: true
-    description: The base filename of the analysis run.
+    description: The base filename of the analysis run (with or without extension — only the stem is used).
+    example: "20260101120000_capture"
   - name: type
     in: query
     type: string
     required: false
     default: json
-    description: The format to download the roles in (json or csv).
+    enum: [json, csv]
+    description: The format to download the roles in.
 responses:
   200:
-    description: The requested roles file.
+    description: >
+      The requested roles file. Content shape is the
+      rule_based_classification_summary array documented under
+      POST /run_pipeline (class_name, count, ips per role).
+  400:
+    description: The "type" parameter is neither "json" nor "csv".
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "type must be json or csv"
+  403:
+    description: The underlying PCAP exists but belongs to a different user.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access denied"
   404:
-    description: File not found.
+    description: No matching PcapFile row, or the roles file doesn't exist on disk for this base name/format.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "File not found"

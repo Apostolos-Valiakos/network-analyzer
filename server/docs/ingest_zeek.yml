@@ -1,13 +1,29 @@
 tags:
   - Continuous Monitoring
 summary: Ingest Zeek Flow Logs
-description: Receives JSON flow batches from the VM Zeek Agent and stores them in TimescaleDB.
+description: >
+  Receives batched conn.log-derived flow records from the Sensor's
+  zeek_agent.py (not a browser client — internal-token auth, not JWT) and
+  bulk-inserts them into the flow_statistics table
+  (ON CONFLICT DO NOTHING, so re-sent/duplicate rows are silently
+  ignored). Also emits real-time Socket.IO events: "new_network_data"
+  with the raw flow batch on every call, and a "network_alert" event per
+  flow that trips one of three built-in heuristics — a single flow over
+  5MB ("Massive Data Transfer", level error), a single flow over 5000
+  packets ("Packet Flood Detected", level warning), or conn_state "REJ"
+  ("Connection Rejected", level warning).
+
+  Exempt from the global rate limiter (continuous ingest traffic).
+consumes:
+  - application/json
+produces:
+  - application/json
 parameters:
   - name: X-Internal-Token
     in: header
     type: string
     required: true
-    description: Authentication token for the internal sensor.
+    description: Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.
   - in: body
     name: body
     required: true
@@ -16,12 +32,75 @@ parameters:
       properties:
         flows:
           type: array
+          description: Batch of Zeek conn.log-shaped flow records.
           items:
             type: object
+            properties:
+              ts:
+                type: number
+                description: Flow timestamp (Unix epoch). Defaults to current UTC time if omitted.
+              uid:
+                type: string
+                description: Zeek connection UID.
+              id.orig_h:
+                type: string
+              id.resp_h:
+                type: string
+              proto:
+                type: string
+                example: "tcp"
+              conn_state:
+                type: string
+                example: "SF"
+              orig_bytes:
+                type: integer
+              resp_bytes:
+                type: integer
+              orig_pkts:
+                type: integer
+              resp_pkts:
+                type: integer
+      example:
+        flows:
+          - ts: 1789111234.5
+            uid: "Cabc123"
+            id.orig_h: "10.0.0.1"
+            id.resp_h: "10.0.0.5"
+            proto: "tcp"
+            conn_state: "SF"
+            orig_bytes: 4096
+            resp_bytes: 8192
+            orig_pkts: 12
+            resp_pkts: 14
 responses:
   200:
-    description: Batch inserted successfully or empty batch processed.
+    description: >
+      Batch inserted successfully, or an empty "flows" array was received
+      (no-op, still 200).
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Only present for an empty batch.
+          example: "empty"
+        inserted:
+          type: integer
+          description: Only present for a non-empty batch — number of rows inserted (duplicates counted, even though ON CONFLICT skips writing them).
+          example: 50
   401:
-    description: Unauthorized. Missing or invalid internal token.
+    description: Missing or incorrect X-Internal-Token header.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Unauthorized"
   500:
-    description: Database insertion error.
+    description: Database insertion error. The transaction is rolled back.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

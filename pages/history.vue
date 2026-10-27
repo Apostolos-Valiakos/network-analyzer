@@ -520,7 +520,9 @@ export default {
           { method: 'POST' }
         )
         if (!r.ok) {
-          const err = await r.json()
+          // 500 = analysis ran and failed; the backend marked the file ERROR
+          if (r.status === 500) item.status = 'ERROR'
+          const err = await r.json().catch(() => ({}))
           throw new Error(err.error || 'Analysis failed')
         }
         item.has_result = true

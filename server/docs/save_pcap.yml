@@ -1,29 +1,77 @@
 tags:
   - PCAP Management
 summary: Save PCAP Stream
-description: Receives chunks of packets over a stream and appends them to a PCAP file.
+description: >
+  Appends a chunk of base64-encoded raw packet bytes to a growing .pcap
+  file on disk, identified by session_id (used as the live-capture
+  streaming sink — e.g. from a browser-side capture session). The file is
+  created with a fresh PCAP global header on the first chunk for a given
+  session_id, and further chunks are appended. On the final chunk
+  (is_final_chunk=true), the corresponding PcapFile DB row is created (if
+  missing) or marked COMPLETED with its final file size.
+
+  Rate limit: 30 requests per minute per authenticated user.
+consumes:
+  - application/json
+produces:
+  - application/json
+security:
+  - Bearer: []
 parameters:
   - in: body
     name: body
     required: true
     schema:
       type: object
+      required:
+        - session_id
+        - packets
       properties:
         session_id:
           type: string
-          description: Unique identifier for the current capture session.
+          description: Unique identifier for the current capture session — also becomes the base of the saved filename ("<session_id>.pcap").
+          example: "live-capture-20260101"
         packets:
           type: array
           items:
-            type: object
-          description: List of packet data payloads.
+            type: string
+          description: List of base64-encoded raw packet payloads for this chunk.
         is_final_chunk:
           type: boolean
-          description: Flag indicating if this is the last chunk of the stream.
+          default: false
+          description: True on the last chunk — finalizes the PcapFile record.
 responses:
   200:
     description: Chunk processed successfully.
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Chunk processed"
+        filename:
+          type: string
+          description: The stored filename ("<session_id>.pcap") — only present when is_final_chunk is true, otherwise null.
+          example: "live-capture-20260101.pcap"
   400:
-    description: Invalid JSON or missing required fields.
+    description: Not JSON, or missing "session_id" / "packets" (packets must be an array, even if empty).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing session_id or packets"
   500:
-    description: Internal server error during processing.
+    description: Failed to write the chunk to disk, or a database error while updating the PcapFile record.
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Internal server error"

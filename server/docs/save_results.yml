@@ -1,30 +1,72 @@
 tags:
   - Clustering
 summary: Save Clustering Results
-description: Saves the raw JSON results of a clustering operation to disk as either CSV or JSON.
+description: >
+  Saves an arbitrary tabular result set (typically the "clusters" array
+  from POST /clustering, re-submitted by the frontend) to disk as both
+  CSV and JSON under the clustering output directory, and registers both
+  filenames as ClusterResult rows owned by the caller so they're
+  downloadable via GET /clustering-output/{filename}.
+consumes:
+  - application/json
+produces:
+  - application/json
+security:
+  - Bearer: []
 parameters:
   - in: body
     name: body
     required: true
     schema:
       type: object
+      required:
+        - filename
+        - results
       properties:
         filename:
           type: string
-          description: Base filename to save the results under.
+          description: Base filename to save the results under (extension is added automatically).
+          example: "cluster_42"
         results:
           type: array
           items:
             type: object
-          description: The tabular data/results to save.
+          description: The tabular data/results to save — converted to a pandas DataFrame, so all rows should share the same keys.
         type:
           type: string
           default: json
-          description: Format to save the results (csv or json).
+          enum: [json, csv]
+          description: Which of the two saved files the "download_url" in the response points to (both are always written).
 responses:
   200:
     description: File saved successfully, returning download URLs.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Saved"
+        saved_file:
+          type: string
+          description: The filename of the format selected by "type".
+          example: "cluster_42.json"
+        download_url:
+          type: string
+          description: Relative URL — GET this to retrieve the file via /clustering-output/{filename}.
+          example: "/clustering-output/cluster_42.json"
   400:
-    description: Missing filename parameter.
+    description: Missing "filename" in the request body.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing filename"
   500:
-    description: Server error while saving the file.
+    description: Server error while writing the files or updating the database.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"
