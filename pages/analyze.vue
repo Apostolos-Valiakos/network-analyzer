@@ -106,6 +106,37 @@ export default {
       response: null,
       apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       loadedFromCache: false,
+      privacyInfoDialog: false,
+      privacyPanels: [0, 1, 2],
+      privacyIdentifiers: [],
+      privacySensitiveAttribute: null,
+      privacyPseudonymize: [],
+      privacyPseudonymizationMode: "deterministic",
+      privacyGeneralize: [],
+      privacySuppress: [],
+      privacyGeneralizeProfiles: {},
+      privacySuppressThreshold: 2,
+      privacyLoading: false,
+      privacyError: "",
+      privacySuggestions: [],
+      privacyOriginalMetrics: null,
+      privacyTransformedMetrics: null,
+      privacyTransformedRecords: [],
+      generalizationProfileOptions: [
+        { text: "Auto", value: "auto" },
+        { text: "IP Mask /24", value: "ip_mask_24" },
+        { text: "IP Mask /16", value: "ip_mask_16" },
+        { text: "Numeric bins (size 5)", value: "numeric_bins_5" },
+        { text: "Numeric bins (size 10)", value: "numeric_bins_10" },
+        { text: "Text prefix (1 char)", value: "text_prefix_1" },
+        { text: "Text prefix (3 chars)", value: "text_prefix_3" },
+        { text: "Protocol family", value: "protocol_family" },
+      ],
+      pseudonymizationModeOptions: [
+        { text: "Deterministic", value: "deterministic" },
+        { text: "Per-run", value: "per_run" },
+        { text: "Per-pilot", value: "per_pilot" },
+      ],
 
       // Table
       ipProtocolHeaders: [
@@ -125,6 +156,61 @@ export default {
           protocols,
         })
       );
+    },
+    privacyRecords() {
+      const ipRoles = this.response?.ip_roles || {};
+      const ipProtocols = this.analysis?.ip_protocols || {};
+      const allIps = new Set([
+        ...Object.keys(ipRoles),
+        ...Object.keys(ipProtocols),
+      ]);
+
+      return Array.from(allIps).map((ip) => {
+        const protocols = ipProtocols[ip] || [];
+        return {
+          ip,
+          role: ipRoles[ip] || "Unknown",
+          protocol_count: protocols.length,
+          protocols: protocols.join("|"),
+          pilot: "PUC#1",
+        };
+      });
+    },
+    privacyColumns() {
+      if (!this.privacyRecords.length) return [];
+      return Object.keys(this.privacyRecords[0]);
+    },
+    canComputePrivacy() {
+      return (
+        this.privacyRecords.length > 0 &&
+        this.privacyIdentifiers.length > 0 &&
+        !!this.privacySensitiveAttribute
+      );
+    },
+    privacyTableHeaders() {
+      return this.privacyColumns.map((col) => ({
+        text: col.replace(/_/g, " "),
+        value: col,
+      }));
+    },
+    suppressThresholdMap() {
+      const threshold = Math.max(2, Number(this.privacySuppressThreshold) || 2);
+      return this.privacySuppress.reduce((acc, col) => {
+        acc[col] = threshold;
+        return acc;
+      }, {});
+    },
+  },
+  watch: {
+    privacyGeneralize: {
+      immediate: true,
+      handler(cols) {
+        const next = {};
+        cols.forEach((col) => {
+          next[col] = this.privacyGeneralizeProfiles[col] || "auto";
+        });
+        this.privacyGeneralizeProfiles = next;
+      },
     },
   },
 
@@ -156,7 +242,7 @@ export default {
         analysis: data.analysis,
         graphData: data.analysis?.graph || null,
         ueInfo: data.ue_sessions || null,
-        roles: data.roles || null,
+        roles: data.roles || data.ip_roles || null,
         clustering: data.clustering || null,
         suggested_clusters: data.suggested_clusters || null,
         response: data,
@@ -193,7 +279,7 @@ export default {
         this.analysis = data.analysis;
         this.graphData = data.analysis.graph;
         this.ueInfo = data.ue_sessions;
-        this.roles = data.roles;
+        this.roles = data.roles || data.ip_roles;
         this.clustering = data.clustering;
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
@@ -202,6 +288,56 @@ export default {
         alert(`Analysis failed: ${err.message}`);
       } finally {
         this.loading = false;
+      }
+    },
+    async callPrivacyMetrics(transformations) {
+      const resp = await fetch(`${this.apiBaseUrl}/privacy-metrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: this.privacyRecords,
+          identifiers: this.privacyIdentifiers,
+          sensitive_attribute: this.privacySensitiveAttribute,
+          transformations,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || "Privacy metrics failed");
+      }
+      return data;
+    },
+    async computePrivacyMetrics() {
+      if (!this.canComputePrivacy) return;
+      this.privacyLoading = true;
+      this.privacyError = "";
+      this.privacySuggestions = [];
+
+      try {
+        const baseline = await this.callPrivacyMetrics({
+          pseudonymize: [],
+          generalize: [],
+          suppress: [],
+          generalize_profiles: {},
+          suppress_thresholds: {},
+        });
+        const transformed = await this.callPrivacyMetrics({
+          pseudonymize: this.privacyPseudonymize,
+          pseudonymization_mode: this.privacyPseudonymizationMode,
+          generalize: this.privacyGeneralize,
+          suppress: this.privacySuppress,
+          generalize_profiles: this.privacyGeneralizeProfiles,
+          suppress_thresholds: this.suppressThresholdMap,
+        });
+
+        this.privacyOriginalMetrics = baseline.metrics;
+        this.privacyTransformedMetrics = transformed.metrics;
+        this.privacyTransformedRecords = transformed.records.slice(0, 12);
+        this.privacySuggestions = transformed.suggestions || [];
+      } catch (err) {
+        this.privacyError = err.message;
+      } finally {
+        this.privacyLoading = false;
       }
     },
 

@@ -956,6 +956,215 @@ def start_analysis_from_websocket():
     data = request.json or {}
     ws_url = data.get("ws_url")
     seconds = data.get("seconds")
+@app.route("/privacy-metrics", methods=["POST"])
+def privacy_metrics_endpoint():
+    """
+    Compute privacy metrics with optional anonymization transforms
+    ---
+    tags:
+      - Privacy
+    consumes:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required: [records, identifiers]
+          properties:
+            records:
+              type: array
+              items: {type: object}
+            identifiers:
+              type: array
+              items: {type: string}
+            sensitive_attribute:
+              type: string
+            transformations:
+              type: object
+              properties:
+                pseudonymize:
+                  type: array
+                  items: {type: string}
+                generalize:
+                  type: array
+                  items: {type: string}
+                suppress:
+                  type: array
+                  items: {type: string}
+    responses:
+      200:
+        description: Metrics computed
+      400:
+        description: Invalid input
+    """
+    if not request.is_json:
+        return jsonify({"error": "JSON required"}), 400
+
+    data = request.get_json()
+    records = data.get("records", [])
+    identifiers = data.get("identifiers", [])
+    sensitive_attribute = data.get("sensitive_attribute")
+    transforms = data.get("transformations", {})
+
+    if not isinstance(records, list) or not all(isinstance(r, dict) for r in records):
+        return jsonify({"error": "records must be a list of objects"}), 400
+    if not isinstance(identifiers, list):
+        return jsonify({"error": "identifiers must be a list"}), 400
+
+    pseudonymize = transforms.get("pseudonymize", []) or []
+    generalize = transforms.get("generalize", []) or []
+    suppress = transforms.get("suppress", []) or []
+    pseudonymization_mode = transforms.get("pseudonymization_mode", "deterministic")
+    generalize_profiles = transforms.get("generalize_profiles", {}) or {}
+    suppress_thresholds = transforms.get("suppress_thresholds", {}) or {}
+
+    if not isinstance(generalize_profiles, dict):
+        return jsonify({"error": "generalize_profiles must be an object"}), 400
+    if not isinstance(suppress_thresholds, dict):
+        return jsonify({"error": "suppress_thresholds must be an object"}), 400
+
+    normalized_thresholds = {}
+    for key, value in suppress_thresholds.items():
+        try:
+            normalized_thresholds[key] = int(value)
+        except (TypeError, ValueError):
+            return jsonify({"error": f"Invalid suppression threshold for '{key}'"}), 400
+
+    if pseudonymization_mode not in ["deterministic", "per_run", "per_pilot"]:
+        return jsonify({"error": "Invalid pseudonymization_mode"}), 400
+
+    transformed = apply_transformations(
+        records,
+        pseudonymize,
+        generalize,
+        suppress,
+        pseudonymization_mode=pseudonymization_mode,
+        generalize_profiles=generalize_profiles,
+        suppress_thresholds=normalized_thresholds,
+    )
+    metrics = compute_privacy_metrics(transformed, identifiers, sensitive_attribute)
+    suggestions = build_privacy_suggestions(metrics, identifiers, sensitive_attribute)
+
+    return (
+        jsonify(
+            {
+                "metrics": metrics,
+                "records": transformed,
+                "applied_transformations": {
+                    "pseudonymize": pseudonymize,
+                    "pseudonymization_mode": pseudonymization_mode,
+                    "generalize": generalize,
+                    "suppress": suppress,
+                    "generalize_profiles": generalize_profiles,
+                    "suppress_thresholds": normalized_thresholds,
+                },
+                "suggestions": suggestions,
+            }
+        ),
+        200,
+    )
+
+
+@app.route("/automated-analysis", methods=["POST"])
+def automated_analysis():
+    """
+    Fully Automated PCAP Analysis Pipeline
+    ---
+    tags:
+      - Automated Pipeline
+    summary: Upload a PCAP and get complete analysis in one call
+    description: |
+      Saves the PCAP in `generated_pcaps/`, runs:
+      - General packet stats & protocol breakdown
+      - UE session extraction
+      - Network conversation graph
+      - Graph Modularity method cluster suggestion
+      - Agglomerative clustering (4 clusters, anomaly_threshold=3)
+      - ML-based IP role classification (`run_ip_role_pipeline`)
+
+      **All steps are executed server-side. No additional frontend calls needed.**
+
+    consumes:
+      - multipart/form-data
+    produces:
+      - application/json
+
+    parameters:
+      - name: file
+        in: formData
+        type: file
+        required: true
+        description: PCAP file to analyze (.pcap only)
+        example: capture.pcap
+
+      - name: model_name
+        in: formData
+        type: string
+        required: false
+        default: rule_based
+        description: Role classification model
+        enum: [rule_based]
+        example: rule_based
+
+      - name: selected_ips
+        in: formData
+        type: string
+        required: false
+        description: Comma-separated list of IPs to classify (optional)
+        example: 192.168.1.10,10.0.0.5
+
+    responses:
+      200:
+        description: Full analysis results
+        content:
+          application/json:
+            example:
+              filename: "a1b2c3d4e5f6_capture.pcap"
+              analysis:
+                total_packets: 12453
+                ip_protocols:
+                  "192.168.1.10": ["TCP", "UDP"]
+                  "10.0.0.5": ["TCP"]
+                graph:
+                  nodes:
+                    - id: "192.168.1.10"
+                      label: "Server"
+                  links:
+                    - source: "10.0.0.5"
+                      target: "192.168.1.10"
+                      value: 890
+              ue_sessions:
+                - ue_ip_addr_ipv4: "10.0.0.5"
+                  imsi: "123456789012345"
+                  sessions: 12
+              roles:
+                "192.168.1.10": "Server"
+                "10.0.0.5": "Client"
+              clustering:
+                labels: [0, 0, 1, 2]
+                anomalies: [false, false, true]
+                centroids:
+                  - [0.1, 0.9]
+                  - [0.8, 0.2]
+              suggested_clusters:
+                elbow_point: 4
+                wcss_data: [1000, 600, 400, 300, 290]
+
+      400:
+        description: Invalid input (missing file, wrong format, etc.)
+        content:
+          application/json:
+            example:
+              error: "File must be .pcap"
+
+      500:
+        description: Server error during processing
+        content:
+          application/json:
+            example:
+              error: "ML pipeline failed: Model not found"
 
     if not ws_url or seconds is None:
         return jsonify({"status": "Error", "message": "Missing parameters"}), 400
@@ -1123,6 +1332,23 @@ def get_network_statistics():
                     "resp_pkts": row.resp_pkts,
                 }
             )
+        response = {
+            "filename": unique_name,
+            "json": "http://127.0.0.1:5000/save_roles?file=" + name_only + "&type=json",
+            "csv": "http://127.0.0.1:5000/save_roles?file=" + name_only + "&type=csv",
+            "analysis": {
+                "total_packets": analysis_result["total_packets"],
+                "ip_protocols": analysis_result["ip_protocols"],
+                # "graph": graph_json
+            },
+            "ip_roles": report.get("ip_roles", {}),
+            # "ue_sessions": ue_sessions,
+            # "clustering": clustering_result,
+            # "suggested_clusters": {
+            #     "elbow_point": elbow_result.get("elbow_point"),
+            #     "wcss_data": elbow_result.get("wcss_data")
+            # }
+        }
 
         if resp_format == "json":
             return jsonify(results), 200

@@ -57,6 +57,13 @@ interactive dashboards.
 └────────────────────────────────────────────────────────────┘
 ```
 
+### **4. Privacy Metrics**
+
+- **Privacy Metrics Dashboard:** New section in `analyze.vue` to compute and compare privacy metrics before/after anonymization.
+- **Supported Metrics:** Calculates **k-anonymity**, **l-diversity**, and **t-closeness** on selected identifier groups.
+- **Anonymization Controls:** Lets users apply **pseudonymization**, **generalization**, and **suppression** per selected columns.
+- **API Support:** Includes a dedicated `POST /privacy-metrics` endpoint for metric computation and transformed-record previews.
+
 ---
 
 ## Prerequisites
