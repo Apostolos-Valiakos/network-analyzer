@@ -1,0 +1,47 @@
+{
+  "data": {
+    "10.250.100.1": {
+      "confidence": 0.0,
+      "ip": "10.250.100.1",
+      "reasoning": "No matching evidence (dns, udp seen)",
+      "role": "Unidentified",
+      "runner_ups": []
+    },
+    "10.250.100.41": {
+      "confidence": 0.95,
+      "ip": "10.250.100.41",
+      "reasoning": "Terminates NGAP on SCTP 38412 (2 pkts)",
+      "role": "AMF",
+      "runner_ups": []
+    },
+    "10.250.100.42": {
+      "confidence": 0.95,
+      "ip": "10.250.100.42",
+      "reasoning": "Initiates NGAP toward AMF:38412 (2 pkts); also matched: E2_NODE (0.95)",
+      "role": "gNB",
+      "runner_ups": [
+        [
+          "E2_NODE",
+          0.95
+        ]
+      ]
+    },
+    "10.250.100.45": {
+      "confidence": 0.95,
+      "ip": "10.250.100.45",
+      "reasoning": "Terminates E2AP on SCTP 36421/36422 (2 pkts)",
+      "role": "NEAR_RT_RIC",
+      "runner_ups": []
+    },
+    "10.8.0.11": {
+      "confidence": 0.0,
+      "ip": "10.8.0.11",
+      "reasoning": "No matching evidence (http, json, sigcomp, ssh, tcp seen)",
+      "role": "Unidentified",
+      "runner_ups": []
+    }
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

@@ -6,12 +6,12 @@ import time
 from datetime import datetime, timedelta
 
 # from apscheduler.schedulers.background import BackgroundScheduler
+import settings
 from models import db, RoleSnapshot
 from Preprocess import run_ip_role_pipeline
 
 logger = logging.getLogger(__name__)
 
-SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 
 
 def run_role_snapshot(app):
@@ -23,18 +23,17 @@ def run_role_snapshot(app):
         start_time = end_time - 300
 
         # Ask VM for slice
-        sensor_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005")
-        vm_url = f"{sensor_url}/get-pcap?start_time={start_time}&end_time={end_time}"
-        headers = {"X-Internal-Token": SECRET_TOKEN}
+        vm_url = settings.sensor_url(f"/get-pcap?start_time={start_time}&end_time={end_time}")
+        headers = {"X-Internal-Token": settings.secret_token()}
 
         try:
             response = requests.get(vm_url, headers=headers, stream=True)
             response.raise_for_status()
 
             # Save the file persistently
-            os.makedirs("server/results", exist_ok=True)
+            os.makedirs(settings.RESULTS_OUTPUT_DIR, exist_ok=True)
             # Use a static name so it just overwrites itself every 60 mins
-            temp_pcap = "server/results/latest_snapshot.pcap"
+            temp_pcap = os.path.join(settings.RESULTS_OUTPUT_DIR, "latest_snapshot.pcap")
 
             with open(temp_pcap, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):

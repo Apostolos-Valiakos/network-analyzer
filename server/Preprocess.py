@@ -1,12 +1,17 @@
 # server/Preprocess.py
 import os
+import subprocess
 import sys
 import time
 import multiprocessing as mp
+import csv
 import json
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+import packet_table
+import settings
 from rrc_utils import get_cached_packets
 from role_engine import get_or_compute_roles, roles_as_strings
 
@@ -139,28 +144,28 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
         with app.app_context():
             start_time = time.time()
 
-            # 1. Load packet features (tshark field pass, cached next to the pcap)
-            packets = get_cached_packets(pcap_file_path)
-            if packets is None:
+            # 1. Make sure tshark can read the capture. The role engine treats
+            # an unreadable capture as "no evidence", which would look like a
+            # successful run with no roles.
+            try:
+                packet_table.ensure(pcap_file_path)
+            except (OSError, subprocess.SubprocessError, RuntimeError) as e:
                 result_queue.put(
-                    {"status": "failed", "message": "Failed to load packets."}
+                    {"status": "failed", "message": f"Failed to load packets: {e}"}
                 )
                 return
 
-            # 2. Parse & Extract Roles
+            # 2. Extract Roles. Roles come only from the rule engine, so the ML
+            # feature step (PacketProcessor.parse_pcap + FeatureEngineer), whose
+            # output nothing reads, is not run here.
             processor = PacketProcessor(pcap_file_path)
-            raw_data, ip_roles = processor.parse_pcap(packets=packets)
+            ip_roles = processor.ip_roles
 
             # Filter if user selected specific IPs
             if selected_ips:
-                raw_data = [d for d in raw_data if d["src_ip"] in selected_ips]
                 ip_roles = {k: v for k, v in ip_roles.items() if k in selected_ips}
 
-            # 3. Feature Engineering (Optimized)
-            engineer = FeatureEngineer(raw_data, ip_roles)
-            X, y, classes, enc = engineer.run_preprocessing()
-
-            # 4. Generate Summary Report
+            # 3. Generate Summary Report
             summary = []
             u_roles, counts = np.unique(list(ip_roles.values()), return_counts=True)
             for r, c in zip(u_roles, counts):
@@ -172,12 +177,18 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                     }
                 )
 
-            # Save result for frontend retrieval
-            results_dir = "./server/results"
+            # Save result for /save_roles (?type=json|csv), which reads
+            # settings.RESULTS_OUTPUT_DIR
+            results_dir = settings.RESULTS_OUTPUT_DIR
             os.makedirs(results_dir, exist_ok=True)
             base = os.path.splitext(os.path.basename(pcap_file_path))[0]
-            with open(f"{results_dir}/{base}.json", "w") as f:
+            with open(os.path.join(results_dir, f"{base}.json"), "w") as f:
                 json.dump(summary, f, indent=4)
+            with open(os.path.join(results_dir, f"{base}.csv"), "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["class_name", "count", "ips"])
+                for row in summary:
+                    writer.writerow([row["class_name"], row["count"], ";".join(row["ips"])])
 
             most_frequent_class = (
                 max(summary, key=lambda x: x["count"])["class_name"]

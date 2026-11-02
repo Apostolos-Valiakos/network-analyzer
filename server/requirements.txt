@@ -10,7 +10,6 @@ networkx
 python-louvain
 websocket-client
 requests
-pyshark
 flask-sqlalchemy
 psycopg2-binary
 flask_jwt_extended

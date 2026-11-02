@@ -1,0 +1,65 @@
+{
+  "data": {
+    "filename": "snapshot_sample.pcap",
+    "records": [
+      {
+        "bytes": 4840,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "192.168.100.21",
+        "mac": "08:00:27:53:0b:02",
+        "mac_vendor": "PCS Systemtechnik GmbH",
+        "packets": 38,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 3,
+        "protocols": "NGAP,NGAP/NAS-5GS,SCTP",
+        "role": "AMF (NGAP)",
+        "scope": "private",
+        "service_port": "38412",
+        "subnet": "192.168.100.0/24",
+        "tx_share": 0.5
+      },
+      {
+        "bytes": 9852,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "192.168.100.5",
+        "mac": "08:00:27:4b:88:bb",
+        "mac_vendor": "PCS Systemtechnik GmbH",
+        "packets": 56,
+        "peer_count": 2,
+        "pilot": "PUC#1",
+        "protocol_count": 4,
+        "protocols": "DNS,NGAP,NGAP/NAS-5GS,SCTP",
+        "role": "gNB (NGAP client)",
+        "scope": "private",
+        "service_port": "ephemeral",
+        "subnet": "192.168.100.0/24",
+        "tx_share": 0.33
+      },
+      {
+        "bytes": 5012,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "195.251.124.68",
+        "mac": "routed",
+        "mac_vendor": "routed",
+        "packets": 18,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 1,
+        "protocols": "DNS",
+        "role": "DNS server",
+        "scope": "public",
+        "service_port": "53",
+        "subnet": "195.251.124.0/24",
+        "tx_share": 0.83
+      }
+    ]
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

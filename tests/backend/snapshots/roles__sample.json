@@ -1,0 +1,28 @@
+{
+  "data": {
+    "192.168.100.21": {
+      "confidence": 0.95,
+      "ip": "192.168.100.21",
+      "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts)",
+      "role": "AMF",
+      "runner_ups": []
+    },
+    "192.168.100.5": {
+      "confidence": 0.95,
+      "ip": "192.168.100.5",
+      "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs)",
+      "role": "gNB",
+      "runner_ups": []
+    },
+    "195.251.124.68": {
+      "confidence": 0.0,
+      "ip": "195.251.124.68",
+      "reasoning": "No matching evidence (dns, udp seen)",
+      "role": "Unidentified",
+      "runner_ups": []
+    }
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

@@ -4,7 +4,7 @@ WORKDIR /app
 
 # System packages
 #   libpcap0.8  – runtime library required by scapy for reading/writing PCAPs
-#   tshark      – required by pyshark for deep packet dissection
+#   tshark      – extracts the packet fields every analysis module reads
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpcap0.8 \

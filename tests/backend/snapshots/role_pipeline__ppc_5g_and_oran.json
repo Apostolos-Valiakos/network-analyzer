@@ -1,0 +1,75 @@
+{
+  "data": {
+    "ip_role_details": {
+      "10.250.100.1": {
+        "confidence": 0.0,
+        "reasoning": "No matching evidence (dns, udp seen)",
+        "role": "Unidentified"
+      },
+      "10.250.100.41": {
+        "confidence": 0.95,
+        "reasoning": "Terminates NGAP on SCTP 38412 (2 pkts)",
+        "role": "AMF"
+      },
+      "10.250.100.42": {
+        "confidence": 0.95,
+        "reasoning": "Initiates NGAP toward AMF:38412 (2 pkts); also matched: E2_NODE (0.95)",
+        "role": "gNB"
+      },
+      "10.250.100.45": {
+        "confidence": 0.95,
+        "reasoning": "Terminates E2AP on SCTP 36421/36422 (2 pkts)",
+        "role": "NEAR_RT_RIC"
+      },
+      "10.8.0.11": {
+        "confidence": 0.0,
+        "reasoning": "No matching evidence (http, json, sigcomp, ssh, tcp seen)",
+        "role": "Unidentified"
+      }
+    },
+    "ip_roles": {
+      "10.250.100.1": "Unidentified",
+      "10.250.100.41": "AMF",
+      "10.250.100.42": "gNB",
+      "10.250.100.45": "NEAR_RT_RIC",
+      "10.8.0.11": "Unidentified"
+    },
+    "most_frequent_class": "Unidentified",
+    "rule_based_classification_summary": [
+      {
+        "class_name": "AMF",
+        "count": 1,
+        "ips": [
+          "10.250.100.41"
+        ]
+      },
+      {
+        "class_name": "NEAR_RT_RIC",
+        "count": 1,
+        "ips": [
+          "10.250.100.45"
+        ]
+      },
+      {
+        "class_name": "Unidentified",
+        "count": 2,
+        "ips": [
+          "10.8.0.11",
+          "10.250.100.1"
+        ]
+      },
+      {
+        "class_name": "gNB",
+        "count": 1,
+        "ips": [
+          "10.250.100.42"
+        ]
+      }
+    ],
+    "status": "success",
+    "total_classified": 5
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

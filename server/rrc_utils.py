@@ -3,6 +3,7 @@ import logging
 import os
 from typing import List, Tuple, Optional, Dict, Any
 
+import tshark
 from role_engine import get_or_compute_roles, roles_as_strings
 
 logger = logging.getLogger(__name__)
@@ -65,27 +66,20 @@ def _run_tshark_and_load_packets(pcap_file: str) -> Optional[List[Dict[str, Any]
         except OSError:
             pass
 
-    cmd = ["tshark", "-r", pcap_file, "-T", "fields"]
-    for field in _FEATURE_FIELDS:
-        cmd += ["-e", field]
-    # Every ip.src occurrence (outer, GTP-U inner, ICMP-quoted) comma-joined;
-    # _packet_src_ip picks the right one.
-    cmd += ["-E", "separator=/t", "-E", "occurrence=a", "-E", "aggregator=,"]
-
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=_TSHARK_TIMEOUT,
+        # Every ip.src occurrence (outer, GTP-U inner, ICMP-quoted) comma-joined;
+        # _packet_src_ip picks the right one.
+        cmd = tshark.fields_command(
+            pcap_file,
+            _FEATURE_FIELDS,
+            extra=["-E", "separator=/t", "-E", "occurrence=a", "-E", "aggregator=,"],
         )
+        result = tshark.run(cmd, timeout=_TSHARK_TIMEOUT)
     except subprocess.TimeoutExpired:
         logger.error("tshark timed out after %ds on %s", _TSHARK_TIMEOUT, pcap_file)
         return None
-    except FileNotFoundError:
-        logger.error("tshark not found on PATH — cannot load packets")
+    except FileNotFoundError as e:
+        logger.error("%s — cannot load packets", e)
         return None
 
     if result.returncode != 0:

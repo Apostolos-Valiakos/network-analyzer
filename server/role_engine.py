@@ -33,6 +33,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
+import packet_table
 from models import db, PcapFile, IpRole
 
 logger = logging.getLogger(__name__)
@@ -171,17 +172,6 @@ _TSHARK_FIELDS = [
 _N_FIELDS = len(_TSHARK_FIELDS)
 
 
-def _build_tshark_cmd(pcap_file: str) -> List[str]:
-    cmd = ["tshark", "-r", pcap_file, "-T", "fields"]
-    for f in _TSHARK_FIELDS:
-        cmd += ["-e", f]
-    # Tab separator: cannot appear inside header values. occurrence=a +
-    # aggregator=, exposes every occurrence (all HTTP/2 paths in a frame,
-    # inner+outer IPs of GTP-U tunnels) as comma-joined tokens.
-    cmd += ["-E", "separator=/t", "-E", "occurrence=a", "-E", "aggregator=,"]
-    return cmd
-
-
 def _tokens(col: str) -> List[str]:
     return [t for t in col.split(",") if t] if col else []
 
@@ -281,17 +271,13 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
             obs.e2t_clients.add(outer_src)
 
 
-def collect_evidence(pcap_file: str, timeout: int = 60) -> PcapObservations:
-    """Run the single tshark pass and build per-IP evidence."""
+def collect_evidence(pcap_file: str) -> PcapObservations:
+    """Build per-IP evidence from the shared packet table. Every occurrence of
+    a field (all HTTP/2 paths in a frame, inner+outer IPs of GTP-U tunnels)
+    arrives as comma-joined tokens."""
     obs = PcapObservations()
     try:
-        proc = subprocess.run(
-            _build_tshark_cmd(pcap_file),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        for line in proc.stdout.splitlines():
+        for line in packet_table.lines(pcap_file, _TSHARK_FIELDS).splitlines():
             if line.strip():
                 _parse_line(line, obs)
     except subprocess.TimeoutExpired:

@@ -107,25 +107,7 @@ export default {
       apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       loadedFromCache: false,
 
-      // Table
-      ipProtocolHeaders: [
-        { text: "IP Address", value: "ip" },
-        { text: "Protocols Sent", value: "protocols" },
-      ],
-      expanded: [],
     };
-  },
-
-  computed: {
-    ipProtocolItems() {
-      if (!this.analysis?.ip_protocols) return [];
-      return Object.entries(this.analysis.ip_protocols).map(
-        ([ip, protocols]) => ({
-          ip,
-          protocols,
-        })
-      );
-    },
   },
 
   methods: {

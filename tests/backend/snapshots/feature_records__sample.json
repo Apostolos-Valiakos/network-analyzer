@@ -1,0 +1,343 @@
+{
+  "data": [
+    {
+      "packet_len": 82,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693836
+    },
+    {
+      "packet_len": 306,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693856
+    },
+    {
+      "packet_len": 278,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693864
+    },
+    {
+      "packet_len": 50,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693867
+    },
+    {
+      "packet_len": 142,
+      "protocol": "ngap",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693873
+    },
+    {
+      "packet_len": 62,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693876
+    },
+    {
+      "packet_len": 126,
+      "protocol": "ngap",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693879
+    },
+    {
+      "packet_len": 62,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693881
+    },
+    {
+      "packet_len": 138,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693884
+    },
+    {
+      "packet_len": 146,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693887
+    },
+    {
+      "packet_len": 146,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.69389
+    },
+    {
+      "packet_len": 126,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693893
+    },
+    {
+      "packet_len": 190,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693896
+    },
+    {
+      "packet_len": 234,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.6939
+    },
+    {
+      "packet_len": 98,
+      "protocol": "ngap",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693903
+    },
+    {
+      "packet_len": 62,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693905
+    },
+    {
+      "packet_len": 242,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693909
+    },
+    {
+      "packet_len": 154,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693912
+    },
+    {
+      "packet_len": 250,
+      "protocol": "nas-5gs",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693916
+    },
+    {
+      "packet_len": 62,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693918
+    },
+    {
+      "packet_len": 126,
+      "protocol": "ngap",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693922
+    },
+    {
+      "packet_len": 100,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693926
+    },
+    {
+      "packet_len": 100,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693929
+    },
+    {
+      "packet_len": 668,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693938
+    },
+    {
+      "packet_len": 740,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693951
+    },
+    {
+      "packet_len": 62,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693956
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.69396
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693964
+    },
+    {
+      "packet_len": 100,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693966
+    },
+    {
+      "packet_len": 740,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.69397
+    },
+    {
+      "packet_len": 97,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693971
+    },
+    {
+      "packet_len": 156,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693973
+    },
+    {
+      "packet_len": 86,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693974
+    },
+    {
+      "packet_len": 145,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693975
+    },
+    {
+      "packet_len": 94,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693977
+    },
+    {
+      "packet_len": 153,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693978
+    },
+    {
+      "packet_len": 83,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693979
+    },
+    {
+      "packet_len": 142,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693981
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.693982
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693984
+    },
+    {
+      "packet_len": 100,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.693984
+    },
+    {
+      "packet_len": 740,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.693988
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694123
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.694127
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694128
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.694129
+    },
+    {
+      "packet_len": 100,
+      "protocol": "dns",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.69413
+    },
+    {
+      "packet_len": 668,
+      "protocol": "dns",
+      "src_ip": "195.251.124.68",
+      "timestamp": 1780060557.694136
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694137
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.694139
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.69414
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694141
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694144
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.694146
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.21",
+      "timestamp": 1780060557.694147
+    },
+    {
+      "packet_len": 106,
+      "protocol": "sctp",
+      "src_ip": "192.168.100.5",
+      "timestamp": 1780060557.694148
+    }
+  ],
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

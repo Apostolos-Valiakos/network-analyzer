@@ -154,6 +154,14 @@ SECRET_TOKEN=paste_your_generated_secret_token_here
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=choose_a_strong_admin_password
 
+# ── Sensor ────────────────────────────────────────────────────────────────
+# Where the backend fetches pcap slices and nmap results (pcap_server.py).
+# The default only works when the sensor runs on this Docker host.
+# SENSOR_URL=http://<sensor-ip>:5005
+
+# (TSHARK_PATH, listed in .env.example, is not needed here: the backend image
+#  installs tshark on PATH, and docker-compose.yml does not pass it through.)
+
 # ── CORS ──────────────────────────────────────────────────────────────────
 # Comma-separated list of origins allowed to call the backend.
 # If you are deploying on a remote server, add its IP/domain here.

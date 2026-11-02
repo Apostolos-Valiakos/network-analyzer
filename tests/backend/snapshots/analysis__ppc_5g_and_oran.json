@@ -1,0 +1,136 @@
+{
+  "data": {
+    "graph": {
+      "categories": [
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "IP"
+        }
+      ],
+      "links": [
+        {
+          "source": 2,
+          "target": 4,
+          "value": 184
+        },
+        {
+          "source": 0,
+          "target": 2,
+          "value": 2
+        },
+        {
+          "source": 2,
+          "target": 5,
+          "value": 22
+        },
+        {
+          "source": 1,
+          "target": 2,
+          "value": 8
+        },
+        {
+          "source": 2,
+          "target": 3,
+          "value": 12
+        }
+      ],
+      "nodes": [
+        {
+          "category": 0,
+          "name": "10.250.100.1",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "10.250.100.41",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "10.250.100.42",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "10.250.100.45",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "10.8.0.11",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "192.178.24.14",
+          "value": 1
+        }
+      ],
+      "type": "force"
+    },
+    "result": {
+      "conversations": {
+        "10.250.100.1|10.250.100.42": {
+          "10.250.100.1_to_10.250.100.42": 1,
+          "10.250.100.42_to_10.250.100.1": 1
+        },
+        "10.250.100.41|10.250.100.42": {
+          "10.250.100.41_to_10.250.100.42": 4,
+          "10.250.100.42_to_10.250.100.41": 4
+        },
+        "10.250.100.42|10.250.100.45": {
+          "10.250.100.42_to_10.250.100.45": 6,
+          "10.250.100.45_to_10.250.100.42": 6
+        },
+        "10.250.100.42|10.8.0.11": {
+          "10.250.100.42_to_10.8.0.11": 88,
+          "10.8.0.11_to_10.250.100.42": 96
+        },
+        "10.250.100.42|192.178.24.14": {
+          "10.250.100.42_to_192.178.24.14": 11,
+          "192.178.24.14_to_10.250.100.42": 11
+        }
+      },
+      "ip_protocols": {
+        "10.250.100.1": [
+          "UDP -> DNS"
+        ],
+        "10.250.100.41": [
+          "SCTP -> SCTPChunkCookieAck",
+          "SCTP -> SCTPChunkData",
+          "SCTP -> SCTPChunkInitAck",
+          "SCTP -> SCTPChunkSACK"
+        ],
+        "10.250.100.42": [
+          "ICMP -> Raw",
+          "SCTP -> SCTPChunkCookieEcho",
+          "SCTP -> SCTPChunkData",
+          "SCTP -> SCTPChunkInit",
+          "SCTP -> SCTPChunkSACK",
+          "TCP",
+          "TCP -> Raw",
+          "UDP -> DNS"
+        ],
+        "10.250.100.45": [
+          "SCTP -> SCTPChunkCookieAck",
+          "SCTP -> SCTPChunkInitAck",
+          "SCTP -> SCTPChunkSACK"
+        ],
+        "10.8.0.11": [
+          "TCP",
+          "TCP -> Padding",
+          "TCP -> Raw",
+          "TCP -> Raw -> Padding"
+        ],
+        "192.178.24.14": [
+          "ICMP -> Raw"
+        ]
+      },
+      "total_packets": 236
+    }
+  },
+  "recorded_with": {
+    "scapy": "2.7"
+  }
+}

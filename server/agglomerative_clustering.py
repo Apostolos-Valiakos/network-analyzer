@@ -2,14 +2,17 @@ import os
 import json
 from collections import defaultdict
 from datetime import datetime
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from scapy.all import PcapReader, IP, TCP, UDP
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
 import networkx as nx
 import community  # python-louvain
+
+import packet_table
+import settings
 
 
 # ----------------------------
@@ -34,28 +37,26 @@ def extract_features(pcap_file):
         }
     )
 
-    # --- MEMORY SAFE FIX ---
-    # Stream the file one packet at a time instead of loading it all into RAM
-    with PcapReader(pcap_file) as packets:
-        for pkt in packets:
-            if IP in pkt:
-                src = pkt[IP].src
-                dst = pkt[IP].dst
-                length = len(pkt)
+    # The shared packet table is cached next to the capture, so the back-to-back
+    # /suggested_clusters and /clustering calls parse the capture only once.
+    for packet in packet_table.outer_packets(pcap_file):
+        if packet is None:
+            continue
+        src, dst, length = packet.src, packet.dst, packet.length
 
-                stats[src]["bytes_sent"] += length
-                stats[src]["packets_sent"] += 1
-                stats[src]["partners"].add(dst)
-                stats[src]["timestamps"].append(float(pkt.time))
+        stats[src]["bytes_sent"] += length
+        stats[src]["packets_sent"] += 1
+        stats[src]["partners"].add(dst)
+        stats[src]["timestamps"].append(packet.time)
 
-                stats[dst]["bytes_received"] += length
-                stats[dst]["packets_received"] += 1
-                stats[dst]["partners"].add(src)
-                stats[dst]["timestamps"].append(float(pkt.time))
+        stats[dst]["bytes_received"] += length
+        stats[dst]["packets_received"] += 1
+        stats[dst]["partners"].add(src)
+        stats[dst]["timestamps"].append(packet.time)
 
-                if TCP in pkt or UDP in pkt:
-                    stats[src]["ports"].add(pkt.sport)
-                    stats[dst]["ports"].add(pkt.dport)
+        if packet.ports:
+            stats[src]["ports"].add(packet.ports[0])
+            stats[dst]["ports"].add(packet.ports[1])
 
     # Build feature DataFrame
     data = []
@@ -145,23 +146,19 @@ def build_graph_data(df):
         for c in df["cluster"].unique()
     ]
 
-    nodes = []
-    ip_to_index = {}
-    for idx, row in enumerate(df.itertuples(index=False)):
-        nodes.append({"name": row.ip, "value": 1, "category": int(row.cluster)})
-        ip_to_index[row.ip] = idx
+    ips = df["ip"].tolist()
+    clusters = df["cluster"].tolist()
+    nodes = [
+        {"name": ip, "value": 1, "category": int(cluster)}
+        for ip, cluster in zip(ips, clusters)
+    ]
 
-    links = []
-    for i, row1 in df.iterrows():
-        for j, row2 in df.iterrows():
-            if i < j and row1["cluster"] == row2["cluster"]:
-                links.append(
-                    {
-                        "source": ip_to_index[row1["ip"]],
-                        "target": ip_to_index[row2["ip"]],
-                        "value": 1,
-                    }
-                )
+    # combinations() yields (i, j) with i < j, one pair per same-cluster link.
+    links = [
+        {"source": i, "target": j, "value": 1}
+        for i, j in combinations(range(len(ips)), 2)
+        if clusters[i] == clusters[j]
+    ]
 
     graph_data = {
         "type": "force",
@@ -242,23 +239,24 @@ def compute_cluster_importance(df):
 #
 # @param [pandas.DataFrame] df The DataFrame containing IPs and their partners.
 # @param [list|np.array] labels Cluster labels assigned to each IP.
+# @param [nx.Graph|None] G The partner graph, when the caller already built it.
 # @return [float] The modularity score of the clustering.
-def compute_modularity(df, labels):
+def compute_modularity(df, labels, G=None):
+    if G is None:
+        G = _partner_graph(df)
+    partition = {ip: int(labels[i]) for i, ip in enumerate(df["ip"].tolist())}
+    return community.modularity(partition, G)
+
+
+def _partner_graph(df):
+    """Undirected graph of who talked to whom; it does not depend on the labels."""
     G = nx.Graph()
-    ip_list = df["ip"].tolist()
-
-    for ip in ip_list:
-        G.add_node(ip)
-
-    # Add edges based on communication partners
-    for idx, row in df.iterrows():
-        src = row["ip"]
-        for dst in row["unique_partners_list"]:
+    G.add_nodes_from(df["ip"].tolist())
+    for src, partners in zip(df["ip"], df["unique_partners_list"]):
+        for dst in partners:
             if src != dst:
                 G.add_edge(src, dst)
-
-    partition = {ip: int(labels[i]) for i, ip in enumerate(ip_list)}
-    return community.modularity(partition, G)
+    return G
 
 
 # ----------------------------
@@ -288,11 +286,12 @@ def suggest_clusters_modularity(df, max_clusters=10):
     max_clusters = min(max_clusters, len(df))
 
     modularity_scores = []  # <-- NEW (for chart)
+    G = _partner_graph(df)
 
     for k in range(2, max_clusters + 1):
         model = AgglomerativeClustering(n_clusters=k)
         labels = model.fit_predict(X_scaled)
-        mod_score = compute_modularity(df, labels)
+        mod_score = compute_modularity(df, labels, G)
 
         # collect all points for the chart
         modularity_scores.append({"k": k, "modularity": float(round(mod_score, 4))})
@@ -361,8 +360,7 @@ def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2)
     except Exception:
         pass  # alert emission must never break the analysis pipeline
 
-    _output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cluster_analysis")
-    save_results(df, os.path.basename(pcap_path), _output_dir)
+    save_results(df, os.path.basename(pcap_path), settings.CLUSTERING_OUTPUT_DIR)
 
     return {
         "clusters": anomalies,

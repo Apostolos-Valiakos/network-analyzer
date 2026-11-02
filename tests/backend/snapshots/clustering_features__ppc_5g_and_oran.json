@@ -1,0 +1,95 @@
+{
+  "data": [
+    {
+      "avg_interarrival": 0.223611,
+      "bytes_received": 25028,
+      "bytes_sent": 13398,
+      "duration": 40.920898,
+      "ip": "10.8.0.11",
+      "packets_received": 88,
+      "packets_sent": 96,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "10.250.100.42"
+      ],
+      "unique_ports": 6
+    },
+    {
+      "avg_interarrival": 0.180268,
+      "bytes_received": 15965,
+      "bytes_sent": 28579,
+      "duration": 40.920898,
+      "ip": "10.250.100.42",
+      "packets_received": 118,
+      "packets_sent": 110,
+      "unique_partners": 5,
+      "unique_partners_list": [
+        "10.250.100.1",
+        "10.250.100.41",
+        "10.250.100.45",
+        "10.8.0.11",
+        "192.178.24.14"
+      ],
+      "unique_ports": 3
+    },
+    {
+      "avg_interarrival": 0.049126,
+      "bytes_received": 81,
+      "bytes_sent": 109,
+      "duration": 0.049126,
+      "ip": "10.250.100.1",
+      "packets_received": 1,
+      "packets_sent": 1,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "10.250.100.42"
+      ],
+      "unique_ports": 1
+    },
+    {
+      "avg_interarrival": 0.480199,
+      "bytes_received": 1078,
+      "bytes_sent": 1078,
+      "duration": 10.084181,
+      "ip": "192.178.24.14",
+      "packets_received": 11,
+      "packets_sent": 11,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "10.250.100.42"
+      ],
+      "unique_ports": 0
+    },
+    {
+      "avg_interarrival": 0.001129,
+      "bytes_received": 548,
+      "bytes_sent": 544,
+      "duration": 0.007906,
+      "ip": "10.250.100.41",
+      "packets_received": 4,
+      "packets_sent": 4,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "10.250.100.42"
+      ],
+      "unique_ports": 0
+    },
+    {
+      "avg_interarrival": 0.001852,
+      "bytes_received": 1844,
+      "bytes_sent": 836,
+      "duration": 0.020376,
+      "ip": "10.250.100.45",
+      "packets_received": 6,
+      "packets_sent": 6,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "10.250.100.42"
+      ],
+      "unique_ports": 0
+    }
+  ],
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

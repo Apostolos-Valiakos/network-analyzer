@@ -1,0 +1,53 @@
+{
+  "data": {
+    "graph": {
+      "categories": [
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "IP"
+        }
+      ],
+      "links": [
+        {
+          "source": 0,
+          "target": 1,
+          "value": 38
+        },
+        {
+          "source": 1,
+          "target": 2,
+          "value": 18
+        }
+      ],
+      "nodes": [
+        {
+          "category": 0,
+          "name": "192.168.100.21",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "192.168.100.5",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "195.251.124.68",
+          "value": 1
+        }
+      ],
+      "type": "force"
+    },
+    "roles": {
+      "192.168.100.21": "AMF",
+      "192.168.100.5": "gNB",
+      "195.251.124.68": "Unidentified"
+    },
+    "total_packets": 58
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

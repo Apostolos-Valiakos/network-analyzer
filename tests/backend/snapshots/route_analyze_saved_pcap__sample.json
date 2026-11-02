@@ -1,0 +1,76 @@
+{
+  "data": {
+    "analysis": {
+      "graph": {
+        "categories": [
+          {
+            "base": "IP",
+            "keyword": {},
+            "name": "IP"
+          }
+        ],
+        "links": [
+          {
+            "source": 0,
+            "target": 1,
+            "value": 38
+          },
+          {
+            "source": 1,
+            "target": 2,
+            "value": 18
+          }
+        ],
+        "nodes": [
+          {
+            "category": 0,
+            "name": "192.168.100.21",
+            "value": 1
+          },
+          {
+            "category": 0,
+            "name": "192.168.100.5",
+            "value": 1
+          },
+          {
+            "category": 0,
+            "name": "195.251.124.68",
+            "value": 1
+          }
+        ],
+        "type": "force"
+      },
+      "ip_protocols": {
+        "192.168.100.21": [
+          "SCTP -> SCTPChunkCookieAck",
+          "SCTP -> SCTPChunkData",
+          "SCTP -> SCTPChunkHeartbeatAck",
+          "SCTP -> SCTPChunkHeartbeatReq",
+          "SCTP -> SCTPChunkInitAck",
+          "SCTP -> SCTPChunkSACK",
+          "SCTP -> SCTPChunkSACK -> SCTPChunkData"
+        ],
+        "192.168.100.5": [
+          "SCTP -> SCTPChunkCookieEcho",
+          "SCTP -> SCTPChunkData",
+          "SCTP -> SCTPChunkData -> SCTPChunkData",
+          "SCTP -> SCTPChunkHeartbeatAck",
+          "SCTP -> SCTPChunkHeartbeatReq",
+          "SCTP -> SCTPChunkInit",
+          "SCTP -> SCTPChunkSACK",
+          "SCTP -> SCTPChunkSACK -> SCTPChunkData",
+          "UDP -> DNS"
+        ],
+        "195.251.124.68": [
+          "UDP -> DNS"
+        ]
+      },
+      "total_packets": 58
+    },
+    "message": "Analysis successful"
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

@@ -7,8 +7,9 @@ interrupted copy) end in a partial record. Every complete packet is still
 readable, but tshark reports "cut short in the middle of a packet" and exits
 non-zero. Truncating after the last complete record makes the file clean.
 
-Only a *truncated* tail is removed. A structurally corrupt block in the middle
-of a pcapng file is left untouched so no readable data is ever discarded.
+Only a *truncated* tail is removed, including a zero-filled one. A structurally
+corrupt block in the middle of a pcapng file is left untouched so no readable
+data is ever discarded.
 """
 import logging
 import os
@@ -30,6 +31,16 @@ _PCAP_GLOBAL_HDR_LEN = 24
 _PCAP_RECORD_HDR_LEN = 16
 
 
+def _only_zeros_from(f, offset: int) -> bool:
+    f.seek(offset)
+    while True:
+        chunk = f.read(1 << 20)
+        if not chunk:
+            return True
+        if chunk.count(0) != len(chunk):
+            return False
+
+
 def _pcapng_valid_length(f, size: int):
     """Returns the offset after the last complete block, or None if the file
     is corrupt (rather than truncated) and must not be trimmed."""
@@ -45,7 +56,9 @@ def _pcapng_valid_length(f, size: int):
                 return None
         blen = struct.unpack(endian + "I", hdr[4:8])[0]
         if blen < 12 or blen % 4:
-            return None
+            # All zeros to EOF is unwritten space from copying a capture while
+            # dumpcap was still writing it, not a damaged block.
+            return off if _only_zeros_from(f, off) else None
         if off + blen > size:
             return off  # last block runs past EOF
         f.seek(off + blen - 4)

@@ -1,0 +1,184 @@
+{
+  "data": {
+    "clusterSummary": {
+      "best_k": 6,
+      "best_modularity": -0.3,
+      "cluster_hierarchy": [
+        {
+          "cluster": 3,
+          "edge_density": 5.0,
+          "score": 5.130117,
+          "size": 1,
+          "traffic_score": 5.433722,
+          "unique_partners_sum": 5
+        },
+        {
+          "cluster": 5,
+          "edge_density": 1.0,
+          "score": 2.266107,
+          "size": 1,
+          "traffic_score": 5.220356,
+          "unique_partners_sum": 1
+        },
+        {
+          "cluster": 1,
+          "edge_density": 1.0,
+          "score": 1.640648,
+          "size": 1,
+          "traffic_score": 3.135494,
+          "unique_partners_sum": 1
+        },
+        {
+          "cluster": 0,
+          "edge_density": 1.0,
+          "score": 1.469485,
+          "size": 1,
+          "traffic_score": 2.564949,
+          "unique_partners_sum": 1
+        },
+        {
+          "cluster": 2,
+          "edge_density": 1.0,
+          "score": 1.359167,
+          "size": 1,
+          "traffic_score": 2.197225,
+          "unique_partners_sum": 1
+        },
+        {
+          "cluster": 4,
+          "edge_density": 1.0,
+          "score": 1.029584,
+          "size": 1,
+          "traffic_score": 1.098612,
+          "unique_partners_sum": 1
+        }
+      ],
+      "modularity_scores": [
+        {
+          "k": 2,
+          "modularity": -0.32
+        },
+        {
+          "k": 3,
+          "modularity": -0.42
+        },
+        {
+          "k": 4,
+          "modularity": -0.36
+        },
+        {
+          "k": 5,
+          "modularity": -0.32
+        },
+        {
+          "k": 6,
+          "modularity": -0.3
+        }
+      ],
+      "mostImportantCluster": 3
+    },
+    "clusters": [
+      {
+        "anomaly": true,
+        "cluster": 0,
+        "ip": "10.250.100.45"
+      },
+      {
+        "anomaly": true,
+        "cluster": 1,
+        "ip": "192.178.24.14"
+      },
+      {
+        "anomaly": true,
+        "cluster": 2,
+        "ip": "10.250.100.41"
+      },
+      {
+        "anomaly": true,
+        "cluster": 3,
+        "ip": "10.250.100.42"
+      },
+      {
+        "anomaly": true,
+        "cluster": 4,
+        "ip": "10.250.100.1"
+      },
+      {
+        "anomaly": true,
+        "cluster": 5,
+        "ip": "10.8.0.11"
+      }
+    ],
+    "graphData": {
+      "categories": [
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 5"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 3"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 4"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 1"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 2"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 0"
+        }
+      ],
+      "links": [],
+      "nodes": [
+        {
+          "category": 5,
+          "name": "10.8.0.11",
+          "value": 1
+        },
+        {
+          "category": 3,
+          "name": "10.250.100.42",
+          "value": 1
+        },
+        {
+          "category": 4,
+          "name": "10.250.100.1",
+          "value": 1
+        },
+        {
+          "category": 1,
+          "name": "192.178.24.14",
+          "value": 1
+        },
+        {
+          "category": 2,
+          "name": "10.250.100.41",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "10.250.100.45",
+          "value": 1
+        }
+      ],
+      "type": "force"
+    }
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

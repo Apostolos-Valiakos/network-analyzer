@@ -1,0 +1,50 @@
+{
+  "data": [
+    {
+      "avg_interarrival": 6e-06,
+      "bytes_received": 6578,
+      "bytes_sent": 3274,
+      "duration": 0.000312,
+      "ip": "192.168.100.5",
+      "packets_received": 28,
+      "packets_sent": 28,
+      "unique_partners": 2,
+      "unique_partners_list": [
+        "192.168.100.21",
+        "195.251.124.68"
+      ],
+      "unique_ports": 7
+    },
+    {
+      "avg_interarrival": 8e-06,
+      "bytes_received": 2414,
+      "bytes_sent": 2426,
+      "duration": 0.000312,
+      "ip": "192.168.100.21",
+      "packets_received": 19,
+      "packets_sent": 19,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "192.168.100.5"
+      ],
+      "unique_ports": 0
+    },
+    {
+      "avg_interarrival": 1.2e-05,
+      "bytes_received": 860,
+      "bytes_sent": 4152,
+      "duration": 0.00021,
+      "ip": "195.251.124.68",
+      "packets_received": 9,
+      "packets_sent": 9,
+      "unique_partners": 1,
+      "unique_partners_list": [
+        "192.168.100.5"
+      ],
+      "unique_ports": 1
+    }
+  ],
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

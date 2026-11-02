@@ -1,0 +1,32 @@
+{
+  "data": {
+    "csv": "class_name,count,ips\nAMF,1,192.168.100.21\nUnidentified,1,195.251.124.68\ngNB,1,192.168.100.5\n",
+    "json": [
+      {
+        "class_name": "AMF",
+        "count": 1,
+        "ips": [
+          "192.168.100.21"
+        ]
+      },
+      {
+        "class_name": "Unidentified",
+        "count": 1,
+        "ips": [
+          "195.251.124.68"
+        ]
+      },
+      {
+        "class_name": "gNB",
+        "count": 1,
+        "ips": [
+          "192.168.100.5"
+        ]
+      }
+    ]
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

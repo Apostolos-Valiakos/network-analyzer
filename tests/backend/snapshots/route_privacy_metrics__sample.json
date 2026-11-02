@@ -1,0 +1,106 @@
+{
+  "data": {
+    "applied_transformations": {
+      "generalize": [
+        "subnet"
+      ],
+      "generalize_profiles": {},
+      "pseudonymization_mode": "deterministic",
+      "pseudonymization_technique": "hmac_sha256",
+      "pseudonymize": [
+        "ip",
+        "mac"
+      ],
+      "record_suppression_k": 0,
+      "suppress": [
+        "mac_vendor"
+      ],
+      "suppress_thresholds": {}
+    },
+    "metrics": {
+      "avg_reid_risk_pct": 100.0,
+      "discernibility": 3,
+      "entropy_l_diversity": 1.0,
+      "equivalence_classes": 3,
+      "k_anonymity": 1,
+      "k_record_weighted": 1.0,
+      "l_diversity": 1,
+      "max_reid_risk_pct": 100.0,
+      "ppi": 0.33,
+      "ppi_rw": 0.33,
+      "qi_value_retention_pct": 100.0,
+      "records": 3,
+      "rows_retained_pct": 100.0,
+      "singleton_classes": 3,
+      "suppressed_cells_pct": 0.0,
+      "t_closeness": 0.6667,
+      "uniqueness_pct": 100.0
+    },
+    "records": [
+      {
+        "bytes": 4840,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "ps_225745f2f68b",
+        "mac": "ps_2ff89f4acb45",
+        "mac_vendor": "*",
+        "packets": 38,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 3,
+        "protocols": "NGAP,NGAP/NAS-5GS,SCTP",
+        "role": "AMF (NGAP)",
+        "scope": "private",
+        "service_port": "38412",
+        "subnet": "192*",
+        "tx_share": 0.5
+      },
+      {
+        "bytes": 9852,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "ps_943f4e8ea804",
+        "mac": "ps_277b53435b91",
+        "mac_vendor": "*",
+        "packets": 56,
+        "peer_count": 2,
+        "pilot": "PUC#1",
+        "protocol_count": 4,
+        "protocols": "DNS,NGAP,NGAP/NAS-5GS,SCTP",
+        "role": "gNB (NGAP client)",
+        "scope": "private",
+        "service_port": "ephemeral",
+        "subnet": "192*",
+        "tx_share": 0.33
+      },
+      {
+        "bytes": 5012,
+        "duration_s": 0.0,
+        "first_seen_s": 0.0,
+        "ip": "ps_906832f4f1d9",
+        "mac": "ps_b9567de00430",
+        "mac_vendor": "*",
+        "packets": 18,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 1,
+        "protocols": "DNS",
+        "role": "DNS server",
+        "scope": "public",
+        "service_port": "53",
+        "subnet": "195*",
+        "tx_share": 0.83
+      }
+    ],
+    "suggestions": [
+      "100.0% of rows are unique on the identifiers. Drop an identifier or set a record-suppression k.",
+      "k-anonymity is low. Remove high-cardinality identifiers and apply stronger generalization profiles.",
+      "l-diversity is low for 'protocols'. Increase group size with fewer identifiers or stronger suppression.",
+      "t-closeness is high. Use threshold-based suppression for rare values and coarser categorical groupings."
+    ]
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

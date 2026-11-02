@@ -1,0 +1,160 @@
+{
+  "data": {
+    "applied_transformations": {
+      "generalize": [
+        "subnet"
+      ],
+      "generalize_profiles": {},
+      "pseudonymization_mode": "deterministic",
+      "pseudonymization_technique": "hmac_sha256",
+      "pseudonymize": [
+        "ip",
+        "mac"
+      ],
+      "record_suppression_k": 0,
+      "suppress": [
+        "mac_vendor"
+      ],
+      "suppress_thresholds": {}
+    },
+    "metrics": {
+      "avg_reid_risk_pct": 100.0,
+      "discernibility": 6,
+      "entropy_l_diversity": 1.0,
+      "equivalence_classes": 6,
+      "k_anonymity": 1,
+      "k_record_weighted": 1.0,
+      "l_diversity": 1,
+      "max_reid_risk_pct": 100.0,
+      "ppi": 0.28,
+      "ppi_rw": 0.28,
+      "qi_value_retention_pct": 100.0,
+      "records": 6,
+      "rows_retained_pct": 100.0,
+      "singleton_classes": 6,
+      "suppressed_cells_pct": 0.0,
+      "t_closeness": 0.8333,
+      "uniqueness_pct": 100.0
+    },
+    "records": [
+      {
+        "bytes": 190,
+        "duration_s": 0.0,
+        "first_seen_s": 8.2,
+        "ip": "ps_8411e9c2bdcf",
+        "mac": "ps_6222fe676582",
+        "mac_vendor": "*",
+        "packets": 2,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 1,
+        "protocols": "DNS",
+        "role": "DNS server",
+        "scope": "private",
+        "service_port": "53",
+        "subnet": "10.*",
+        "tx_share": 0.57
+      },
+      {
+        "bytes": 1092,
+        "duration_s": 0.0,
+        "first_seen_s": 40.8,
+        "ip": "ps_33467120b49d",
+        "mac": "ps_8284beb69aa6",
+        "mac_vendor": "*",
+        "packets": 8,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 2,
+        "protocols": "NGAP,SCTP",
+        "role": "AMF (NGAP)",
+        "scope": "private",
+        "service_port": "38412",
+        "subnet": "10.*",
+        "tx_share": 0.5
+      },
+      {
+        "bytes": 44544,
+        "duration_s": 40.9,
+        "first_seen_s": 0.0,
+        "ip": "ps_c4c3693c4903",
+        "mac": "ps_c0a2fc88cd7d",
+        "mac_vendor": "*",
+        "packets": 228,
+        "peer_count": 5,
+        "pilot": "PUC#1",
+        "protocol_count": 10,
+        "protocols": "DNS,E2AP|E1AP,E2AP|NGAP,HTTP,HTTP/JSON,ICMP,NGAP,SCTP,SSH,TCP",
+        "role": "gNB (NGAP client)",
+        "scope": "private",
+        "service_port": "5555",
+        "subnet": "10.*",
+        "tx_share": 0.64
+      },
+      {
+        "bytes": 2680,
+        "duration_s": 0.0,
+        "first_seen_s": 40.8,
+        "ip": "ps_89f6c316e667",
+        "mac": "ps_85081fdba6e9",
+        "mac_vendor": "*",
+        "packets": 12,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 3,
+        "protocols": "E2AP|E1AP,E2AP|NGAP,SCTP",
+        "role": "Near-RT RIC (E2)",
+        "scope": "private",
+        "service_port": "36421",
+        "subnet": "10.*",
+        "tx_share": 0.31
+      },
+      {
+        "bytes": 38426,
+        "duration_s": 40.9,
+        "first_seen_s": 0.0,
+        "ip": "ps_31b63e983540",
+        "mac": "ps_6222fe676582",
+        "mac_vendor": "*",
+        "packets": 184,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 4,
+        "protocols": "HTTP,HTTP/JSON,SSH,TCP",
+        "role": "LAN host",
+        "scope": "private",
+        "service_port": "ephemeral",
+        "subnet": "10.*",
+        "tx_share": 0.35
+      },
+      {
+        "bytes": 2156,
+        "duration_s": 10.1,
+        "first_seen_s": 8.3,
+        "ip": "ps_7a68aac1410b",
+        "mac": "ps_b9567de00430",
+        "mac_vendor": "*",
+        "packets": 22,
+        "peer_count": 1,
+        "pilot": "PUC#1",
+        "protocol_count": 1,
+        "protocols": "ICMP",
+        "role": "Internet peer",
+        "scope": "public",
+        "service_port": "none",
+        "subnet": "192*",
+        "tx_share": 0.5
+      }
+    ],
+    "suggestions": [
+      "100.0% of rows are unique on the identifiers. Drop an identifier or set a record-suppression k.",
+      "k-anonymity is low. Remove high-cardinality identifiers and apply stronger generalization profiles.",
+      "l-diversity is low for 'protocols'. Increase group size with fewer identifiers or stronger suppression.",
+      "t-closeness is high. Use threshold-based suppression for rare values and coarser categorical groupings."
+    ]
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

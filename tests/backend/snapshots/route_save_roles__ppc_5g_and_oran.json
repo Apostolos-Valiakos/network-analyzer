@@ -1,0 +1,40 @@
+{
+  "data": {
+    "csv": "class_name,count,ips\nAMF,1,10.250.100.41\nNEAR_RT_RIC,1,10.250.100.45\nUnidentified,2,10.8.0.11;10.250.100.1\ngNB,1,10.250.100.42\n",
+    "json": [
+      {
+        "class_name": "AMF",
+        "count": 1,
+        "ips": [
+          "10.250.100.41"
+        ]
+      },
+      {
+        "class_name": "NEAR_RT_RIC",
+        "count": 1,
+        "ips": [
+          "10.250.100.45"
+        ]
+      },
+      {
+        "class_name": "Unidentified",
+        "count": 2,
+        "ips": [
+          "10.8.0.11",
+          "10.250.100.1"
+        ]
+      },
+      {
+        "class_name": "gNB",
+        "count": 1,
+        "ips": [
+          "10.250.100.42"
+        ]
+      }
+    ]
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

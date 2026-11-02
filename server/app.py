@@ -10,6 +10,7 @@ import json
 import logging
 import ipaddress
 import time
+import multiprocessing
 from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env before any os.getenv() calls
@@ -24,7 +25,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response
+from functools import wraps
+from flask import Flask, g, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
 from flasgger import Swagger, swag_from
 import pandas as pd
@@ -41,11 +43,12 @@ import socketio
 
 from models import db, PcapFile, FlowStatistic, RoleSnapshot, IpRole, UeSession, User, ClusterResult
 
-from pcap_analysis import initialize_analysis
+from pcap_analysis import initialize_analysis, summarize_traffic
 from ueAnalysis import initialize_analysis_for_ue
 from graph_builder import build_graph_json
 from pcap_generator_service import handle_pcap_chunk
 from pcap_repair import trim_incomplete_tail
+from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 from rrc_utils import FEATURE_CACHE_SUFFIX
 from agglomerative_clustering import (
     analyze_pcap_for_clustering,
@@ -61,24 +64,19 @@ from privacy_metrics import (
     build_privacy_suggestions,
 )
 from privacy_records import records_from_pcap
-import faulthandler
-import requests
-
-
-faulthandler.enable()
-
-_SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(_SERVER_DIR, "uploads")
-PCAP_GEN_OUTPUT_DIR = os.path.join(_SERVER_DIR, "generated_pcaps")
-CLUSTERING_OUTPUT_DIR = os.path.join(_SERVER_DIR, "cluster_analysis")
-RESULTS_OUTPUT_DIR = os.path.join(_SERVER_DIR, "results")
-
-for d in [
+import settings
+from settings import (
     UPLOAD_FOLDER,
     PCAP_GEN_OUTPUT_DIR,
     CLUSTERING_OUTPUT_DIR,
     RESULTS_OUTPUT_DIR,
-]:
+)
+import faulthandler
+
+
+faulthandler.enable()
+
+for d in settings.OUTPUT_DIRS:
     os.makedirs(d, exist_ok=True)
 
 logging.basicConfig(
@@ -230,19 +228,39 @@ def _init_db():
 _MAX_DB_RETRIES = 12
 _DB_RETRY_DELAY = 5  # seconds between attempts
 
-with app.app_context():
-    for _attempt in range(1, _MAX_DB_RETRIES + 1):
-        try:
-            _init_db()
-            break
-        except Exception as _exc:
-            if _attempt < _MAX_DB_RETRIES:
-                print(f"[DB] Attempt {_attempt}/{_MAX_DB_RETRIES} failed: {_exc}. Retrying in {_DB_RETRY_DELAY}s...")
+
+def _is_pipeline_worker() -> bool:
+    """True inside the multiprocessing child started by Preprocess.
+
+    The child imports this module only for an app context (the role cache).
+    The parent has already created tables, run migrations and seeded the admin,
+    so repeating that costs seconds and competes for the same table locks.
+
+    Checks the process name because a spawned child imports the main module as
+    __mp_main__ before multiprocessing.parent_process() is set. Gunicorn's
+    forked workers keep the name MainProcess, so they still run setup.
+    """
+    return multiprocessing.current_process().name != "MainProcess"
+
+
+def _init_db_with_retries():
+    with app.app_context():
+        for attempt in range(1, _MAX_DB_RETRIES + 1):
+            try:
+                _init_db()
+                return
+            except Exception as exc:
+                if attempt == _MAX_DB_RETRIES:
+                    raise RuntimeError(
+                        f"Could not initialise database after {_MAX_DB_RETRIES} attempts."
+                    ) from exc
+                print(f"[DB] Attempt {attempt}/{_MAX_DB_RETRIES} failed: {exc}. Retrying in {_DB_RETRY_DELAY}s...")
                 time.sleep(_DB_RETRY_DELAY)
-            else:
-                raise RuntimeError(
-                    f"Could not initialise database after {_MAX_DB_RETRIES} attempts."
-                ) from _exc
+
+
+if not _is_pipeline_worker():
+    _init_db_with_retries()
+
 
 def generate_csv_response(data_list, filename):
     """Converts a list of dicts to a CSV Flask response."""
@@ -279,11 +297,12 @@ def _is_safe_scan_param(value: str) -> bool:
 
 
 def _cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
-    """Deletes stale tshark cache files (.features.tsv, legacy .packets.json)
-    older than max_age_seconds."""
+    """Deletes stale tshark cache files (.packets.tsv, .features.tsv, legacy
+    .packets.json) older than max_age_seconds."""
     now = datetime.now().timestamp()
     for directory in [PCAP_GEN_OUTPUT_DIR, UPLOAD_FOLDER]:
-        caches = list(Path(directory).glob("*" + FEATURE_CACHE_SUFFIX))
+        caches = list(Path(directory).glob("*" + PACKET_CACHE_SUFFIX))
+        caches += Path(directory).glob("*" + FEATURE_CACHE_SUFFIX)
         caches += Path(directory).glob("*.packets.json")
         for path in caches:
             try:
@@ -295,7 +314,8 @@ def _cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
 
 
 # Run once at startup to clear any caches left from a previous run
-_cleanup_packet_caches()
+if not _is_pipeline_worker():
+    _cleanup_packet_caches()
 
 
 def _current_user_id() -> int:
@@ -315,6 +335,48 @@ def _check_pcap_ownership(filename: str, user_id: int):
 
 class AnalysisFailed(Exception):
     """Analysis step failed; the message is safe to show to the user."""
+
+
+def owned_pcap(filename, missing_message="File not found"):
+    """(pcap, path, None) for the caller's own pcap, else (None, None, error_response)."""
+    pcap, err = _check_pcap_ownership(filename, _current_user_id())
+    if err:
+        return None, None, err
+    path = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
+    if not path.exists():
+        return None, None, (jsonify({"error": missing_message}), 404)
+    return pcap, path, None
+
+
+def _is_admin(user_id: int) -> bool:
+    u = db.session.get(User, user_id)
+    return bool(u and u.is_admin)
+
+
+def record_for_user(model, record_id):
+    """(record, None) if the caller owns it or is an admin, else (None, error_response)."""
+    uid = _current_user_id()
+    record = db.session.get(model, record_id)
+    if not record:
+        return None, (jsonify({"error": "Not found"}), 404)
+    if not _is_admin(uid) and record.user_id != uid:
+        return None, (jsonify({"error": "Access denied"}), 403)
+    return record, None
+
+
+def admin_required(fn):
+    """jwt_required plus an admin check; the admin User is available as g.current_user."""
+
+    @wraps(fn)
+    @jwt_required()
+    def wrapper(*args, **kwargs):
+        current = db.session.get(User, _current_user_id())
+        if not current or not current.is_admin:
+            return jsonify({"error": "Admin access required"}), 403
+        g.current_user = current
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def _mark_pcap_error(pcap_id) -> None:
@@ -352,11 +414,8 @@ def login():
 
 
 @app.route("/auth/register", methods=["POST"])
-@jwt_required()
+@admin_required
 def register():
-    current = User.query.get(_current_user_id())
-    if not current or not current.is_admin:
-        return jsonify({"error": "Admin access required"}), 403
     data = request.get_json(silent=True) or {}
     username = data.get("username", "").strip()
     password = data.get("password", "")
@@ -377,11 +436,8 @@ def register():
 
 
 @app.route("/auth/users", methods=["GET"])
-@jwt_required()
+@admin_required
 def list_users():
-    current = User.query.get(_current_user_id())
-    if not current or not current.is_admin:
-        return jsonify({"error": "Admin access required"}), 403
     users = User.query.order_by(User.created_at.asc()).all()
     return jsonify([
         {
@@ -395,14 +451,11 @@ def list_users():
 
 
 @app.route("/auth/users/<int:user_id>", methods=["DELETE"])
-@jwt_required()
+@admin_required
 def delete_user(user_id):
-    current = User.query.get(_current_user_id())
-    if not current or not current.is_admin:
-        return jsonify({"error": "Admin access required"}), 403
-    if user_id == current.id:
+    if user_id == g.current_user.id:
         return jsonify({"error": "Cannot delete your own account"}), 400
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
     db.session.delete(user)
@@ -478,12 +531,9 @@ def save_pcap_stream():
 @jwt_required()
 @swag_from("docs/get_generated_pcap.yml")
 def get_generated_pcap(filename: str):
-    pcap, err = _check_pcap_ownership(Path(filename).name, _current_user_id())
+    pcap, safe_path, err = owned_pcap(filename)
     if err:
         return err
-    safe_path = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not safe_path.exists():
-        return jsonify({"error": "File not found"}), 404
     return send_file(str(safe_path), as_attachment=True)
 
 
@@ -496,12 +546,9 @@ def get_generated_pcap(filename: str):
 @jwt_required()
 @swag_from("docs/analyze_saved_pcap.yml")
 def analyze_saved_pcap(filename: str):
-    pcap, err = _check_pcap_ownership(Path(filename).name, _current_user_id())
+    pcap, filepath, err = owned_pcap(filename)
     if err:
         return err
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not filepath.exists():
-        return jsonify({"error": "File not found"}), 404
 
     result, error = initialize_analysis(str(filepath))
     if error:
@@ -522,6 +569,40 @@ def analyze_saved_pcap(filename: str):
         ),
         200,
     )
+
+
+def run_core_analysis(pcap_path: str, model_name: str, pipeline_label: str) -> dict:
+    """Traffic graph + role pipeline, shared by upload and re-analyze.
+
+    Returns the result stored in pcap_files.analysis_result. Raises
+    AnalysisFailed with a user-safe message when either step fails.
+    """
+    analysis_result, err = summarize_traffic(pcap_path)
+    if err:
+        raise AnalysisFailed(f"Analysis failed: {err}")
+    report = run_ip_role_pipeline(pcap_path, model_name)
+    if report.get("status") != "success":
+        raise AnalysisFailed(f"{pipeline_label} failed: {report.get('message')}")
+    return {
+        "total_packets": analysis_result["total_packets"],
+        "graph": build_graph_json(analysis_result["conversations"]),
+        "roles": report.get("ip_roles", {}),
+    }
+
+
+def analysis_error_response(exc: Exception, pcap_id, generic_message: str, log_name: str):
+    """Rolls back, marks the pcap ERROR, and returns the 500 response.
+
+    AnalysisFailed messages are shown to the user; anything else is logged
+    with its traceback and replaced by generic_message.
+    """
+    db.session.rollback()
+    _mark_pcap_error(pcap_id)
+    if isinstance(exc, AnalysisFailed):
+        logger.error("%s failed: %s", log_name, exc)
+        return jsonify({"error": str(exc)}), 500
+    logger.exception("%s failed", log_name)
+    return jsonify({"error": generic_message}), 500
 
 
 @app.route("/automated-analysis", methods=["POST"])
@@ -562,15 +643,8 @@ def automated_analysis():
         db.session.commit()
         pcap_id = pcap_record.id
 
-        analysis_result, err = initialize_analysis(str(pcap_path))
-        if err:
-            raise AnalysisFailed(f"Analysis failed: {err}")
-
         model_name = request.form.get("model_name", "rule_based")
-        report = run_ip_role_pipeline(str(pcap_path), model_name)
-
-        if report.get("status") != "success":
-            raise AnalysisFailed(f"ML Pipeline failed: {report.get('message')}")
+        stored_result = run_core_analysis(str(pcap_path), model_name, "ML Pipeline")
 
         ue_data = initialize_analysis_for_ue(str(pcap_path))
         if ue_data:
@@ -593,11 +667,6 @@ def automated_analysis():
             logger.exception("privacy records failed")
             privacy_records = []
 
-        stored_result = {
-            "total_packets": analysis_result["total_packets"],
-            "graph": build_graph_json(analysis_result["conversations"]),
-            "roles": report.get("ip_roles", {}),
-        }
         pcap_record.status = "COMPLETED"
         pcap_record.analysis_result = stored_result
         db.session.commit()
@@ -615,16 +684,8 @@ def automated_analysis():
         }
         return jsonify(response), 200
 
-    except AnalysisFailed as e:
-        logger.error("automated_analysis failed: %s", e)
-        db.session.rollback()
-        _mark_pcap_error(pcap_id)
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        logger.exception("automated_analysis failed")
-        db.session.rollback()
-        _mark_pcap_error(pcap_id)
-        return jsonify({"error": "Internal server error"}), 500
+    except Exception as exc:
+        return analysis_error_response(exc, pcap_id, "Internal server error", "automated_analysis")
 
 
 # ==========================
@@ -636,12 +697,9 @@ def automated_analysis():
 @jwt_required()
 @swag_from("docs/privacy_records.yml")
 def privacy_records_endpoint(filename: str):
-    pcap, err = _check_pcap_ownership(Path(filename).name, _current_user_id())
+    pcap, filepath, err = owned_pcap(filename)
     if err:
         return err
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not filepath.exists():
-        return jsonify({"error": "File not found"}), 404
     pilot = request.args.get("pilot", "PUC#1")
     try:
         records = records_from_pcap(str(filepath), pilot=pilot)
@@ -759,12 +817,9 @@ def clustering_analysis():
     data = request.get_json()
     filename = data.get("file")
 
-    pcap, err = _check_pcap_ownership(filename, _current_user_id())
+    pcap, filepath, err = owned_pcap(filename, missing_message="PCAP not found")
     if err:
         return err
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not filepath.exists():
-        return jsonify({"error": "PCAP not found"}), 404
 
     max_clusters = data.get("clusters", 4)
     if not isinstance(max_clusters, int) or not (2 <= max_clusters <= 20):
@@ -813,12 +868,9 @@ def suggested_clusters():
     if not filename:
         return jsonify({"error": "file required"}), 400
 
-    pcap, err = _check_pcap_ownership(filename, _current_user_id())
+    pcap, filepath, err = owned_pcap(filename)
     if err:
         return err
-    filepath = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not filepath.exists():
-        return jsonify({"error": "File not found"}), 404
 
     try:
         result = analyze_pcap_for_clustering(
@@ -901,12 +953,9 @@ def run_pipeline_endpoint():
     pcap_file = data.get("pcap_file_path")
     model = data.get("model_name")
 
-    pcap, err = _check_pcap_ownership(pcap_file, _current_user_id())
+    pcap, full_path, err = owned_pcap(pcap_file, missing_message="PCAP not found")
     if err:
         return err
-    full_path = Path(PCAP_GEN_OUTPUT_DIR) / pcap.filename
-    if not full_path.exists():
-        return jsonify({"error": "PCAP not found"}), 404
 
     try:
         report = run_ip_role_pipeline(str(full_path), model, data.get("selected_ips"))
@@ -943,7 +992,8 @@ def save_roles_endpoint():
     if err:
         return err
 
-    path = Path(RESULTS_OUTPUT_DIR) / f"{safe_base}.{ftype}"
+    # Read at call time, like the pipeline worker that writes these files.
+    path = Path(settings.RESULTS_OUTPUT_DIR) / f"{safe_base}.{ftype}"
     if not path.exists():
         return jsonify({"error": "File not found"}), 404
     return send_file(str(path), as_attachment=True)
@@ -978,8 +1028,80 @@ def start_analysis_from_websocket():
 # CONTINUOUS MONITORING API ENDPOINTS
 # ==========================================
 
-VM_URL = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/get-pcap"
-SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
+ABNORMAL_BYTES_THRESHOLD = 5_000_000  # 5 MB in a single flow
+ABNORMAL_PKTS_THRESHOLD = 5_000  # packets in a single flow
+
+
+def flow_alert(src_ip, dst_ip, orig_bytes, orig_pkts, conn_state):
+    """The network_alert payload for one Zeek flow, or None. First match wins."""
+    if orig_bytes > ABNORMAL_BYTES_THRESHOLD:
+        return {
+            "level": "error",
+            "title": "Massive Data Transfer",
+            "message": f"IP {src_ip} sent {(orig_bytes/1024/1024):.2f} MB to {dst_ip}.",
+        }
+    if orig_pkts > ABNORMAL_PKTS_THRESHOLD:
+        return {
+            "level": "warning",
+            "title": "Packet Flood Detected",
+            "message": f"IP {src_ip} sent {orig_pkts} packets to {dst_ip}.",
+        }
+    if conn_state == "REJ":
+        return {
+            "level": "warning",
+            "title": "Connection Rejected",
+            "message": f"{src_ip} attempted to connect to a closed port on {dst_ip}.",
+        }
+    return None
+
+
+def flow_to_zeek(row):
+    """A flow_statistics row with Zeek's dotted field names."""
+    return {
+        # Stored as naive UTC (see ingest_zeek); mark it UTC so .timestamp()
+        # gives the real epoch instead of reading it as server-local time.
+        "ts": row.ts.replace(tzinfo=timezone.utc).timestamp(),  # float for ECharts
+        "id.orig_h": row.id_orig_h,
+        "id.resp_h": row.id_resp_h,
+        "proto": row.proto,
+        "conn_state": row.conn_state,
+        "orig_bytes": row.orig_bytes,
+        "resp_bytes": row.resp_bytes,
+        "orig_pkts": row.orig_pkts,
+        "resp_pkts": row.resp_pkts,
+    }
+
+
+def _sensor_headers(**extra):
+    return {"X-Internal-Token": settings.secret_token(), **extra}
+
+
+def proxy_sensor_pcap(params, download_name):
+    """Streams a pcap from the sensor's /get-pcap with the usual error mapping.
+
+    download_name may be a callable; it is evaluated only after the sensor
+    answers 200, matching the original routes' order of evaluation.
+    """
+    try:
+        vm_response = requests.get(
+            settings.sensor_url("/get-pcap"),
+            params=params,
+            headers=_sensor_headers(),
+            stream=True,
+            timeout=10,
+        )
+        if vm_response.status_code != 200:
+            return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 502
+        name = download_name() if callable(download_name) else download_name
+        return Response(
+            vm_response.iter_content(chunk_size=1024),
+            content_type="application/vnd.tcpdump.pcap",
+            headers={"Content-Disposition": f"attachment; filename={name}"},
+        )
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "Sensor is unreachable"}), 503
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Sensor request timed out"}), 504
 
 
 @app.route("/v1/ingest/zeek", methods=["POST"])
@@ -987,15 +1109,12 @@ SECRET_TOKEN = os.getenv("SECRET_TOKEN", "")
 @swag_from("docs/ingest_zeek.yml")
 def ingest_zeek():
     """Receives JSON flow batches from the VM Zeek Agent."""
-    if request.headers.get("X-Internal-Token") != SECRET_TOKEN:
+    if request.headers.get("X-Internal-Token") != settings.secret_token():
         return jsonify({"error": "Unauthorized"}), 401
 
     flows = request.json.get("flows", [])
     if not flows:
         return jsonify({"status": "empty"}), 200
-
-    ABNORMAL_BYTES_THRESHOLD = 5000000  # 5 MB in a single flow
-    ABNORMAL_PKTS_THRESHOLD = 5000  # 5000 packets in a single flow
 
     conn = None
     try:
@@ -1014,36 +1133,9 @@ def ingest_zeek():
             dst_ip = data.get("id.resp_h")
             conn_state = data.get("conn_state")
 
-            if orig_bytes > ABNORMAL_BYTES_THRESHOLD:
-                socketio.emit(
-                    "network_alert",
-                    {
-                        "level": "error",
-                        "title": "Massive Data Transfer",
-                        "message": f"IP {src_ip} sent {(orig_bytes/1024/1024):.2f} MB to {dst_ip}.",
-                    },
-                )
-
-            elif orig_pkts > ABNORMAL_PKTS_THRESHOLD:
-                socketio.emit(
-                    "network_alert",
-                    {
-                        "level": "warning",
-                        "title": "Packet Flood Detected",
-                        "message": f"IP {src_ip} sent {orig_pkts} packets to {dst_ip}.",
-                    },
-                )
-
-            elif conn_state == "REJ":
-                socketio.emit(
-                    "network_alert",
-                    {
-                        "level": "warning",
-                        "title": "Connection Rejected",
-                        "message": f"{src_ip} attempted to connect to a closed port on {dst_ip}.",
-                    },
-                )
-            # ------------------------------------
+            alert = flow_alert(src_ip, dst_ip, orig_bytes, orig_pkts, conn_state)
+            if alert:
+                socketio.emit("network_alert", alert)
 
             batch.append(
                 (
@@ -1089,7 +1181,9 @@ def get_network_statistics():
     """Endpoint 1: Get Network Statistics (Grafana/Zeek Aligned)"""
     try:
         raw_start = float(request.args.get("start_time", 0))
-        raw_end = float(request.args.get("end_time", datetime.utcnow().timestamp()))
+        # time.time() is the real epoch; utcnow().timestamp() reads the naive UTC
+        # value as local time and lands hours in the past on non-UTC hosts.
+        raw_end = float(request.args.get("end_time", time.time()))
         limit = int(request.args.get("limit", 1000))
         resp_format = request.args.get("format", "csv").lower()
 
@@ -1108,21 +1202,7 @@ def get_network_statistics():
             .all()
         )
 
-        results = []
-        for row in query:
-            results.append(
-                {
-                    "ts": row.ts.timestamp(),  # Convert back to float for ECharts
-                    "id.orig_h": row.id_orig_h,
-                    "id.resp_h": row.id_resp_h,
-                    "proto": row.proto,
-                    "conn_state": row.conn_state,
-                    "orig_bytes": row.orig_bytes,
-                    "resp_bytes": row.resp_bytes,
-                    "orig_pkts": row.orig_pkts,
-                    "resp_pkts": row.resp_pkts,
-                }
-            )
+        results = [flow_to_zeek(row) for row in query]
 
         if resp_format == "json":
             return jsonify(results), 200
@@ -1180,28 +1260,10 @@ def get_pcap_headers_only():
     """Endpoint 3: Get Timeframe PCAP (Headers Only / No Payload)"""
     start_time = request.args.get("start_time")
     end_time = request.args.get("end_time")
-
-    try:
-        vm_response = requests.get(
-            VM_URL,
-            params={"start_time": start_time, "end_time": end_time, "headers_only": "true"},
-            headers={"X-Internal-Token": SECRET_TOKEN},
-            stream=True,
-            timeout=10,
-        )
-        if vm_response.status_code != 200:
-            return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 502
-        return Response(
-            vm_response.iter_content(chunk_size=1024),
-            content_type="application/vnd.tcpdump.pcap",
-            headers={
-                "Content-Disposition": f"attachment; filename=headers_{int(float(start_time))}.pcap"
-            },
-        )
-    except requests.exceptions.ConnectionError:
-        return jsonify({"error": "Sensor is unreachable"}), 503
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "Sensor request timed out"}), 504
+    return proxy_sensor_pcap(
+        {"start_time": start_time, "end_time": end_time, "headers_only": "true"},
+        lambda: f"headers_{int(float(start_time))}.pcap",
+    )
 
 
 @app.route("/v1/network/pcap/latest/full", methods=["GET"])
@@ -1209,21 +1271,7 @@ def get_pcap_headers_only():
 @swag_from("docs/get_latest_full_pcap.yml")
 def get_latest_full_pcap():
     """Endpoint 4: Get Full Payload PCAP (Latest Snapshot)"""
-    try:
-        vm_response = requests.get(
-            VM_URL, headers={"X-Internal-Token": SECRET_TOKEN}, stream=True, timeout=10
-        )
-        if vm_response.status_code != 200:
-            return jsonify({"error": "Failed to retrieve PCAP from sensor"}), 502
-        return Response(
-            vm_response.iter_content(chunk_size=1024),
-            content_type="application/vnd.tcpdump.pcap",
-            headers={"Content-Disposition": "attachment; filename=latest_full.pcap"},
-        )
-    except requests.exceptions.ConnectionError:
-        return jsonify({"error": "Sensor is unreachable"}), 503
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "Sensor request timed out"}), 504
+    return proxy_sensor_pcap(None, "latest_full.pcap")
 
 
 @app.route("/v1/network/export", methods=["GET"])
@@ -1233,7 +1281,7 @@ def export_network_statistics():
     """Endpoint 5: Export Analytics Data (CSV/JSON) with Zeek dot notation"""
     try:
         raw_start = float(request.args.get("start_time", 0))
-        raw_end = float(request.args.get("end_time", datetime.utcnow().timestamp()))
+        raw_end = float(request.args.get("end_time", time.time()))  # see get_network_statistics
         resp_format = request.args.get("format", "csv").lower()
 
         limit_arg = request.args.get("limit")
@@ -1253,23 +1301,11 @@ def export_network_statistics():
 
         records = query.all()
 
-        # 2. Map to strict Zeek field names
-        results = []
-        for row in records:
-            results.append(
-                {
-                    "ts": row.ts.timestamp(),
-                    "id.orig_h": row.id_orig_h,
-                    "id.resp_h": row.id_resp_h,
-                    "proto": row.proto,
-                    "conn_state": row.conn_state,
-                    "orig_bytes": row.orig_bytes,
-                    "resp_bytes": row.resp_bytes,
-                    "orig_pkts": row.orig_pkts,
-                    "resp_pkts": row.resp_pkts,
-                    "conversations": f"{row.id_orig_h} <-> {row.id_resp_h}",  # Concatenated IP pair
-                }
-            )
+        # 2. Map to strict Zeek field names, plus the concatenated IP pair
+        results = [
+            {**flow_to_zeek(row), "conversations": f"{row.id_orig_h} <-> {row.id_resp_h}"}
+            for row in records
+        ]
 
         filename = f"network_analytics_{int(raw_start)}_{int(raw_end)}"
 
@@ -1291,19 +1327,13 @@ def export_network_statistics():
         return jsonify({"error": "Internal server error"}), 400
 
 
-# Add glob to your imports at the top of app.py if it isn't there already
-import glob
-
-
 @app.route("/v1/analyze_live", methods=["POST"])
 @jwt_required()
 @limiter.limit("5 per minute")
 def analyze_live():
     """Auto-grabs the latest PCAP, analyzes it, and deletes it."""
-    results_dir = "server/results"
-
-    # Auto-grab the newest PCAP file
-    list_of_files = glob.glob(f"{results_dir}/*.pcap")
+    # Auto-grab the newest PCAP file (written here by the snapshot scheduler)
+    list_of_files = glob.glob(os.path.join(RESULTS_OUTPUT_DIR, "*.pcap"))
     if not list_of_files:
         return (
             jsonify(
@@ -1318,8 +1348,6 @@ def analyze_live():
 
     try:
         # Run pipeline with an empty list for selected_ips (analyzes all)
-        from Preprocess import run_ip_role_pipeline
-
         model_name = os.path.splitext(os.path.basename(latest_file))[0]
 
         results = run_ip_role_pipeline(latest_file, model_name, selected_ips=None)
@@ -1365,14 +1393,13 @@ def start_scan():
             logger.warning("start_scan: rejected unsafe param %s=%r", key, value)
             return jsonify({"error": f"Invalid value for parameter '{key}'"}), 400
 
-    vm_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/run-nmap-async"
-    headers = {
-        "X-Internal-Token": os.getenv("SECRET_TOKEN", ""),
-        "Content-Type": "application/json",
-    }
-
     try:
-        response = requests.post(vm_url, json=data, headers=headers, timeout=10)
+        response = requests.post(
+            settings.sensor_url("/run-nmap-async"),
+            json=data,
+            headers=_sensor_headers(**{"Content-Type": "application/json"}),
+            timeout=10,
+        )
         return jsonify(response.json()), response.status_code
     except Exception:
         logger.exception("start_scan: failed to reach VM")
@@ -1383,11 +1410,10 @@ def start_scan():
 @jwt_required()
 @swag_from("docs/get_scan_results.yml")
 def get_scan_results():
-    vm_url = os.getenv("SENSOR_URL", "http://172.18.0.1:5005") + "/get-nmap-results"
-    headers = {"X-Internal-Token": os.getenv("SECRET_TOKEN", "")}
-
     try:
-        response = requests.get(vm_url, headers=headers, timeout=10)
+        response = requests.get(
+            settings.sensor_url("/get-nmap-results"), headers=_sensor_headers(), timeout=10
+        )
         _emit_scan_notice(response)
         return jsonify(response.json()), response.status_code
     except Exception:
@@ -1464,31 +1490,25 @@ def _cluster_to_dict(r):
     }
 
 
-def _is_admin(user_id: int) -> bool:
-    u = User.query.get(user_id)
-    return bool(u and u.is_admin)
+def _history_for_source(source):
+    uid = _current_user_id()
+    q = PcapFile.query.filter_by(source=source)
+    if not _is_admin(uid):
+        q = q.filter_by(user_id=uid)
+    records = q.order_by(PcapFile.upload_time.desc()).all()
+    return jsonify([_pcap_to_dict(r) for r in records])
 
 
 @app.route("/v1/history/pcaps", methods=["GET"])
 @jwt_required()
 def history_pcaps():
-    uid = _current_user_id()
-    q = PcapFile.query.filter_by(source="upload")
-    if not _is_admin(uid):
-        q = q.filter_by(user_id=uid)
-    records = q.order_by(PcapFile.upload_time.desc()).all()
-    return jsonify([_pcap_to_dict(r) for r in records])
+    return _history_for_source("upload")
 
 
 @app.route("/v1/history/generated", methods=["GET"])
 @jwt_required()
 def history_generated():
-    uid = _current_user_id()
-    q = PcapFile.query.filter_by(source="generated")
-    if not _is_admin(uid):
-        q = q.filter_by(user_id=uid)
-    records = q.order_by(PcapFile.upload_time.desc()).all()
-    return jsonify([_pcap_to_dict(r) for r in records])
+    return _history_for_source("generated")
 
 
 @app.route("/v1/history/clusters", methods=["GET"])
@@ -1505,12 +1525,9 @@ def history_clusters():
 @app.route("/v1/history/pcap/<pcap_id>/result", methods=["GET"])
 @jwt_required()
 def get_pcap_history_result(pcap_id):
-    uid = _current_user_id()
-    record = PcapFile.query.get(pcap_id)
-    if not record:
-        return jsonify({"error": "Not found"}), 404
-    if not _is_admin(uid) and record.user_id != uid:
-        return jsonify({"error": "Access denied"}), 403
+    record, err = record_for_user(PcapFile, pcap_id)
+    if err:
+        return err
     if not record.analysis_result:
         return jsonify({"error": "No results stored"}), 404
     return jsonify(record.analysis_result)
@@ -1519,12 +1536,9 @@ def get_pcap_history_result(pcap_id):
 @app.route("/v1/history/cluster/<int:cluster_id>/result", methods=["GET"])
 @jwt_required()
 def get_cluster_history_result(cluster_id):
-    uid = _current_user_id()
-    record = ClusterResult.query.get(cluster_id)
-    if not record:
-        return jsonify({"error": "Not found"}), 404
-    if not _is_admin(uid) and record.user_id != uid:
-        return jsonify({"error": "Access denied"}), 403
+    record, err = record_for_user(ClusterResult, cluster_id)
+    if err:
+        return err
     if not record.result_json:
         return jsonify({"error": "No results stored"}), 404
     return jsonify(record.result_json)
@@ -1534,62 +1548,43 @@ def get_cluster_history_result(cluster_id):
 @jwt_required()
 @limiter.limit("5 per minute")
 def reanalyze_pcap(pcap_id):
-    uid = _current_user_id()
-    record = PcapFile.query.get(pcap_id)
-    if not record:
-        return jsonify({"error": "Not found"}), 404
-    if not _is_admin(uid) and record.user_id != uid:
-        return jsonify({"error": "Access denied"}), 403
+    record, err = record_for_user(PcapFile, pcap_id)
+    if err:
+        return err
 
     filepath = Path(record.file_path)
     if not filepath.exists():
         return jsonify({"error": "File no longer exists on disk"}), 410
 
     try:
-        analysis_result, err = initialize_analysis(str(filepath))
-        if err:
-            raise AnalysisFailed(f"Analysis failed: {err}")
-
-        report = run_ip_role_pipeline(str(filepath), "rule_based")
-        if report.get("status") != "success":
-            raise AnalysisFailed(f"Role pipeline failed: {report.get('message')}")
-
-        stored_result = {
-            "total_packets": analysis_result["total_packets"],
-            "graph": build_graph_json(analysis_result["conversations"]),
-            "roles": report.get("ip_roles", {}),
-        }
+        stored_result = run_core_analysis(str(filepath), "rule_based", "Role pipeline")
         record.analysis_result = stored_result
         record.status = "COMPLETED"
         db.session.commit()
         return jsonify(stored_result), 200
-    except AnalysisFailed as e:
-        logger.error("reanalyze_pcap failed: %s", e)
-        db.session.rollback()
-        _mark_pcap_error(pcap_id)
-        return jsonify({"error": str(e)}), 500
-    except Exception:
-        logger.exception("reanalyze_pcap failed")
-        db.session.rollback()
-        _mark_pcap_error(pcap_id)
-        return jsonify({"error": "Analysis failed"}), 500
+    except Exception as exc:
+        return analysis_error_response(exc, pcap_id, "Analysis failed", "reanalyze_pcap")
 
 
 @app.route("/v1/history/pcap/<pcap_id>", methods=["DELETE"])
 @jwt_required()
 def delete_history_pcap(pcap_id):
-    uid = _current_user_id()
-    record = PcapFile.query.get(pcap_id)
-    if not record:
-        return jsonify({"error": "Not found"}), 404
-    if not _is_admin(uid) and record.user_id != uid:
-        return jsonify({"error": "Access denied"}), 403
+    record, err = record_for_user(PcapFile, pcap_id)
+    if err:
+        return err
 
-    if record.file_path and os.path.exists(record.file_path):
-        try:
-            os.remove(record.file_path)
-        except OSError:
-            logger.warning("Could not delete file: %s", record.file_path)
+    if record.file_path:
+        # The caches hold header data from the capture, so they go with it.
+        for path in (
+            record.file_path,
+            record.file_path + PACKET_CACHE_SUFFIX,
+            record.file_path + FEATURE_CACHE_SUFFIX,
+        ):
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    logger.warning("Could not delete file: %s", path)
 
     db.session.delete(record)
     db.session.commit()
@@ -1599,12 +1594,9 @@ def delete_history_pcap(pcap_id):
 @app.route("/v1/history/cluster/<int:cluster_id>", methods=["DELETE"])
 @jwt_required()
 def delete_history_cluster(cluster_id):
-    uid = _current_user_id()
-    record = ClusterResult.query.get(cluster_id)
-    if not record:
-        return jsonify({"error": "Not found"}), 404
-    if not _is_admin(uid) and record.user_id != uid:
-        return jsonify({"error": "Access denied"}), 403
+    record, err = record_for_user(ClusterResult, cluster_id)
+    if err:
+        return err
 
     output_path = Path(CLUSTERING_OUTPUT_DIR) / record.filename
     if output_path.exists():

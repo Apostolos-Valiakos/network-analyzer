@@ -20,9 +20,10 @@ Record schema (one row per host):
 
 import ipaddress
 import os
-import subprocess
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional
+
+import packet_table
 
 FIELDS = [
     "frame.time_epoch",
@@ -111,16 +112,9 @@ def _split(value: str) -> List[str]:
 
 
 def run_tshark(pcap_path: str) -> str:
-    """Run tshark once. A capture cut off mid-packet makes tshark exit
-    non-zero, but every complete packet is still printed, so we keep stdout."""
-    cmd = ["tshark", "-r", pcap_path, "-n", "-T", "fields", "-Y", "ip"]
-    for field in FIELDS:
-        cmd += ["-e", field]
-    cmd += ["-E", "separator=\t", "-E", "aggregator=,", "-E", "occurrence=a"]
-    out = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if out.returncode != 0 and not out.stdout:
-        raise RuntimeError(f"tshark failed: {out.stderr[:300]}")
-    return out.stdout
+    """The IPv4 frames of the shared packet table, in FIELDS layout. Raises
+    RuntimeError if tshark cannot read the capture at all."""
+    return packet_table.lines(pcap_path, FIELDS, require="ip.src")
 
 
 def load_rows(pcap_path: str, cache_path: Optional[str] = None) -> str:

@@ -1,0 +1,47 @@
+{
+  "data": {
+    "best_k": 3,
+    "best_modularity": -0.375,
+    "cluster_hierarchy": [
+      {
+        "cluster": 1,
+        "edge_density": 2.0,
+        "score": 2.612915,
+        "size": 1,
+        "traffic_score": 4.043051,
+        "unique_partners_sum": 2
+      },
+      {
+        "cluster": 2,
+        "edge_density": 1.0,
+        "score": 1.799068,
+        "size": 1,
+        "traffic_score": 3.663562,
+        "unique_partners_sum": 1
+      },
+      {
+        "cluster": 0,
+        "edge_density": 1.0,
+        "score": 1.583332,
+        "size": 1,
+        "traffic_score": 2.944439,
+        "unique_partners_sum": 1
+      }
+    ],
+    "modularity_scores": [
+      {
+        "k": 2,
+        "modularity": -0.5
+      },
+      {
+        "k": 3,
+        "modularity": -0.375
+      }
+    ],
+    "mostImportantCluster": 1
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

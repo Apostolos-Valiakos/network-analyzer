@@ -1,0 +1,103 @@
+{
+  "data": {
+    "clusterSummary": {
+      "best_k": 3,
+      "best_modularity": -0.375,
+      "cluster_hierarchy": [
+        {
+          "cluster": 1,
+          "edge_density": 2.0,
+          "score": 2.612915,
+          "size": 1,
+          "traffic_score": 4.043051,
+          "unique_partners_sum": 2
+        },
+        {
+          "cluster": 2,
+          "edge_density": 1.0,
+          "score": 1.799068,
+          "size": 1,
+          "traffic_score": 3.663562,
+          "unique_partners_sum": 1
+        },
+        {
+          "cluster": 0,
+          "edge_density": 1.0,
+          "score": 1.583332,
+          "size": 1,
+          "traffic_score": 2.944439,
+          "unique_partners_sum": 1
+        }
+      ],
+      "modularity_scores": [
+        {
+          "k": 2,
+          "modularity": -0.5
+        },
+        {
+          "k": 3,
+          "modularity": -0.375
+        }
+      ],
+      "mostImportantCluster": 1
+    },
+    "clusters": [
+      {
+        "anomaly": true,
+        "cluster": 0,
+        "ip": "195.251.124.68"
+      },
+      {
+        "anomaly": true,
+        "cluster": 1,
+        "ip": "192.168.100.21"
+      },
+      {
+        "anomaly": true,
+        "cluster": 2,
+        "ip": "192.168.100.5"
+      }
+    ],
+    "graphData": {
+      "categories": [
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 2"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 1"
+        },
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "Cluster 0"
+        }
+      ],
+      "links": [],
+      "nodes": [
+        {
+          "category": 2,
+          "name": "192.168.100.5",
+          "value": 1
+        },
+        {
+          "category": 1,
+          "name": "192.168.100.21",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "195.251.124.68",
+          "value": 1
+        }
+      ],
+      "type": "force"
+    }
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  }
+}

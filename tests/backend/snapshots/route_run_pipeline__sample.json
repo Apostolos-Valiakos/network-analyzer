@@ -1,0 +1,68 @@
+{
+  "data": {
+    "ip_role_details": {
+      "192.168.100.21": {
+        "confidence": 0.95,
+        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts)",
+        "role": "AMF"
+      },
+      "192.168.100.5": {
+        "confidence": 0.95,
+        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs)",
+        "role": "gNB"
+      },
+      "195.251.124.68": {
+        "confidence": 0.0,
+        "reasoning": "No matching evidence (dns, udp seen)",
+        "role": "Unidentified"
+      }
+    },
+    "ip_roles": {
+      "192.168.100.21": {
+        "confidence": 0.95,
+        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts)",
+        "role": "AMF"
+      },
+      "192.168.100.5": {
+        "confidence": 0.95,
+        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs)",
+        "role": "gNB"
+      },
+      "195.251.124.68": {
+        "confidence": 0.0,
+        "reasoning": "No matching evidence (dns, udp seen)",
+        "role": "Unidentified"
+      }
+    },
+    "most_frequent_class": "AMF",
+    "rule_based_classification_summary": [
+      {
+        "class_name": "AMF",
+        "count": 1,
+        "ips": [
+          "192.168.100.21"
+        ]
+      },
+      {
+        "class_name": "Unidentified",
+        "count": 1,
+        "ips": [
+          "195.251.124.68"
+        ]
+      },
+      {
+        "class_name": "gNB",
+        "count": 1,
+        "ips": [
+          "192.168.100.5"
+        ]
+      }
+    ],
+    "status": "success",
+    "total_classified": 3
+  },
+  "recorded_with": {
+    "scapy": "2.7",
+    "tshark": "4.6"
+  }
+}

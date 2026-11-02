@@ -4,10 +4,10 @@ import struct
 import time
 from typing import List, Union
 
-# Resolve path relative to this file so it always points to
-# server/generated_pcaps/ regardless of where Flask is launched from.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-PCAP_OUTPUT_DIR = os.path.join(_HERE, "generated_pcaps")
+import settings
+
+# Module-level name kept so tests can monkeypatch it.
+PCAP_OUTPUT_DIR = settings.PCAP_GEN_OUTPUT_DIR
 os.makedirs(PCAP_OUTPUT_DIR, exist_ok=True)
 
 # PCAP global header — written once at the start of each new file.

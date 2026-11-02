@@ -2,6 +2,36 @@ from scapy.all import PcapReader, IP
 from scapy.data import IP_PROTOS
 from scapy.layers.inet import IP
 
+import packet_table
+
+
+def summarize_traffic(filepath):
+    """
+    Packet count and per-pair conversation counts from the shared packet table,
+    with the same result layout as initialize_analysis but without the per-IP
+    protocol labels, which only Scapy can produce.
+
+    @return (result: dict|None, error: str|None)
+    """
+    total_packets = 0
+    conversations = {}
+    try:
+        for packet in packet_table.outer_packets(filepath):
+            total_packets += 1
+            if packet is None:
+                continue
+            src, dst = packet.src, packet.dst
+            key = tuple(sorted([src, dst]))
+            if key not in conversations:
+                conversations[key] = {
+                    f"{key[0]}_to_{key[1]}": 0,
+                    f"{key[1]}_to_{key[0]}": 0,
+                }
+            conversations[key][f"{src}_to_{dst}"] += 1
+    except Exception as e:
+        return None, f"Error processing PCAP: {str(e)}"
+    return {"total_packets": total_packets, "conversations": conversations}, None
+
 
 ##
 # Orchestrates the PCAP analysis pipeline using a memory-efficient streaming approach.
