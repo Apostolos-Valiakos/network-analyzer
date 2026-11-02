@@ -42,6 +42,7 @@ function mountLogin(store, router) {
     mocks: {
       $store: store,
       $router: router,
+      $api: { url: (path) => `http://localhost:5555${path}` },
     },
     stubs: { NuxtLink: true },
   })

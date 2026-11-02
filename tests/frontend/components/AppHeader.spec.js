@@ -56,6 +56,7 @@ function mountHeader({ token = null, isAdmin = false, username = null, route = '
       $vuetify: vuetify,
       $router: router,
       $route: mockRoute,
+      $api: { url: (path) => `http://localhost:5555${path}` },
     },
     stubs: {
       'v-app-bar': true,

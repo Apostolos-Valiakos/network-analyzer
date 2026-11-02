@@ -86,7 +86,7 @@
           <template v-slot:item.percentage="{ item }">
             <div class="d-flex align-center" style="width: 100%">
               <v-progress-linear
-                :model-value="item.percentage"
+                :value="item.percentage"
                 color="primary"
                 height="8"
                 rounded

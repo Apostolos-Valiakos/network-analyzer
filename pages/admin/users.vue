@@ -190,7 +190,6 @@ export default {
 
   data() {
     return {
-      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       form: { username: "", password: "", is_admin: false },
       showPassword: false,
       creating: false,
@@ -241,7 +240,7 @@ export default {
     async fetchUsers() {
       this.loadingUsers = true;
       try {
-        const res = await this.$apiFetch(`${this.apiBaseUrl}/auth/users`);
+        const res = await this.$apiFetch(this.$api.url(`/auth/users`));
         if (!res.ok) throw new Error("Failed to load users");
         this.users = await res.json();
       } catch (err) {
@@ -256,7 +255,7 @@ export default {
       this.createError = null;
       this.createSuccess = null;
       try {
-        const res = await this.$apiFetch(`${this.apiBaseUrl}/auth/register`, {
+        const res = await this.$apiFetch(this.$api.url(`/auth/register`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(this.form),
@@ -290,7 +289,7 @@ export default {
       this.deletingId = this.deleteTarget.id;
       try {
         const res = await this.$apiFetch(
-          `${this.apiBaseUrl}/auth/users/${this.deleteTarget.id}`,
+          this.$api.url(`/auth/users/${this.deleteTarget.id}`),
           { method: "DELETE" }
         );
         if (!res.ok) {

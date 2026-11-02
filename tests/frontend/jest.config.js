@@ -1,19 +1,20 @@
 /**
  * Jest configuration for Nuxt 2 / Vue 2 frontend tests.
  *
- * Install test dependencies once (from the project root):
- *
- *   npm install --save-dev jest@27 babel-jest@27 @babel/core @babel/preset-env vue-jest@3 @vue/test-utils@1 vuex@3
- *
  * Run from project root:
- *   npx jest@27 --config tests/frontend/jest.config.js
+ *   npx jest --config tests/frontend/jest.config.js
  *
  * Notes
  * -----
- * - vue-jest@3 is used (not @4) because vue-jest@4 has a peer-dep conflict with babel-jest@27.
+ * - @vue/vue2-jest is the official Vue 2 transformer for Jest 27 and uses Babel 7.
+ *   (vue-jest 3 compiled with Babel 6, which could not read this project's presets.)
  * - jest@27 ships jsdom bundled; no separate jest-environment-jsdom package is required.
- * - Babel config is inlined below so no root-level babel.config.js is needed.
+ * - babel-transformer.js holds the Babel setup, so no root-level config is needed.
  */
+
+const path = require('path')
+
+const babelTransformer = path.resolve(__dirname, 'babel-transformer.js')
 
 module.exports = {
   rootDir: '../../',
@@ -21,14 +22,14 @@ module.exports = {
   testEnvironment: 'jsdom',
 
   transform: {
-    '^.+\\.vue$': '<rootDir>/node_modules/vue-jest',
-    // Inline babel config — avoids root-level babel.config.js requirement
-    '^.+\\.js$': ['babel-jest', {
-      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-    }],
+    '^.+\\.vue$': '@vue/vue2-jest',
+    '^.+\\.js$': babelTransformer,
   },
 
   moduleFileExtensions: ['js', 'json', 'vue'],
+
+  // <script> blocks inside .vue files go through the same Babel setup
+  globals: { 'vue-jest': { transform: { js: babelTransformer } } },
 
   moduleNameMapper: {
     // Nuxt aliases: ~ and @ both resolve to project root
@@ -44,6 +45,7 @@ module.exports = {
   collectCoverageFrom: [
     'store/**/*.js',
     'plugins/**/*.js',
+    'utils/**/*.js',
     'pages/**/*.vue',
     'components/**/*.vue',
     '!**/node_modules/**',

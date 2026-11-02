@@ -106,7 +106,6 @@ export default {
       noOfclusters: 4,
       noOfclustersList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       fileType: "json",
-      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       suggestedClusters: null,
       modularityData: [],
       bestModularity: null,
@@ -152,9 +151,9 @@ export default {
   computed: {
     pcapUrlDisplay() {
       if (!this.filename) {
-        return `${this.apiBaseUrl}/generated_pcaps/`;
+        return this.$api.url(`/generated_pcaps/`);
       }
-      return `${this.apiBaseUrl}/generated_pcaps/${this.filename}`;
+      return this.$api.url(`/generated_pcaps/${this.filename}`);
     },
     clusteringProps() {
       return {
@@ -235,7 +234,7 @@ export default {
           anomaly_threshold: 3,
         };
 
-        const response = await this.$apiFetch(`${this.apiBaseUrl}/clustering`, {
+        const response = await this.$apiFetch(this.$api.url(`/clustering`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -264,7 +263,7 @@ export default {
     },
 
     async downloadPcap() {
-      const url = `${this.apiBaseUrl}/generated_pcaps/${this.filename}`;
+      const url = this.$api.url(`/generated_pcaps/${this.filename}`);
       try {
         const res = await this.$apiFetch(url);
         if (!res.ok) throw new Error("Download failed");
@@ -290,7 +289,7 @@ export default {
           type: this.fileType,
         };
 
-        const response = await this.$apiFetch(`${this.apiBaseUrl}/save-results`, {
+        const response = await this.$apiFetch(this.$api.url(`/save-results`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -304,7 +303,7 @@ export default {
         const data = await response.json();
         if (data.download_url) {
           const link = document.createElement("a");
-          link.href = `${this.apiBaseUrl}${data.download_url}`;
+          link.href = this.$api.url(data.download_url);
           link.download = data.saved_file;
           document.body.appendChild(link);
           link.click();
@@ -320,7 +319,7 @@ export default {
       try {
         const params = new URLSearchParams({ file: this.filename });
         const response = await this.$apiFetch(
-          `${this.apiBaseUrl}/suggested_clusters?${params}`
+          this.$api.url(`/suggested_clusters?${params}`)
         );
 
         if (!response.ok) {
@@ -357,7 +356,7 @@ export default {
       };
 
       try {
-        const response = await this.$apiFetch(`${this.apiBaseUrl}/run_pipeline`, {
+        const response = await this.$apiFetch(this.$api.url(`/run_pipeline`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -379,7 +378,7 @@ export default {
 
     async saveRoles() {
       const file = this.filename.substring(0, this.filename.lastIndexOf("."));
-      const url = `${this.apiBaseUrl}/save_roles?file=${file}&type=${this.fileType}`;
+      const url = this.$api.url(`/save_roles?file=${file}&type=${this.fileType}`);
       try {
         const res = await this.$apiFetch(url);
         if (!res.ok) throw new Error("Download failed");

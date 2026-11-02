@@ -56,7 +56,6 @@
       <PrivacyPanel
         v-if="response && response.privacy_records && response.privacy_records.length"
         :records="response.privacy_records"
-        :api-base-url="apiBaseUrl"
       />
 
       <div class="d-flex flex-wrap btn-gap">
@@ -104,7 +103,6 @@ export default {
       clustering: null,
       suggested_clusters: null,
       response: null,
-      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       loadedFromCache: false,
 
     };
@@ -158,7 +156,7 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await this.$apiFetch(`${this.apiBaseUrl}/automated-analysis`, {
+        const resp = await this.$apiFetch(this.$api.url(`/automated-analysis`), {
           method: "POST",
           body: form,
         });
@@ -193,7 +191,7 @@ export default {
       if (type === "json") this.savingJson = true;
       if (type === "csv") this.savingCsv = true;
 
-      const url = `${this.apiBaseUrl}/save_roles?file=${this.filename}&type=${type}`;
+      const url = this.$api.url(`/save_roles?file=${this.filename}&type=${type}`);
 
       try {
         const resp = await this.$apiFetch(url);
