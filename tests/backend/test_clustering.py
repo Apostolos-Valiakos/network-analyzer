@@ -11,7 +11,8 @@ import os
 from unittest.mock import patch, MagicMock
 
 import pytest
-from app import db as _db, PCAP_GEN_OUTPUT_DIR, CLUSTERING_OUTPUT_DIR
+from models import db as _db
+from settings import PCAP_GEN_OUTPUT_DIR, CLUSTERING_OUTPUT_DIR
 from models import PcapFile, ClusterResult
 
 
@@ -151,7 +152,7 @@ class TestClustering:
 
     def test_clustering_success_returns_result(self, client, app, admin_user, admin_headers):
         _make_pcap(app, admin_user["id"], filename="real_for_cluster.pcap", create_file=True)
-        with patch("app.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
+        with patch("blueprints.clustering.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
             res = client.post(
                 "/clustering",
                 data=json.dumps({"file": "real_for_cluster.pcap", "clusters": 2}),
@@ -167,7 +168,7 @@ class TestClustering:
 
     def test_clustering_persists_result_to_db(self, client, app, admin_user, admin_headers):
         _make_pcap(app, admin_user["id"], filename="persist_test.pcap", create_file=True)
-        with patch("app.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
+        with patch("blueprints.clustering.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
             client.post(
                 "/clustering",
                 data=json.dumps({"file": "persist_test.pcap", "clusters": 2}),
@@ -203,7 +204,7 @@ class TestSuggestedClusters:
 
     def test_suggested_clusters_success(self, client, app, admin_user, admin_headers):
         _make_pcap(app, admin_user["id"], filename="suggest_test.pcap", create_file=True)
-        with patch("app.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
+        with patch("blueprints.clustering.analyze_pcap_for_clustering", return_value=MOCK_CLUSTER_RESULT):
             res = client.get(
                 "/suggested_clusters?file=suggest_test.pcap", headers=admin_headers
             )
@@ -234,7 +235,7 @@ class TestSaveResults:
 
     def test_save_results_success(self, client, admin_headers, monkeypatch, tmp_path):
         # keep test_save.csv / .json out of the real server/cluster_analysis
-        monkeypatch.setattr("app.CLUSTERING_OUTPUT_DIR", str(tmp_path))
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(tmp_path))
         results = [
             {"ip": "1.2.3.4", "cluster": 0, "bytes_sent": 100},
             {"ip": "5.6.7.8", "cluster": 1, "bytes_sent": 200},

@@ -22,4 +22,6 @@ RUN mkdir -p uploads generated_pcaps cluster_analysis results
 
 EXPOSE 5555
 
-CMD ["python3", "app.py"]
+# One worker: Socket.IO clients and the rate limiter live in process memory.
+# Threads serve concurrent requests and websockets.
+CMD ["sh", "-c", "exec gunicorn --workers 1 --threads 100 --timeout 120 --bind 0.0.0.0:${PORT:-5555} --access-logfile - wsgi:app"]

@@ -9,7 +9,7 @@ Unit tests for authentication endpoints:
 import json
 import pytest
 from werkzeug.security import generate_password_hash
-from app import db as _db
+from models import db as _db
 from models import User
 
 

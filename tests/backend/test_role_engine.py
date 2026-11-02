@@ -315,7 +315,7 @@ class TestParser:
 
 class TestCacheVersioning:
     def _make_pcap_record(self, app, path):
-        from app import db as _db
+        from models import db as _db
         from models import PcapFile
 
         with app.app_context():
@@ -331,7 +331,7 @@ class TestCacheVersioning:
             return rec.id
 
     def test_stale_version_rows_are_replaced(self, app, fresh_db, monkeypatch):
-        from app import db as _db
+        from models import db as _db
         from models import IpRole
         from role_engine import RoleAssessment
 
@@ -364,7 +364,7 @@ class TestCacheVersioning:
             }
 
     def test_current_version_rows_are_served_from_cache(self, app, fresh_db, monkeypatch):
-        from app import db as _db
+        from models import db as _db
         from models import IpRole
 
         path = "cache_hit_dummy.pcap"

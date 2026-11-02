@@ -90,14 +90,17 @@ _SERVER_DIR = os.path.abspath(
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-# ── 4. Import app (triggers _init_db with SQLite) ────────────────────────────
+# ── 4. Build the app; the fresh_db fixture creates the schema ────────────────
 import pytest
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import create_access_token
 
-from app import app as flask_app, db as _db, limiter as _limiter
-from models import User, PcapFile, ClusterResult, FlowStatistic, RoleSnapshot
+from app import create_app
+from extensions import limiter as _limiter
+from models import db as _db, User, PcapFile, ClusterResult, FlowStatistic, RoleSnapshot
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
+
+flask_app = create_app(init_database=False)
 
 # Disable rate limiting so tests can call endpoints freely. Flask-Limiter reads
 # RATELIMIT_ENABLED only at init, so setting the config here has no effect;
@@ -221,7 +224,7 @@ def pcap_in_db(app, fresh_db, admin_user):
     Copies sample.pcap into server/generated_pcaps/ and inserts a PcapFile row.
     Cleans up after the test.
     """
-    from app import PCAP_GEN_OUTPUT_DIR
+    from settings import PCAP_GEN_OUTPUT_DIR
 
     test_filename = "test_sample_fixture.pcap"
     dest_path = os.path.join(PCAP_GEN_OUTPUT_DIR, test_filename)

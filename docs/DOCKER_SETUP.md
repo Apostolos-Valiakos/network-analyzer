@@ -14,10 +14,12 @@ Docker and the app handle everything:
 | --------------------------------------------------------------- | ------------------------------------ | ----------------------------- |
 | Create the `network_analyzer` database                          | TimescaleDB container (via env vars) | On first `docker compose up`  |
 | Create the `postgres` superuser with your password              | TimescaleDB container                | On first `docker compose up`  |
-| Create all tables (`users`, `pcap_files`, `cluster_results`, …) | `app.py → db.create_all()`           | Every time the backend starts |
-| Enable TimescaleDB extension                                    | `app.py`                             | Every time the backend starts |
-| Create `flow_statistics` hypertable                             | `app.py`                             | Every time the backend starts |
-| Run `ALTER TABLE` column migrations                             | `app.py → _init_db()`                | Every time the backend starts |
+| Create all tables (`users`, `pcap_files`, `cluster_results`, …) | Alembic (`server/migrations/`)       | When the backend starts, if pending |
+| Apply later schema changes                                      | Alembic (`server/migrations/`)       | When the backend starts, if pending |
+| Enable TimescaleDB extension                                    | `db_setup.py`                        | Every time the backend starts |
+| Create `flow_statistics` hypertable                             | `db_setup.py`                        | Every time the backend starts |
+
+The backend container runs gunicorn (`wsgi:app`) with one worker and many threads.
 
 ---
 

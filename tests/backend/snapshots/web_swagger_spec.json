@@ -1,0 +1,2457 @@
+{
+  "data": {
+    "definitions": {},
+    "info": {
+      "description": "API documentation for the Network Traffic Analysis and PCAP Generation Service.",
+      "title": "Network Traffic Analysis API",
+      "version": "1.0.0"
+    },
+    "paths": {
+      "/analyze-saved-pcap/{filename}": {
+        "get": {
+          "description": "Runs a single-pass streaming analysis (packet count, per-IP protocol set, and conversation graph) on a PCAP file already owned by the caller (e.g. uploaded via /save-pcap). Lighter-weight than /automated-analysis — no role classification or UE session extraction, just traffic shape.\n",
+          "parameters": [
+            {
+              "description": "The name of the PCAP file to analyze (must belong to the caller).",
+              "example": "20260101120000_capture.pcap",
+              "in": "path",
+              "name": "filename",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Analysis successful, returning packet stats and conversation graph.",
+              "schema": {
+                "properties": {
+                  "analysis": {
+                    "properties": {
+                      "graph": {
+                        "description": "Force-directed graph of IP conversations (ECharts-shaped).",
+                        "properties": {
+                          "categories": {
+                            "example": [
+                              {
+                                "base": "IP",
+                                "keyword": {},
+                                "name": "IP"
+                              }
+                            ],
+                            "items": {
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "links": {
+                            "description": "One entry per IP pair that exchanged traffic.",
+                            "items": {
+                              "properties": {
+                                "source": {
+                                  "description": "Index into \"nodes\" for the first endpoint.",
+                                  "example": 0,
+                                  "type": "integer"
+                                },
+                                "target": {
+                                  "description": "Index into \"nodes\" for the second endpoint.",
+                                  "example": 1,
+                                  "type": "integer"
+                                },
+                                "value": {
+                                  "description": "Total packets exchanged between this pair, across all protocols.",
+                                  "example": 342,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "nodes": {
+                            "description": "One entry per unique IP.",
+                            "items": {
+                              "properties": {
+                                "category": {
+                                  "example": 0,
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "example": "10.0.0.1",
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "example": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "type": {
+                            "example": "force",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "ip_protocols": {
+                        "additionalProperties": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "description": "Map of IP address to the list of protocol/layer names seen for that IP (e.g. scapy layer names, or \"UNKNOWN(<proto>)\" for unrecognized IP protocol numbers).\n",
+                        "example": {
+                          "10.0.0.1": [
+                            "TCP",
+                            "TCP -> HTTP"
+                          ],
+                          "10.0.0.2": [
+                            "UDP"
+                          ]
+                        },
+                        "type": "object"
+                      },
+                      "total_packets": {
+                        "description": "Total packets read from the file.",
+                        "example": 18042,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "message": {
+                    "example": "Analysis successful",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "403": {
+              "description": "The PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "PCAP file not found (wrong filename, or not owned by the caller).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "File not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Error occurred while reading/parsing the PCAP.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Analyze Saved PCAP",
+          "tags": [
+            "Core Analysis"
+          ]
+        }
+      },
+      "/automated-analysis": {
+        "post": {
+          "consumes": [
+            "multipart/form-data"
+          ],
+          "description": "Uploads a PCAP file, saves it, and runs the full pipeline in one call: traffic/graph analysis, rule-based (or ML) IP role classification, and O-RAN UE session extraction (IMSI/GUTI). This is the \"one-shot\" entry point used by the Profiling step in the UI — for an already-uploaded file, /run_pipeline (roles only) or /analyze-saved-pcap (traffic only) are cheaper alternatives.\nRate limit: 5 requests per minute per authenticated user.\n",
+          "parameters": [
+            {
+              "description": "The PCAP file to upload. Must have a .pcap extension.",
+              "in": "formData",
+              "name": "file",
+              "required": true,
+              "type": "file"
+            },
+            {
+              "default": "rule_based",
+              "description": "The ML or rule-based model to use for role classification.",
+              "in": "formData",
+              "name": "model_name",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Full analysis report including roles, graph data, and file download links.",
+              "schema": {
+                "properties": {
+                  "analysis": {
+                    "properties": {
+                      "graph": {
+                        "description": "Force-directed conversation graph (same shape as /analyze-saved-pcap's \"graph\" field: type, categories, nodes[{name,value,category}], links[{source,target,value}]).\n",
+                        "type": "object"
+                      },
+                      "total_packets": {
+                        "example": 18042,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "csv": {
+                    "description": "Relative URL to download the classified roles as CSV.",
+                    "example": "/save_roles?file=20260101120000_capture&type=csv",
+                    "type": "string"
+                  },
+                  "filename": {
+                    "description": "The stored filename (timestamp-prefixed) — use with /run_pipeline, /clustering, etc.",
+                    "example": "20260101120000_capture.pcap",
+                    "type": "string"
+                  },
+                  "json": {
+                    "description": "Relative URL to download the classified roles as JSON.",
+                    "example": "/save_roles?file=20260101120000_capture&type=json",
+                    "type": "string"
+                  },
+                  "roles": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Map of IP address to its classified role string (plain string, not the {role, confidence, reasoning} object — use /run_pipeline if you need confidence/reasoning alongside the role).\n",
+                    "example": {
+                      "10.0.0.1": "gNB",
+                      "10.0.0.5": "AMF",
+                      "10.244.0.77": "NEAR_RT_RIC"
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Missing file part, no file selected, or the file isn't a .pcap.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Missing file part",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or invalid JWT Bearer token.",
+              "schema": {
+                "properties": {
+                  "msg": {
+                    "example": "Missing Authorization Header",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "429": {
+              "description": "Rate limit exceeded — more than 5 requests per minute.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "5 per 1 minute",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Pipeline processing failure — packet loading failed, role classification failed, or an unexpected exception. The uploaded PcapFile row is left in \"PROCESSING\" status; the transaction is rolled back so no partial results are persisted.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Automated PCAP Upload & Analysis",
+          "tags": [
+            "Core Analysis"
+          ]
+        }
+      },
+      "/clustering": {
+        "post": {
+          "description": "Groups the IPs in a PCAP into traffic-behavior clusters (agglomerative clustering over per-IP features: packets/bytes sent+received, unique partner count), auto-selects the cluster count that maximizes graph modularity (tested from 2 up to \"clusters\"), and flags small clusters as anomalous. Requires at least 2 unique IP endpoints in the file.\nAlso emits a WP5 \"PENM::Anomalous_Cluster\" notice per anomalous IP (best-effort; failures here never fail the request), and persists the result keyed by PCAP so a later GET to the same PCAP's ClusterResult returns this run's output.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "anomaly_threshold": {
+                    "default": 2,
+                    "description": "Clusters with size <= this value are flagged anomalous.",
+                    "example": 2,
+                    "type": "number"
+                  },
+                  "clusters": {
+                    "default": 4,
+                    "description": "Maximum cluster count to test (2-20 inclusive); the best-modularity k <= this value is used.",
+                    "example": 4,
+                    "type": "integer"
+                  },
+                  "file": {
+                    "description": "The filename of the PCAP to analyze (must belong to the caller).",
+                    "example": "20260101120000_capture.pcap",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Clustering analysis results.",
+              "schema": {
+                "properties": {
+                  "clusterSummary": {
+                    "description": "Same shape as GET /suggested_clusters's 200 response.",
+                    "properties": {
+                      "best_k": {
+                        "example": 3,
+                        "type": "integer"
+                      },
+                      "best_modularity": {
+                        "example": 0.4123,
+                        "type": "number"
+                      },
+                      "cluster_hierarchy": {
+                        "description": "One entry per cluster, sorted by importance score descending.",
+                        "items": {
+                          "properties": {
+                            "cluster": {
+                              "type": "integer"
+                            },
+                            "edge_density": {
+                              "type": "number"
+                            },
+                            "score": {
+                              "description": "Importance score: (edge_density * 0.7) + (traffic_score * 0.3).",
+                              "type": "number"
+                            },
+                            "size": {
+                              "description": "Number of IPs in this cluster.",
+                              "type": "integer"
+                            },
+                            "traffic_score": {
+                              "description": "log1p of total packets sent+received within the cluster.",
+                              "type": "number"
+                            },
+                            "unique_partners_sum": {
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "modularity_scores": {
+                        "description": "Modularity tested at every k from 2 up to \"clusters\".",
+                        "example": [
+                          {
+                            "k": 2,
+                            "modularity": 0.31
+                          },
+                          {
+                            "k": 3,
+                            "modularity": 0.4123
+                          }
+                        ],
+                        "items": {
+                          "properties": {
+                            "k": {
+                              "type": "integer"
+                            },
+                            "modularity": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "mostImportantCluster": {
+                        "description": "cluster id of the highest-scoring entry in cluster_hierarchy, or null if none.",
+                        "example": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "clusters": {
+                    "description": "One entry per IP, with its assigned cluster and anomaly flag.",
+                    "items": {
+                      "properties": {
+                        "anomaly": {
+                          "description": "True when this IP's cluster size is <= anomaly_threshold.",
+                          "example": true,
+                          "type": "boolean"
+                        },
+                        "cluster": {
+                          "example": 2,
+                          "type": "integer"
+                        },
+                        "ip": {
+                          "example": "10.0.0.7",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "graphData": {
+                    "description": "Force-directed graph, one node per IP, edges between IPs in the same cluster.",
+                    "properties": {
+                      "categories": {
+                        "example": [
+                          {
+                            "base": "IP",
+                            "keyword": {},
+                            "name": "Cluster 0"
+                          }
+                        ],
+                        "items": {
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "links": {
+                        "items": {
+                          "properties": {
+                            "source": {
+                              "type": "integer"
+                            },
+                            "target": {
+                              "type": "integer"
+                            },
+                            "value": {
+                              "example": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "nodes": {
+                        "items": {
+                          "properties": {
+                            "category": {
+                              "description": "Cluster id this node belongs to.",
+                              "example": 2,
+                              "type": "integer"
+                            },
+                            "name": {
+                              "example": "10.0.0.7",
+                              "type": "string"
+                            },
+                            "value": {
+                              "example": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "type": {
+                        "example": "force",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Missing JSON body, or \"clusters\"/\"anomaly_threshold\" out of the allowed range (clusters must be 2-20, anomaly_threshold must be >= 0).\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "clusters must be an integer between 2 and 20",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "403": {
+              "description": "The PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "PCAP file not found.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "PCAP not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Clustering process failed — commonly \"Not enough unique IP endpoints to cluster\" when the PCAP has fewer than 2 distinct IPs.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Run Agglomerative Clustering",
+          "tags": [
+            "Clustering"
+          ]
+        }
+      },
+      "/clustering-output/{filename}": {
+        "get": {
+          "description": "Downloads a clustering output file (CSV or JSON, as saved by POST /save-results) by its exact stored filename. Ownership is checked against the caller's JWT identity via the ClusterResult row.\n",
+          "parameters": [
+            {
+              "description": "The name of the file to retrieve, exactly as returned in \"download_url\" by POST /save-results.",
+              "example": "cluster_42.json",
+              "in": "path",
+              "name": "filename",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json",
+            "text/csv"
+          ],
+          "responses": {
+            "200": {
+              "description": "The requested file's raw content (JSON or CSV, per its extension)."
+            },
+            "403": {
+              "description": "The file exists but was saved by a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "No ClusterResult row matches this filename.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "File not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Download clustering result",
+          "tags": [
+            "Clustering"
+          ]
+        }
+      },
+      "/generated_pcaps/{filename}": {
+        "get": {
+          "description": "Downloads a previously uploaded/saved PCAP file as a binary attachment (not JSON). Ownership is checked against the caller's JWT identity.\n",
+          "parameters": [
+            {
+              "description": "The name of the generated PCAP file to download.",
+              "example": "20260101120000_capture.pcap",
+              "in": "path",
+              "name": "filename",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/vnd.tcpdump.pcap"
+          ],
+          "responses": {
+            "200": {
+              "description": "The requested PCAP file as a binary attachment (Content-Disposition header: attachment)."
+            },
+            "403": {
+              "description": "The PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "File not found in the generated directory, or no matching PcapFile row for this filename/user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "File not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Download Generated PCAP",
+          "tags": [
+            "PCAP Management"
+          ]
+        }
+      },
+      "/privacy-metrics": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Applies pseudonymisation, generalisation and suppression to the records, then returns k-anonymity, l-diversity, t-closeness, re-identification risk, PPI and utility loss.",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "identifiers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "records": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "sensitive_attribute": {
+                    "type": "string"
+                  },
+                  "transformations": {
+                    "properties": {
+                      "generalize": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "generalize_profiles": {
+                        "type": "object"
+                      },
+                      "pseudonymization_mode": {
+                        "enum": [
+                          "deterministic",
+                          "per_run",
+                          "per_pilot"
+                        ],
+                        "type": "string"
+                      },
+                      "pseudonymization_technique": {
+                        "enum": [
+                          "hmac_sha256",
+                          "sha256_salt",
+                          "random_token",
+                          "format_preserving_ip"
+                        ],
+                        "type": "string"
+                      },
+                      "pseudonymize": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "record_suppression_k": {
+                        "description": "Drop rows whose QI class has fewer than k rows (0 = off).",
+                        "type": "integer"
+                      },
+                      "suppress": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "suppress_thresholds": {
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "records",
+                  "identifiers"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Metrics computed."
+            },
+            "400": {
+              "description": "Invalid input."
+            }
+          },
+          "summary": "Privacy metrics with optional anonymisation transforms",
+          "tags": [
+            "Privacy"
+          ]
+        }
+      },
+      "/privacy-records/{filename}": {
+        "get": {
+          "description": "Builds one record per host from an uploaded PCAP (one tshark pass). GTP-U inner UE addresses get their own record; cut-off captures are accepted.",
+          "parameters": [
+            {
+              "description": "The name of the uploaded PCAP file.",
+              "in": "path",
+              "name": "filename",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "description": "Pilot label used for per-pilot pseudonymisation.",
+              "in": "query",
+              "name": "pilot",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Records with ip, mac, mac_vendor, subnet, scope, role, service_port, protocols, protocol_count, packets, bytes, tx_share, peer_count, first_seen_s, duration_s, pilot."
+            },
+            "404": {
+              "description": "PCAP file not found."
+            },
+            "500": {
+              "description": "tshark failed."
+            }
+          },
+          "summary": "Per-host privacy records",
+          "tags": [
+            "Privacy"
+          ]
+        }
+      },
+      "/run_pipeline": {
+        "post": {
+          "description": "Runs only the IP role assessment pipeline (evidence-based DPI role engine — see role_engine.py) on an already-uploaded PCAP, without the full /automated-analysis flow (no UE session extraction, no graph built here). Runs in a separate OS process with a 10-minute timeout. Optionally scope the analysis to a subset of IPs via \"selected_ips\".\nRate limit: 10 requests per minute per authenticated user.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "model_name": {
+                    "description": "Name of the model to use (e.g., rule_based).",
+                    "example": "rule_based",
+                    "type": "string"
+                  },
+                  "pcap_file_path": {
+                    "description": "Name of the PCAP file in the generated directory (must belong to the caller).",
+                    "example": "20260101120000_capture.pcap",
+                    "type": "string"
+                  },
+                  "selected_ips": {
+                    "description": "Optional list of specific IPs to restrict the analysis to.",
+                    "example": [
+                      "10.0.0.1",
+                      "10.0.0.5"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "pcap_file_path"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Pipeline executed successfully.",
+              "schema": {
+                "properties": {
+                  "ip_role_details": {
+                    "description": "Same content as \"ip_roles\" above (pre-merge source field from the pipeline).",
+                    "type": "object"
+                  },
+                  "ip_roles": {
+                    "additionalProperties": {
+                      "properties": {
+                        "confidence": {
+                          "example": 0.95,
+                          "type": "number"
+                        },
+                        "reasoning": {
+                          "example": "E2AP control-plane traffic observed as the RIC side of the association (SCTP dst 36422).",
+                          "type": "string"
+                        },
+                        "role": {
+                          "example": "NEAR_RT_RIC",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "description": "Map of IP address to its full classification — role, confidence (0.0-1.0), and human-readable reasoning citing the evidence used. (Note: /automated-analysis's \"roles\" field is NOT this shape — it's a plain {ip: role_string} map. This endpoint's \"ip_roles\" is the enriched object form.)\n",
+                    "example": {
+                      "10.244.0.77": {
+                        "confidence": 0.95,
+                        "reasoning": "E2AP control-plane traffic observed as the RIC side of the association (SCTP dst 36422).",
+                        "role": "NEAR_RT_RIC"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "most_frequent_class": {
+                    "description": "The role string with the highest IP count.",
+                    "example": "Unidentified",
+                    "type": "string"
+                  },
+                  "processing_time": {
+                    "description": "Wall-clock seconds the pipeline took.",
+                    "example": 4.87,
+                    "type": "number"
+                  },
+                  "rule_based_classification_summary": {
+                    "description": "One entry per distinct role found, with its member IPs.",
+                    "items": {
+                      "properties": {
+                        "class_name": {
+                          "example": "AMF",
+                          "type": "string"
+                        },
+                        "count": {
+                          "example": 1,
+                          "type": "integer"
+                        },
+                        "ips": {
+                          "example": [
+                            "10.0.0.5"
+                          ],
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "status": {
+                    "example": "success",
+                    "type": "string"
+                  },
+                  "total_classified": {
+                    "description": "Number of IPs that received a role assignment.",
+                    "example": 14,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "403": {
+              "description": "The PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "PCAP file not found.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "PCAP not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "429": {
+              "description": "Rate limit exceeded — more than 10 requests per minute.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "10 per 1 minute",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Pipeline failed — the response schema differs by failure mode. A packet-load failure gives {\"status\": \"failed\", \"message\": \"Failed to load packets.\"}; a worker exception gives {\"status\": \"failed\", \"message\": \"<exception text>\"}; a >600s run gives {\"status\": \"failed\", \"message\": \"Pipeline Timeout\"}; an error in the request handler itself gives {\"status\": \"error\", \"message\": \"Internal server error\"}.\n",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "example": "Failed to load packets.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "failed",
+                      "error"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Run IP Role Pipeline",
+          "tags": [
+            "Core Analysis"
+          ]
+        }
+      },
+      "/save-pcap": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Appends a chunk of base64-encoded raw packet bytes to a growing .pcap file on disk, identified by session_id (used as the live-capture streaming sink — e.g. from a browser-side capture session). The file is created with a fresh PCAP global header on the first chunk for a given session_id, and further chunks are appended. On the final chunk (is_final_chunk=true), the corresponding PcapFile DB row is created (if missing) or marked COMPLETED with its final file size.\nRate limit: 30 requests per minute per authenticated user.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "is_final_chunk": {
+                    "default": false,
+                    "description": "True on the last chunk — finalizes the PcapFile record.",
+                    "type": "boolean"
+                  },
+                  "packets": {
+                    "description": "List of base64-encoded raw packet payloads for this chunk.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "description": "Unique identifier for the current capture session — also becomes the base of the saved filename (\"<session_id>.pcap\").",
+                    "example": "live-capture-20260101",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "session_id",
+                  "packets"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Chunk processed successfully.",
+              "schema": {
+                "properties": {
+                  "filename": {
+                    "description": "The stored filename (\"<session_id>.pcap\") — only present when is_final_chunk is true, otherwise null.",
+                    "example": "live-capture-20260101.pcap",
+                    "type": "string"
+                  },
+                  "message": {
+                    "example": "Chunk processed",
+                    "type": "string"
+                  },
+                  "success": {
+                    "example": true,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Not JSON, or missing \"session_id\" / \"packets\" (packets must be an array, even if empty).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Missing session_id or packets",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Failed to write the chunk to disk, or a database error while updating the PcapFile record.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  },
+                  "success": {
+                    "example": false,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Save PCAP Stream",
+          "tags": [
+            "PCAP Management"
+          ]
+        }
+      },
+      "/save-results": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Saves an arbitrary tabular result set (typically the \"clusters\" array from POST /clustering, re-submitted by the frontend) to disk as both CSV and JSON under the clustering output directory, and registers both filenames as ClusterResult rows owned by the caller so they're downloadable via GET /clustering-output/{filename}.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "filename": {
+                    "description": "Base filename to save the results under (extension is added automatically).",
+                    "example": "cluster_42",
+                    "type": "string"
+                  },
+                  "results": {
+                    "description": "The tabular data/results to save — converted to a pandas DataFrame, so all rows should share the same keys.",
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "default": "json",
+                    "description": "Which of the two saved files the \"download_url\" in the response points to (both are always written).",
+                    "enum": [
+                      "json",
+                      "csv"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "filename",
+                  "results"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "File saved successfully, returning download URLs.",
+              "schema": {
+                "properties": {
+                  "download_url": {
+                    "description": "Relative URL — GET this to retrieve the file via /clustering-output/{filename}.",
+                    "example": "/clustering-output/cluster_42.json",
+                    "type": "string"
+                  },
+                  "message": {
+                    "example": "Saved",
+                    "type": "string"
+                  },
+                  "saved_file": {
+                    "description": "The filename of the format selected by \"type\".",
+                    "example": "cluster_42.json",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Missing \"filename\" in the request body.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Missing filename",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Server error while writing the files or updating the database.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Save Clustering Results",
+          "tags": [
+            "Clustering"
+          ]
+        }
+      },
+      "/save_roles": {
+        "get": {
+          "description": "Downloads the role-classification file for a specific analysis run (written to server/results/<base>.json by the role pipeline), in either JSON or CSV form. This is what the \"json\"/\"csv\" links returned by POST /automated-analysis point to. Ownership is checked against the corresponding \"<base>.pcap\" PcapFile row.\n",
+          "parameters": [
+            {
+              "description": "The base filename of the analysis run (with or without extension — only the stem is used).",
+              "example": "20260101120000_capture",
+              "in": "query",
+              "name": "file",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "default": "json",
+              "description": "The format to download the roles in.",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "in": "query",
+              "name": "type",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json",
+            "text/csv"
+          ],
+          "responses": {
+            "200": {
+              "description": "The requested roles file. Content shape is the rule_based_classification_summary array documented under POST /run_pipeline (class_name, count, ips per role).\n"
+            },
+            "400": {
+              "description": "The \"type\" parameter is neither \"json\" nor \"csv\".",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "type must be json or csv",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "403": {
+              "description": "The underlying PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "No matching PcapFile row, or the roles file doesn't exist on disk for this base name/format.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "File not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Download assigned IP roles",
+          "tags": [
+            "Core Analysis"
+          ]
+        }
+      },
+      "/start-analysis-from-websocket": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Connects out to an external WebSocket source (e.g. the sensor's raw packet publisher) for a fixed duration and captures the incoming traffic. Returns immediately once the client thread is confirmed started — it does not wait for the capture window to finish or return analysis results directly; use the regular PCAP-based endpoints afterward against whatever file this run produced.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "seconds": {
+                    "description": "Duration in seconds to capture traffic (1-3600).",
+                    "example": 60,
+                    "type": "integer"
+                  },
+                  "ws_url": {
+                    "description": "The WebSocket URL to connect to (e.g. the sensor's publisher.py).",
+                    "example": "ws://10.6.1.155:5002",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ws_url",
+                  "seconds"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "202": {
+              "description": "Pipeline started successfully.",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "example": "Pipeline started.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "example": "Accepted",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Missing \"ws_url\"/\"seconds\", \"seconds\" isn't a valid integer, or \"seconds\" is outside the 1-3600 range.\n",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "example": "seconds must be between 1 and 3600",
+                    "type": "string"
+                  },
+                  "status": {
+                    "example": "Error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Failed to connect to or start capturing from the given WebSocket URL.",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "example": "Failed to start.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "example": "Failed",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Start WebSocket Analysis",
+          "tags": [
+            "Streaming Analysis"
+          ]
+        }
+      },
+      "/suggested_clusters": {
+        "get": {
+          "description": "Runs a clustering pass up to 10 clusters (fixed anomaly_threshold=2) and returns only the modularity/importance summary — use this to preview the suggested cluster count and hierarchy before committing to a full POST /clustering call (which also persists the result and emits WP5 anomaly notices).\n",
+          "parameters": [
+            {
+              "description": "The filename of the PCAP to analyze (must belong to the caller).",
+              "example": "20260101120000_capture.pcap",
+              "in": "query",
+              "name": "file",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Summary containing the best 'k', modularity scores, and cluster hierarchy.",
+              "schema": {
+                "properties": {
+                  "best_k": {
+                    "description": "The cluster count (2-10) that produced the highest modularity score.",
+                    "example": 3,
+                    "type": "integer"
+                  },
+                  "best_modularity": {
+                    "example": 0.4123,
+                    "type": "number"
+                  },
+                  "cluster_hierarchy": {
+                    "description": "One entry per cluster (at best_k), sorted by importance score descending.",
+                    "items": {
+                      "properties": {
+                        "cluster": {
+                          "type": "integer"
+                        },
+                        "edge_density": {
+                          "type": "number"
+                        },
+                        "score": {
+                          "description": "Importance score: (edge_density * 0.7) + (traffic_score * 0.3).",
+                          "type": "number"
+                        },
+                        "size": {
+                          "description": "Number of IPs in this cluster.",
+                          "type": "integer"
+                        },
+                        "traffic_score": {
+                          "type": "number"
+                        },
+                        "unique_partners_sum": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "modularity_scores": {
+                    "description": "Modularity score tested at every k from 2 to 10.",
+                    "example": [
+                      {
+                        "k": 2,
+                        "modularity": 0.31
+                      },
+                      {
+                        "k": 3,
+                        "modularity": 0.4123
+                      },
+                      {
+                        "k": 4,
+                        "modularity": 0.38
+                      }
+                    ],
+                    "items": {
+                      "properties": {
+                        "k": {
+                          "type": "integer"
+                        },
+                        "modularity": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "mostImportantCluster": {
+                    "description": "cluster id of the highest-scoring entry in cluster_hierarchy, or null if none.",
+                    "example": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Missing \"file\" query parameter.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "file required",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "403": {
+              "description": "The PCAP exists but belongs to a different user.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "404": {
+              "description": "PCAP file not found.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "File not found",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Clustering analysis failed — commonly when the PCAP has fewer than 2 distinct IP endpoints.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Clustering analysis failed",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Get Suggested Clustering Parameters",
+          "tags": [
+            "Clustering"
+          ]
+        }
+      },
+      "/v1/ingest/zeek": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Receives batched conn.log-derived flow records from the Sensor's zeek_agent.py (not a browser client — internal-token auth, not JWT) and bulk-inserts them into the flow_statistics table (ON CONFLICT DO NOTHING, so re-sent/duplicate rows are silently ignored). Also emits real-time Socket.IO events: \"new_network_data\" with the raw flow batch on every call, and a \"network_alert\" event per flow that trips one of three built-in heuristics — a single flow over 5MB (\"Massive Data Transfer\", level error), a single flow over 5000 packets (\"Packet Flood Detected\", level warning), or conn_state \"REJ\" (\"Connection Rejected\", level warning).\nExempt from the global rate limiter (continuous ingest traffic).\n",
+          "parameters": [
+            {
+              "description": "Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.",
+              "in": "header",
+              "name": "X-Internal-Token",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "example": {
+                  "flows": [
+                    {
+                      "conn_state": "SF",
+                      "id.orig_h": "10.0.0.1",
+                      "id.resp_h": "10.0.0.5",
+                      "orig_bytes": 4096,
+                      "orig_pkts": 12,
+                      "proto": "tcp",
+                      "resp_bytes": 8192,
+                      "resp_pkts": 14,
+                      "ts": 1789111234.5,
+                      "uid": "Cabc123"
+                    }
+                  ]
+                },
+                "properties": {
+                  "flows": {
+                    "description": "Batch of Zeek conn.log-shaped flow records.",
+                    "items": {
+                      "properties": {
+                        "conn_state": {
+                          "example": "SF",
+                          "type": "string"
+                        },
+                        "id.orig_h": {
+                          "type": "string"
+                        },
+                        "id.resp_h": {
+                          "type": "string"
+                        },
+                        "orig_bytes": {
+                          "type": "integer"
+                        },
+                        "orig_pkts": {
+                          "type": "integer"
+                        },
+                        "proto": {
+                          "example": "tcp",
+                          "type": "string"
+                        },
+                        "resp_bytes": {
+                          "type": "integer"
+                        },
+                        "resp_pkts": {
+                          "type": "integer"
+                        },
+                        "ts": {
+                          "description": "Flow timestamp (Unix epoch). Defaults to current UTC time if omitted.",
+                          "type": "number"
+                        },
+                        "uid": {
+                          "description": "Zeek connection UID.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Batch inserted successfully, or an empty \"flows\" array was received (no-op, still 200).\n",
+              "schema": {
+                "properties": {
+                  "inserted": {
+                    "description": "Only present for a non-empty batch — number of rows inserted (duplicates counted, even though ON CONFLICT skips writing them).",
+                    "example": 50,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "description": "Only present for an empty batch.",
+                    "example": "empty",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or incorrect X-Internal-Token header.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Unauthorized",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Database insertion error. The transaction is rolled back.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "summary": "Ingest Zeek Flow Logs",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/network/export": {
+        "get": {
+          "description": "Same underlying flow_statistics data as GET /v1/network/statistics, but always returned as a file download (Content-Disposition: attachment) rather than an inline JSON array, and with an added \"conversations\" field summarizing the IP pair as text. Intended for the UI's \"Export Results\" download buttons.\n",
+          "parameters": [
+            {
+              "description": "Start timestamp (Unix epoch float). Defaults to 0.",
+              "example": 1789111200,
+              "in": "query",
+              "name": "start_time",
+              "required": false,
+              "type": "number"
+            },
+            {
+              "description": "End timestamp (Unix epoch float). Defaults to current time.",
+              "example": 1789114800,
+              "in": "query",
+              "name": "end_time",
+              "required": false,
+              "type": "number"
+            },
+            {
+              "description": "Maximum number of records to return (1-10000). Omit for no limit.",
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "type": "integer"
+            },
+            {
+              "default": "csv",
+              "description": "Response format.",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "in": "query",
+              "name": "format",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json",
+            "text/csv"
+          ],
+          "responses": {
+            "200": {
+              "description": "Returns the exported analytics data as a downloadable file (network_analytics_<start>_<end>.json or .csv).\n",
+              "schema": {
+                "items": {
+                  "properties": {
+                    "conn_state": {
+                      "example": "SF",
+                      "type": "string"
+                    },
+                    "conversations": {
+                      "description": "Concatenated \"id.orig_h <-> id.resp_h\" pair, for spreadsheet readability.",
+                      "example": "10.0.0.1 <-> 10.0.0.5",
+                      "type": "string"
+                    },
+                    "id.orig_h": {
+                      "example": "10.0.0.1",
+                      "type": "string"
+                    },
+                    "id.resp_h": {
+                      "example": "10.0.0.5",
+                      "type": "string"
+                    },
+                    "orig_bytes": {
+                      "example": 4096,
+                      "type": "integer"
+                    },
+                    "orig_pkts": {
+                      "example": 12,
+                      "type": "integer"
+                    },
+                    "proto": {
+                      "example": "tcp",
+                      "type": "string"
+                    },
+                    "resp_bytes": {
+                      "example": 8192,
+                      "type": "integer"
+                    },
+                    "resp_pkts": {
+                      "example": 14,
+                      "type": "integer"
+                    },
+                    "ts": {
+                      "example": 1789111234.5,
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "400": {
+              "description": "The \"limit\" parameter is out of the allowed 1-10000 range, or another request processing error.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "limit must be between 1 and 10000",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Export Analytics Data",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/network/pcap/headers": {
+        "get": {
+          "description": "Proxies a GET to the Sensor VM's \"/get-pcap\" endpoint with headers_only=true and the given time window, streaming back a payload-stripped PCAP slice (headers only, no packet bodies) — useful for lighter-weight timeframe inspection than the full-payload endpoint.\n",
+          "parameters": [
+            {
+              "description": "Start timestamp (Unix epoch, as a string) for the slice.",
+              "example": "1789111200",
+              "in": "query",
+              "name": "start_time",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "description": "End timestamp (Unix epoch, as a string) for the slice.",
+              "example": "1789114800",
+              "in": "query",
+              "name": "end_time",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/vnd.tcpdump.pcap"
+          ],
+          "responses": {
+            "200": {
+              "description": "A downloaded PCAP file (Content-Disposition: attachment; filename=headers_<start_time>.pcap) containing packet headers only.\n"
+            },
+            "502": {
+              "description": "The sensor responded, but not with HTTP 200.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Failed to retrieve PCAP from sensor",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "503": {
+              "description": "TCP connection to the sensor failed outright.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Sensor is unreachable",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "504": {
+              "description": "The sensor didn't respond within the 10-second timeout.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Sensor request timed out",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Get Timeframe PCAP (Headers Only)",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/network/pcap/latest/full": {
+        "get": {
+          "description": "Proxies a GET to the Sensor VM's own \"/get-pcap\" endpoint (SENSOR_URL env var + \"/get-pcap\") and streams back the most recent full-payload PCAP slice from the sensor's ring buffer, unmodified. This is a live pull from the sensor, not a stored file — every call gets whatever the sensor has right now.\n",
+          "produces": [
+            "application/vnd.tcpdump.pcap"
+          ],
+          "responses": {
+            "200": {
+              "description": "A downloaded PCAP file (Content-Disposition: attachment; filename=latest_full.pcap) containing full packet payloads.\n"
+            },
+            "502": {
+              "description": "The sensor responded, but not with HTTP 200 (its own error was proxied through as this generic message).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Failed to retrieve PCAP from sensor",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "503": {
+              "description": "TCP connection to the sensor failed outright (wrong SENSOR_URL, sensor process down, or network path broken between the app server and the Sensor VM).\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Sensor is unreachable",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "504": {
+              "description": "The sensor didn't respond within the 10-second timeout.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Sensor request timed out",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Get Latest Full Payload PCAP",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/network/roles/latest": {
+        "get": {
+          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows sharing the single latest \"ts\" value). This table is populated by a periodic snapshot scheduler; if it has never run, or the table is empty, the response is an empty result rather than an error.\n",
+          "parameters": [
+            {
+              "default": 1000,
+              "description": "Maximum number of records to return (1-10000).",
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "type": "integer"
+            },
+            {
+              "default": "csv",
+              "description": "Response format.",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "in": "query",
+              "name": "format",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json",
+            "text/csv"
+          ],
+          "responses": {
+            "200": {
+              "description": "Returns the latest role assessments. With format=json, a JSON array (empty array \"[]\" if no snapshot exists yet). With format=csv (default), a downloadable CSV — EXCEPT when no snapshot exists yet, in which case the response is the plain text \"No data\" (not CSV) at 200.\n",
+              "schema": {
+                "items": {
+                  "properties": {
+                    "confidence": {
+                      "example": 0.95,
+                      "type": "number"
+                    },
+                    "id.orig_h": {
+                      "description": "IP address (field name matches Zeek dot notation).",
+                      "example": "10.244.0.77",
+                      "type": "string"
+                    },
+                    "reasoning": {
+                      "example": "E2AP control-plane traffic observed as the RIC side of the association.",
+                      "type": "string"
+                    },
+                    "role": {
+                      "example": "NEAR_RT_RIC",
+                      "type": "string"
+                    },
+                    "ts": {
+                      "description": "Snapshot timestamp (Unix epoch).",
+                      "example": 1789111200,
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "400": {
+              "description": "The \"limit\" parameter is out of the allowed 1-10000 range.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "limit must be between 1 and 10000",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Internal server error (e.g. database query failure).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Get Latest Role Snapshot",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/network/statistics": {
+        "get": {
+          "description": "Retrieves raw flow records from the flow_statistics table (populated by POST /v1/ingest/zeek) within a time window, newest first. Field names use Zeek dot notation (\"id.orig_h\" etc.) to align with Grafana/Zeek dashboard conventions.\n",
+          "parameters": [
+            {
+              "description": "Start timestamp (Unix epoch float). Defaults to 0.",
+              "example": 1789111200,
+              "in": "query",
+              "name": "start_time",
+              "required": false,
+              "type": "number"
+            },
+            {
+              "description": "End timestamp (Unix epoch float). Defaults to current time.",
+              "example": 1789114800,
+              "in": "query",
+              "name": "end_time",
+              "required": false,
+              "type": "number"
+            },
+            {
+              "default": 1000,
+              "description": "Maximum number of records to return (1-10000).",
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "type": "integer"
+            },
+            {
+              "default": "csv",
+              "description": "Response format.",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "in": "query",
+              "name": "format",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "produces": [
+            "application/json",
+            "text/csv"
+          ],
+          "responses": {
+            "200": {
+              "description": "Returns the formatted network statistics (JSON array, or a downloadable CSV when format=csv).",
+              "schema": {
+                "items": {
+                  "properties": {
+                    "conn_state": {
+                      "description": "Zeek connection state code (e.g. SF, REJ, S0).",
+                      "example": "SF",
+                      "type": "string"
+                    },
+                    "id.orig_h": {
+                      "example": "10.0.0.1",
+                      "type": "string"
+                    },
+                    "id.resp_h": {
+                      "example": "10.0.0.5",
+                      "type": "string"
+                    },
+                    "orig_bytes": {
+                      "example": 4096,
+                      "type": "integer"
+                    },
+                    "orig_pkts": {
+                      "example": 12,
+                      "type": "integer"
+                    },
+                    "proto": {
+                      "example": "tcp",
+                      "type": "string"
+                    },
+                    "resp_bytes": {
+                      "example": 8192,
+                      "type": "integer"
+                    },
+                    "resp_pkts": {
+                      "example": 14,
+                      "type": "integer"
+                    },
+                    "ts": {
+                      "description": "Flow end timestamp (Unix epoch float).",
+                      "example": 1789111234.5,
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "400": {
+              "description": "Request processing error — invalid start_time/end_time/limit values, or a database error.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Get Network Statistics",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/scan/results": {
+        "get": {
+          "description": "Retrieves the results of the most recently dispatched Nmap scan from the Sensor VM. This endpoint is intended to be polled after calling POST /v1/scan/start.\nThe \"status\" field in the response drives the polling loop. A value of \"running\" means the scan is still in progress and the client should poll again in a few seconds. A value of \"completed\" means the scan finished and the \"results\" array contains the parsed Nmap output. A value of \"error\" means the scan failed on the VM; inspect the \"message\" field for details. A value of \"idle\" means no scan has been started yet, or the results have been cleared.\nThe frontend polls this endpoint on a 5-second interval and stops automatically when \"status\" reaches \"completed\" or \"error\". Polling faster than every 2 seconds is not recommended.\n",
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Current scan status and, when complete, the parsed results.",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "description": "Human-readable status message or error detail.",
+                    "example": "Scan completed successfully.",
+                    "type": "string"
+                  },
+                  "results": {
+                    "description": "List of scanned hosts. Present only when status is \"completed\". Each entry describes one host and its discovered open ports.\n",
+                    "items": {
+                      "properties": {
+                        "host": {
+                          "description": "IP address of the scanned host.",
+                          "example": "192.168.1.10",
+                          "type": "string"
+                        },
+                        "hostname": {
+                          "description": "Resolved hostname, if available.",
+                          "example": "gateway.local",
+                          "type": "string"
+                        },
+                        "ports": {
+                          "description": "List of discovered open ports and services.",
+                          "items": {
+                            "properties": {
+                              "cves": {
+                                "description": "CVE identifiers reported by the Vulners NSE script. Populated only when the \"vuln\" profile was used.\n",
+                                "example": [
+                                  "CVE-2023-38408",
+                                  "CVE-2021-41617"
+                                ],
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "port": {
+                                "example": 22,
+                                "type": "integer"
+                              },
+                              "protocol": {
+                                "example": "tcp",
+                                "type": "string"
+                              },
+                              "service": {
+                                "description": "Service name identified by Nmap.",
+                                "example": "ssh",
+                                "type": "string"
+                              },
+                              "state": {
+                                "example": "open",
+                                "type": "string"
+                              },
+                              "version": {
+                                "description": "Service version string. Populated when the \"deep\" or \"vuln\" profile was used.\n",
+                                "example": "OpenSSH 8.9p1 Ubuntu",
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "state": {
+                          "description": "Host reachability state reported by Nmap.",
+                          "example": "up",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "status": {
+                    "description": "Current state of the async Nmap job on the Sensor VM.",
+                    "enum": [
+                      "idle",
+                      "running",
+                      "completed",
+                      "error"
+                    ],
+                    "example": "completed",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or invalid JWT Bearer token.",
+              "schema": {
+                "properties": {
+                  "msg": {
+                    "example": "Missing Authorization Header",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "The Sensor VM could not be reached. Ensure pcap_server.py is running and network connectivity between the application server and the Sensor VM is intact.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Failed to reach VM",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Poll Nmap Scan Results",
+          "tags": [
+            "Active Probing"
+          ]
+        }
+      },
+      "/v1/scan/start": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Dispatches an active network probe to the Sensor VM, which runs Nmap asynchronously against the specified target(s). The request returns immediately with an acceptance acknowledgement; poll GET /v1/scan/results to retrieve the output once the scan completes.\nTwo targeting modes are supported. Pass a single \"target\" string (IP address, CIDR range, or hostname) for a single-target scan, or pass a \"targets\" array of IP addresses for a multi-target scan. Exactly one of the two fields must be present.\nThree scan profiles are available via the \"profile\" field. \"fast\" runs Nmap with the -F flag and scans the 100 most common ports (fastest option, completes in seconds). \"deep\" runs Nmap with -sV for service and version detection across all open ports (default). \"vuln\" combines version detection with the Vulners NSE script across the first 10000 ports, producing a list of known CVEs per service.\nAll string parameter values are validated against a strict allowlist (valid IPs, CIDRs, plain hostnames) before being forwarded to the Sensor VM. Shell metacharacters and encoded sequences are rejected with HTTP 400.\nRate limit is 5 requests per minute per authenticated user.\n",
+          "parameters": [
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "example": {
+                  "profile": "deep",
+                  "target": "192.168.1.0/24"
+                },
+                "properties": {
+                  "profile": {
+                    "default": "deep",
+                    "description": "Nmap scan profile. \"fast\" uses -F (100 common ports). \"deep\" uses -sV (version detection). \"vuln\" uses version detection plus the Vulners NSE script on 10000 ports.\n",
+                    "enum": [
+                      "fast",
+                      "deep",
+                      "vuln"
+                    ],
+                    "example": "deep",
+                    "type": "string"
+                  },
+                  "target": {
+                    "description": "Single scan target — an IP address, CIDR notation, or hostname. Mutually exclusive with \"targets\".\n",
+                    "example": "192.168.1.0/24",
+                    "type": "string"
+                  },
+                  "targets": {
+                    "description": "List of individual IP addresses to scan. Mutually exclusive with \"target\".\n",
+                    "example": [
+                      "10.0.0.1",
+                      "10.0.0.5",
+                      "10.0.0.12"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "202": {
+              "description": "Scan accepted and dispatched to the Sensor VM. Poll GET /v1/scan/results to retrieve results.\n",
+              "schema": {
+                "properties": {
+                  "message": {
+                    "example": "Nmap scan started.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "example": "accepted",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Invalid request. Returned when a parameter value contains shell metacharacters, an unrecognised character sequence, or fails IP / CIDR / hostname validation.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Invalid value for parameter 'target'",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or invalid JWT Bearer token.",
+              "schema": {
+                "properties": {
+                  "msg": {
+                    "example": "Missing Authorization Header",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "429": {
+              "description": "Rate limit exceeded — more than 5 requests per minute.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "5 per 1 minute",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "The Sensor VM could not be reached, or the VM returned an internal error. Ensure pcap_server.py is running on the Sensor VM and that the INTERNAL_TOKEN values match on both sides.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Failed to reach VM",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
+          "summary": "Start Asynchronous Nmap Scan",
+          "tags": [
+            "Active Probing"
+          ]
+        }
+      }
+    },
+    "securityDefinitions": {
+      "Bearer": {
+        "description": "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      }
+    },
+    "swagger": "2.0"
+  },
+  "recorded_with": {}
+}

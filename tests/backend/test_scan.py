@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 # Import the helper directly so we can unit-test it in isolation
-from app import _is_safe_scan_param
+from blueprints.scan import _is_safe_scan_param
 
 
 # ── _is_safe_scan_param ───────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ class TestStartScan:
         assert res.status_code == 400
 
     def test_start_scan_vm_unreachable_returns_500(self, client, admin_headers):
-        with patch("app.requests.post", side_effect=ConnectionError("VM down")):
+        with patch("blueprints.monitoring.requests.post", side_effect=ConnectionError("VM down")):
             res = client.post(
                 "/v1/scan/start",
                 data=json.dumps({"target": "10.0.0.1"}),
@@ -113,7 +113,7 @@ class TestStartScan:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"task_id": "abc123", "status": "queued"}
         mock_resp.status_code = 202
-        with patch("app.requests.post", return_value=mock_resp):
+        with patch("blueprints.monitoring.requests.post", return_value=mock_resp):
             res = client.post(
                 "/v1/scan/start",
                 data=json.dumps({"target": "10.0.0.1"}),
@@ -126,7 +126,7 @@ class TestStartScan:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "queued"}
         mock_resp.status_code = 202
-        with patch("app.requests.post", return_value=mock_resp):
+        with patch("blueprints.monitoring.requests.post", return_value=mock_resp):
             res = client.post(
                 "/v1/scan/start",
                 data=json.dumps({}),
@@ -144,7 +144,7 @@ class TestGetScanResults:
         assert res.status_code == 401
 
     def test_get_results_vm_unreachable_returns_500(self, client, admin_headers):
-        with patch("app.requests.get", side_effect=ConnectionError("VM down")):
+        with patch("blueprints.monitoring.requests.get", side_effect=ConnectionError("VM down")):
             res = client.get("/v1/scan/results", headers=admin_headers)
         assert res.status_code == 500
         assert "error" in res.get_json()
@@ -153,7 +153,7 @@ class TestGetScanResults:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"results": [{"host": "10.0.0.1", "ports": [22]}]}
         mock_resp.status_code = 200
-        with patch("app.requests.get", return_value=mock_resp):
+        with patch("blueprints.monitoring.requests.get", return_value=mock_resp):
             res = client.get("/v1/scan/results", headers=admin_headers)
         assert res.status_code == 200
         assert "results" in res.get_json()
@@ -162,6 +162,6 @@ class TestGetScanResults:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"error": "no results yet"}
         mock_resp.status_code = 404
-        with patch("app.requests.get", return_value=mock_resp):
+        with patch("blueprints.monitoring.requests.get", return_value=mock_resp):
             res = client.get("/v1/scan/results", headers=admin_headers)
         assert res.status_code == 404

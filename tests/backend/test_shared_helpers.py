@@ -102,7 +102,7 @@ class TestSettings:
 
 class TestFlowAlert:
     def test_large_transfer_is_error(self):
-        from app import flow_alert
+        from blueprints.monitoring import flow_alert
 
         alert = flow_alert("1.1.1.1", "2.2.2.2", 6_000_000, 10, "SF")
         assert alert == {
@@ -112,24 +112,24 @@ class TestFlowAlert:
         }
 
     def test_bytes_rule_wins_over_packets_and_rej(self):
-        from app import flow_alert
+        from blueprints.monitoring import flow_alert
 
         alert = flow_alert("a", "b", 6_000_000, 9_999, "REJ")
         assert alert["title"] == "Massive Data Transfer"
 
     def test_packet_flood_before_rejected(self):
-        from app import flow_alert
+        from blueprints.monitoring import flow_alert
 
         alert = flow_alert("a", "b", 10, 5_001, "REJ")
         assert alert["title"] == "Packet Flood Detected"
 
     def test_rejected_connection(self):
-        from app import flow_alert
+        from blueprints.monitoring import flow_alert
 
         alert = flow_alert("a", "b", 10, 1, "REJ")
         assert alert["message"] == "a attempted to connect to a closed port on b."
 
     def test_thresholds_are_exclusive_and_normal_flow_is_quiet(self):
-        from app import flow_alert
+        from blueprints.monitoring import flow_alert
 
         assert flow_alert("a", "b", 5_000_000, 5_000, "SF") is None

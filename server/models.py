@@ -1,8 +1,18 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 db = SQLAlchemy()
+
+
+# Times are stored as naive UTC.
+def utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utc_from_timestamp(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)
+
 
 # ==========================================
 # CORE & USER MODELS
@@ -15,7 +25,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     pcaps = db.relationship("PcapFile", backref="uploader", lazy=True)
     cluster_results = db.relationship("ClusterResult", backref="owner", lazy=True)
@@ -30,7 +40,7 @@ class PcapFile(db.Model):
     original_filename = db.Column(db.String(255), nullable=True)
     file_path = db.Column(db.String(512), nullable=False)
     file_size = db.Column(db.BigInteger)
-    upload_time = db.Column(db.DateTime, default=datetime.utcnow)
+    upload_time = db.Column(db.DateTime, default=utc_now)
     status = db.Column(db.String(50), default="PENDING")
     source = db.Column(db.String(20), default="upload")  # "upload" or "generated"
     analysis_result = db.Column(db.JSON, nullable=True)
@@ -137,7 +147,7 @@ class ClusterResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     filename = db.Column(db.String(255), nullable=False, unique=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
     result_json = db.Column(db.JSON, nullable=True)
     pcap_id = db.Column(db.String(36), db.ForeignKey("pcap_files.id", ondelete="SET NULL"), nullable=True)
     original_filename = db.Column(db.String(255), nullable=True)

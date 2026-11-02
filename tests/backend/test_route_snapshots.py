@@ -27,7 +27,8 @@ _SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-from app import db as _db, PCAP_GEN_OUTPUT_DIR
+from models import db as _db
+from settings import PCAP_GEN_OUTPUT_DIR
 from models import FlowStatistic, PcapFile, RoleSnapshot
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 
@@ -75,7 +76,8 @@ def pipeline_in_process(monkeypatch, tmp_path):
         _pipeline_worker(pcap_file_path, model_name, queue, selected_ips)
         return queue.items[0]
 
-    monkeypatch.setattr("app.run_ip_role_pipeline", run)
+    monkeypatch.setattr("blueprints.analysis.run_ip_role_pipeline", run)
+    monkeypatch.setattr("analysis_service.run_ip_role_pipeline", run)
     # the worker writes the role summary into settings.RESULTS_OUTPUT_DIR
     monkeypatch.setattr("settings.RESULTS_OUTPUT_DIR", str(tmp_path))
 

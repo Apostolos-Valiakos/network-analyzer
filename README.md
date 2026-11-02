@@ -135,7 +135,18 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The server starts on `http://127.0.0.1:5555`.
+The server starts on `http://127.0.0.1:5555` and applies any pending database
+migrations. Set `FLASK_DEBUG=1` for the Flask debugger; never on an exposed host.
+
+**Changing the database schema:** edit `models.py`, then from `server/` run
+
+```bash
+flask --app wsgi db migrate -m "describe the change"
+```
+
+Review the new file in `migrations/versions/` and commit it. The next server start
+applies it. A test (`test_models_match_the_migrations`) fails if a model changes
+without a migration.
 
 ### 3. Frontend
 
@@ -262,7 +273,16 @@ network-analyzer/
 │   └── admin/users.vue
 ├── plugins/             # Nuxt plugins (auth, api fetch wrapper)
 ├── server/
-│   ├── app.py           # Main Flask application
+│   ├── app.py           # Application factory and development entry point
+│   ├── wsgi.py          # Production entry point (gunicorn)
+│   ├── blueprints/      # HTTP routes, one module per area
+│   ├── access.py        # Login and ownership checks shared by routes
+│   ├── analysis_service.py  # Analysis steps shared by routes
+│   ├── db_setup.py      # Migrations, TimescaleDB, first admin at start-up
+│   ├── migrations/      # Alembic schema migrations
+│   ├── extensions.py    # Flask extensions (JWT, limiter, Socket.IO)
+│   ├── settings.py      # Output folders and sensor settings
+│   ├── packet_table.py  # One cached tshark pass per capture
 │   ├── models.py        # SQLAlchemy models
 │   ├── requirements.txt
 │   ├── docs/            # Swagger YAML definitions per endpoint

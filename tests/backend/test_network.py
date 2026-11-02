@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from app import db as _db
+from models import db as _db
 from models import FlowStatistic, RoleSnapshot
 
 
@@ -223,7 +223,7 @@ class TestIngestZeek:
         }
         mock_conn = MagicMock()
         with patch("psycopg2.connect", return_value=mock_conn), \
-             patch("app.execute_values"):
+             patch("blueprints.monitoring.execute_values"):
             res = client.post(
                 "/v1/ingest/zeek",
                 json={"flows": [flow]},
@@ -244,7 +244,7 @@ class TestIngestZeek:
         headers = {"X-Internal-Token": "test-secret-token"}
         mock_conn = MagicMock()
         with patch("psycopg2.connect", return_value=mock_conn), \
-             patch("app.execute_values"):
+             patch("blueprints.monitoring.execute_values"):
             client.post("/v1/ingest/zeek", json={"flows": [flow]}, headers=headers)
             res = client.post("/v1/ingest/zeek", json={"flows": [flow]}, headers=headers)
         assert res.status_code == 200

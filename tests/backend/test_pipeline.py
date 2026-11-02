@@ -9,7 +9,8 @@ import os
 from unittest.mock import patch
 
 import pytest
-from app import db as _db, PCAP_GEN_OUTPUT_DIR
+from models import db as _db
+from settings import PCAP_GEN_OUTPUT_DIR
 from models import PcapFile
 
 
@@ -90,7 +91,7 @@ class TestRunPipeline:
 
     def test_run_pipeline_success_returns_roles(self, client, app, admin_user, admin_headers):
         _make_pcap(app, admin_user["id"], filename="pipeline_real.pcap", create_file=True)
-        with patch("app.run_ip_role_pipeline", return_value=MOCK_PIPELINE_REPORT):
+        with patch("blueprints.analysis.run_ip_role_pipeline", return_value=MOCK_PIPELINE_REPORT):
             res = client.post(
                 "/run_pipeline",
                 data=json.dumps({"pcap_file_path": "pipeline_real.pcap", "model_name": "rule_based"}),
@@ -108,7 +109,7 @@ class TestRunPipeline:
         """run_pipeline_endpoint enriches ip_roles with the engine's real
         confidence/reasoning; IPs missing from details default to 0.0."""
         _make_pcap(app, admin_user["id"], filename="pipeline_conf.pcap", create_file=True)
-        with patch("app.run_ip_role_pipeline", return_value=MOCK_PIPELINE_REPORT):
+        with patch("blueprints.analysis.run_ip_role_pipeline", return_value=MOCK_PIPELINE_REPORT):
             res = client.post(
                 "/run_pipeline",
                 data=json.dumps({"pcap_file_path": "pipeline_conf.pcap", "model_name": "rule_based"}),
@@ -129,7 +130,7 @@ class TestRunPipeline:
 
     def test_run_pipeline_error_from_service_returns_500(self, client, app, admin_user, admin_headers):
         _make_pcap(app, admin_user["id"], filename="pipeline_err.pcap", create_file=True)
-        with patch("app.run_ip_role_pipeline", side_effect=RuntimeError("oops")):
+        with patch("blueprints.analysis.run_ip_role_pipeline", side_effect=RuntimeError("oops")):
             res = client.post(
                 "/run_pipeline",
                 data=json.dumps({"pcap_file_path": "pipeline_err.pcap", "model_name": "rule_based"}),
@@ -190,7 +191,7 @@ class TestStartAnalysisFromWebsocket:
         assert res.status_code == 400
 
     def test_ws_success_returns_202(self, client, admin_headers):
-        with patch("app.startWebSocketClient", return_value=True):
+        with patch("blueprints.analysis.startWebSocketClient", return_value=True):
             res = client.post(
                 "/start-analysis-from-websocket",
                 data=json.dumps({"ws_url": "ws://localhost:5002", "seconds": 30}),
@@ -199,7 +200,7 @@ class TestStartAnalysisFromWebsocket:
         assert res.status_code == 202
 
     def test_ws_client_failure_returns_500(self, client, admin_headers):
-        with patch("app.startWebSocketClient", return_value=False):
+        with patch("blueprints.analysis.startWebSocketClient", return_value=False):
             res = client.post(
                 "/start-analysis-from-websocket",
                 data=json.dumps({"ws_url": "ws://localhost:5002", "seconds": 30}),
@@ -208,7 +209,7 @@ class TestStartAnalysisFromWebsocket:
         assert res.status_code == 500
 
     def test_ws_seconds_boundary_1_accepted(self, client, admin_headers):
-        with patch("app.startWebSocketClient", return_value=True):
+        with patch("blueprints.analysis.startWebSocketClient", return_value=True):
             res = client.post(
                 "/start-analysis-from-websocket",
                 data=json.dumps({"ws_url": "ws://localhost:5002", "seconds": 1}),
@@ -217,7 +218,7 @@ class TestStartAnalysisFromWebsocket:
         assert res.status_code == 202
 
     def test_ws_seconds_boundary_3600_accepted(self, client, admin_headers):
-        with patch("app.startWebSocketClient", return_value=True):
+        with patch("blueprints.analysis.startWebSocketClient", return_value=True):
             res = client.post(
                 "/start-analysis-from-websocket",
                 data=json.dumps({"ws_url": "ws://localhost:5002", "seconds": 3600}),

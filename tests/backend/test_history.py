@@ -16,7 +16,8 @@ import tempfile
 from datetime import datetime
 
 import pytest
-from app import db as _db, PCAP_GEN_OUTPUT_DIR, CLUSTERING_OUTPUT_DIR
+from models import db as _db
+from settings import PCAP_GEN_OUTPUT_DIR, CLUSTERING_OUTPUT_DIR
 from models import PcapFile, ClusterResult
 
 

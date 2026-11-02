@@ -4,6 +4,7 @@ pipeline worker's handling of an unreadable capture.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 
@@ -14,6 +15,7 @@ if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
 import packet_table
+import settings
 from packet_table import _outer_ports
 from snapshot_utils import tshark_version
 
@@ -154,49 +156,48 @@ def test_worker_reports_missing_tshark(app, fresh_db, tmp_path, monkeypatch):
     assert queue.items[0] == {"status": "failed", "message": "Failed to load packets: tshark not found"}
 
 
-def test_main_process_is_not_a_worker():
-    from app import _is_pipeline_worker
-
-    assert _is_pipeline_worker() is False
-
-
 _SPAWN_SCRIPT = """
-import multiprocessing as mp
 import sys
 sys.path.insert(0, {server!r})
-import app  # imported as __mp_main__'s dependency, as in the real child
-
-def child():
-    print("child-flag", app._is_pipeline_worker(), flush=True)
+from app import create_app
+from Preprocess import run_ip_role_pipeline
 
 if __name__ == "__main__":
-    print("parent-flag", app._is_pipeline_worker(), flush=True)
-    mp.set_start_method("spawn")
-    p = mp.Process(target=child)
-    p.start()
-    p.join()
-else:
-    print("import-in-child-flag", __name__, app._is_pipeline_worker(), flush=True)
+    create_app()
+    report = run_ip_role_pipeline({pcap!r}, "rule_based")
+    print("status", report["status"], "roles", len(report["ip_roles"]), flush=True)
 """
 
 
 @pytest.mark.integration
-def test_spawned_child_skips_database_setup(tmp_path):
-    """A real spawned child: the guard must hold while the main module is being
-    re-imported, before multiprocessing.parent_process() is available."""
+@needs_tshark
+def test_real_child_process_runs_pipeline_without_database_setup(tmp_path, capture_copy):
+    """A real child process, started the way the server starts it: the role
+    cache works, and start-up work happens only in the parent."""
     script = tmp_path / "spawn_probe.py"
-    script.write_text(_SPAWN_SCRIPT.format(server=_SERVER_DIR))
+    pcap = tmp_path / "spawn_probe_capture.pcap"
+    shutil.copy(capture_copy("sample.pcap"), pcap)
+    script.write_text(_SPAWN_SCRIPT.format(server=_SERVER_DIR, pcap=str(pcap)))
     env = dict(
         os.environ,
         DATABASE_URL="sqlite:///" + str(tmp_path / "probe.db").replace("\\", "/"),
         JWT_SECRET_KEY="spawn-probe-secret-spawn-probe-secret",
+        WP5_NOTICE_LOG=str(tmp_path / "wp5.log"),
     )
-    result = subprocess.run(
-        [sys.executable, str(script)], capture_output=True, text=True,
-        encoding="utf-8", errors="replace", env=env, timeout=120, cwd=str(tmp_path),
-    )
-    assert "parent-flag False" in result.stdout, result.stderr[-800:]
-    assert "import-in-child-flag __mp_main__ True" in result.stdout
-    assert "child-flag True" in result.stdout
-    # Setup logs this once per run on SQLite, so once means only the parent ran it.
-    assert (result.stdout + result.stderr).count("Schema migration skipped") == 1
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script)], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", env=env, timeout=120, cwd=str(tmp_path),
+        )
+    finally:
+        # A real child writes its role summary to the real results folder.
+        for extension in ("json", "csv"):
+            summary = os.path.join(settings.RESULTS_OUTPUT_DIR, f"spawn_probe_capture.{extension}")
+            if os.path.exists(summary):
+                os.remove(summary)
+    output = result.stdout + result.stderr
+    assert "status success roles 3" in result.stdout, output[-1500:]
+    # Alembic logs this once per upgrade; a second line would mean the child ran it too.
+    assert output.count("Running upgrade") <= 1
+    assert "Traceback" not in output
+    assert "Loading roles" in output

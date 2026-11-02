@@ -6,13 +6,12 @@ import time
 import multiprocessing as mp
 import csv
 import json
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 import packet_table
 import settings
 from rrc_utils import get_cached_packets
+from db_setup import database_only_app
 from role_engine import get_or_compute_roles, roles_as_strings
 
 
@@ -48,9 +47,14 @@ class FeatureEngineer:
     """
     Transforms raw packet data into structured dataset for ML.
     REFACTOR: Uses Numpy vectorization instead of slow Pandas .iloc loops.
+
+    pandas and scikit-learn are imported here, not at module level: the pipeline
+    child process imports this module and does not need them.
     """
 
     def __init__(self, raw_data, ip_roles):
+        from sklearn.preprocessing import LabelEncoder
+
         self.raw_data = raw_data
         self.ip_roles = ip_roles
         self.sequence_length = 5
@@ -60,6 +64,9 @@ class FeatureEngineer:
         self.label_encoder = LabelEncoder()
 
     def run_preprocessing(self):
+        import pandas as pd
+        from sklearn.preprocessing import StandardScaler
+
         if not self.raw_data:
             return None, None, None, None
 
@@ -139,9 +146,7 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
     Worker process to run the analysis in the background without blocking Flask.
     """
     try:
-        from app import app
-
-        with app.app_context():
+        with database_only_app().app_context():
             start_time = time.time()
 
             # 1. Make sure tshark can read the capture. The role engine treats
@@ -241,14 +246,7 @@ def _run_pipeline_blocking(pcap_file_path, model_name, selected_ips=None):
 
 def run_ip_role_pipeline(pcap_file_path, model_name, selected_ips=None):
     """
-    Entry point called by app.py.
-    Runs the blocking subprocess in a real OS thread via eventlet.tpool so
-    the Eventlet event loop is not blocked while the pipeline executes.
+    Entry point for the routes. Socket.IO runs in threading mode, so blocking
+    this request thread while the child process works affects no other request.
     """
-    try:
-        import eventlet.tpool
-        return eventlet.tpool.execute(
-            _run_pipeline_blocking, pcap_file_path, model_name, selected_ips
-        )
-    except ImportError:
-        return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)
+    return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "allow_headers": [
+      "authorization",
+      "content-type"
+    ],
+    "allow_methods": [
+      "DELETE",
+      "GET",
+      "OPTIONS",
+      "POST",
+      "PUT"
+    ],
+    "allow_origin": "http://localhost",
+    "disallowed_allow_origin": null,
+    "disallowed_status": 200,
+    "status": 200
+  },
+  "recorded_with": {}
+}
