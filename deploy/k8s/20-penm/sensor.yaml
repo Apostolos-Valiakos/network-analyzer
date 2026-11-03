@@ -1,0 +1,88 @@
+# PENM capture sensor. hostNetwork puts it in the node's network namespace,
+# where interface "any" includes every pod's virtual link (lxc* with Cilium),
+# so it sees the traffic between the 5G pods. Its ports open on the VM itself:
+#   5005  pcap_server.py (slices + Nmap), token-protected
+#   5002  publisher.py (Real Time page), NO authentication yet: keep the VM's
+#         network trusted until the Real Time refactor adds it
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: penm-sensor-data
+  namespace: team-penm
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 200Gi     # 24 h of hourly ring files; size to the traffic rate
+---
+# Lets the backend reach pcap_server by name. The endpoint is the node IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: penm-sensor
+  namespace: team-penm
+spec:
+  selector:
+    app: penm-sensor
+  ports:
+    - name: api
+      port: 5005
+      targetPort: 5005
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: penm-sensor
+  namespace: team-penm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate     # host ports 5002/5005 can only be held once
+  selector:
+    matchLabels:
+      app: penm-sensor
+  template:
+    metadata:
+      labels:
+        app: penm-sensor
+        app.kubernetes.io/part-of: penm
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet   # resolve Service names despite hostNetwork
+      containers:
+        - name: sensor
+          image: penm-sensor:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add: ["NET_RAW", "NET_ADMIN"]   # dumpcap, Zeek, Nmap, scapy
+          env:
+            - name: CAPTURE_INTERFACE
+              value: any
+            - name: EXCLUDE_DNS
+              value: penm-capture-exclude.team-penm.svc.cluster.local
+            # Kubernetes control plane (6443, 2379-2380, 10250, 10257, 10259),
+            # Cilium health/Hubble (4240, 4244), SSH (22) and PENM's own
+            # NodePorts and sensor ports.
+            - name: EXCLUDE_PORTS
+              value: "6443 2379 2380 10250 10257 10259 4240 4244 22 30080 30555 5005 5002"
+            - name: RETENTION_MINUTES
+              value: "1440"
+            - name: RING_SECONDS
+              value: "3600"
+            - name: ENABLE_PUBLISHER
+              value: "true"
+            - name: HOST_API_URL
+              value: http://penm-backend.team-penm.svc.cluster.local:5555/v1/ingest/zeek
+            - name: SECRET_TOKEN
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: SECRET_TOKEN }
+          volumeMounts:
+            - { name: data, mountPath: /app/sensor/generated_pcaps, subPath: pcaps }
+            - { name: data, mountPath: /var/lib/penm-sensor/zeek, subPath: zeek }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: penm-sensor-data

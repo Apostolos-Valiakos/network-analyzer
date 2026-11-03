@@ -1,0 +1,265 @@
+# Open5GS 2.7.6 configuration, from the testbed's /etc/open5gs (E:\testbed_configs).
+# Changes from those files, all forced by running in pods:
+#   - servers bind to the pod interface (dev: eth0) instead of 127.0.0.x /
+#     10.16.0.82, clients use Kubernetes DNS names
+#   - SMF -> UPF uses the UPF pod's IP (filled in by render.sh). The old file
+#     pointed at 10.6.2.8 while the UPF listened on 10.16.0.82, which is a
+#     likely reason the TRB500 registered but got no data.
+#   - logs go to the container output (kubectl logs), metrics are off
+#   - IPv4 UE pool only; freeDiameter (4G only) removed from the SMF
+# Unchanged: PLMN 999/70, TAC 1, AMF region/set, slices sst 1 sd 010203 and
+# 020304, security algorithm order, timers, UE pool 10.45.0.0/16.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open5gs-config
+  namespace: team-5g
+data:
+  nrf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    nrf:
+      serving:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+
+  scp.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    scp:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          nrf:
+            - uri: http://open5gs-nrf.team-5g.svc.cluster.local:7777
+
+  ausf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    ausf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+
+  udm.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    udm:
+      # Home-network keys for SUCI de-concealment, mounted from the
+      # open5gs-hnet Secret (copied from the current core's /etc/open5gs/hnet).
+      hnet:
+        - id: 1
+          scheme: 1
+          key: /etc/open5gs/hnet/curve25519-1.key
+        - id: 2
+          scheme: 2
+          key: /etc/open5gs/hnet/secp256r1-2.key
+        - id: 3
+          scheme: 1
+          key: /etc/open5gs/hnet/curve25519-3.key
+        - id: 4
+          scheme: 2
+          key: /etc/open5gs/hnet/secp256r1-4.key
+        - id: 5
+          scheme: 1
+          key: /etc/open5gs/hnet/curve25519-5.key
+        - id: 6
+          scheme: 2
+          key: /etc/open5gs/hnet/secp256r1-6.key
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+
+  udr.yaml: |
+    db_uri: mongodb://open5gs-mongodb.team-5g.svc.cluster.local/open5gs
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    udr:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+
+  pcf.yaml: |
+    db_uri: mongodb://open5gs-mongodb.team-5g.svc.cluster.local/open5gs
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    pcf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+
+  nssf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    nssf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+          nsi:
+            - uri: http://open5gs-nrf.team-5g.svc.cluster.local:7777
+              s_nssai:
+                sst: 1
+
+  bsf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    bsf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+
+  amf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    amf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+      ngap:
+        server:
+          - dev: eth0
+      guami:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+          amf_id:
+            region: 2
+            set: 1
+      tai:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+          tac: 1
+      plmn_support:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+          s_nssai:
+            - sst: 1
+              sd: 0x010203
+            - sst: 1
+              sd: 0x020304
+      security:
+        integrity_order : [ NIA2, NIA1, NIA0 ]
+        ciphering_order : [ NEA0, NEA1, NEA2 ]
+      network_name:
+        full: Open5GS
+        short: Next
+      amf_name: open5gs-amf0
+      time:
+        t3512:
+          value: 540
+
+  # Template: ${UPF_IP} is filled in by render.sh when the pod starts.
+  smf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    smf:
+      sbi:
+        server:
+          - dev: eth0
+            port: 7777
+        client:
+          scp:
+            - uri: http://open5gs-scp.team-5g.svc.cluster.local:7777
+      pfcp:
+        server:
+          - dev: eth0
+        client:
+          upf:
+            - address: ${UPF_IP}
+      gtpc:
+        server:
+          - address: 127.0.0.4
+      gtpu:
+        server:
+          - address: 127.0.0.4
+      session:
+        - subnet: 10.45.0.0/16
+          gateway: 10.45.0.1
+      dns:
+        - 8.8.8.8
+        - 8.8.4.4
+      mtu: 1400
+
+  upf.yaml: |
+    logger:
+      level: info
+    global:
+      max:
+        ue: 1024
+    upf:
+      pfcp:
+        server:
+          - dev: eth0
+      gtpu:
+        server:
+          - dev: eth0
+      session:
+        - subnet: 10.45.0.0/16
+          gateway: 10.45.0.1

@@ -1,0 +1,31 @@
+# kubeadm configuration for the single-node test cluster.
+#   sudo kubeadm init --config kubeadm-config.yaml
+#
+# Replace 10.16.0.90 with the VM's static IP (three places). Same as SMTEC's
+# `kubeadm init --control-plane-endpoint=<static_ip>`, plus:
+#   - podSubnet 10.244.0.0/16: Cilium's own default (10.0.0.0/8) would overlap
+#     the lab network 10.16.0.0/22 and the UE pool 10.45.0.0/16
+#   - the static CPU manager, so the DU pod gets whole, dedicated CPUs
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.16.0.90
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+clusterName: xtrust6g-testbed
+controlPlaneEndpoint: "10.16.0.90:6443"
+networking:
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/12
+  dnsDomain: cluster.local
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+# CPUs 0-1 stay with the OS and Kubernetes; Guaranteed pods (the DU) get
+# exclusive cores from the rest.
+cpuManagerPolicy: static
+reservedSystemCPUs: "0-1"
