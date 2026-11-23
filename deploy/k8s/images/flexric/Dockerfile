@@ -15,8 +15,14 @@ ARG E2AP_VERSION=E2AP_V2
 ARG KPM_VERSION=KPM_V2_03
 ENV DEBIAN_FRONTEND=noninteractive
 
+# pkg-config: cmake uses it to find libraries. libmysqlclient-dev: the C xApp
+# code is built with its default MySQL database support (MYSQL_XAPP).
+# libconfig-dev: FlexRIC reads its .conf files with libconfig.
+# gcc-12/g++-12: Ubuntu 22.04's default gcc 11 crashes (internal compiler
+# error) on src/sm/mac_sm/dec/mac_dec_generic.h.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake git ca-certificates libsctp-dev gettext-base iproute2 \
+        pkg-config libmysqlclient-dev libconfig-dev gcc-12 g++-12 \
     && rm -rf /var/lib/apt/lists/*
 
 # XAPP_MULTILANGUAGE=OFF skips the SWIG/Python xApp bindings: no xApps run in
@@ -25,6 +31,7 @@ RUN git clone https://gitlab.eurecom.fr/mosaic5g/flexric.git /src/flexric \
     && cd /src/flexric && git checkout "${FLEXRIC_COMMIT}" \
     && mkdir build && cd build \
     && cmake .. -DCMAKE_BUILD_TYPE=Release -DXAPP_MULTILANGUAGE=OFF \
+        -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 \
         -DE2AP_VERSION="${E2AP_VERSION}" -DKPM_VERSION="${KPM_VERSION}" \
     && make -j"$(nproc)" \
     && make install \

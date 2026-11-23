@@ -21,9 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libfftw3-dev libmbedtls-dev libsctp-dev libyaml-cpp-dev libgtest-dev \
         gettext-base iproute2 iputils-ping \
     && add-apt-repository -y ppa:ettusresearch/uhd \
-    && apt-get update && apt-get install -y --no-install-recommends libuhd-dev uhd-host \
+    && apt-get update && apt-get install -y --no-install-recommends libuhd-dev uhd-host libboost-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# libboost-dev: UHD's headers include Boost, and --no-install-recommends
+# leaves it out.
 # B200-series FPGA/firmware images, loaded onto the B210 when the DU starts.
 RUN uhd_images_downloader -t b2xx
 
