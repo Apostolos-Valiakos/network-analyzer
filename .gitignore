@@ -107,7 +107,10 @@ uploads
 db_backup.sql
 .env.local
 .env.*.local
-tests/
+# Test artefacts (the tests themselves are tracked)
+tests/backend/test_penm.db
+__pycache__/
+.pytest_cache/
 
 # R13 integration secrets / generated test artifacts — never commit these
 r13/
@@ -121,3 +124,6 @@ r13/testing/manager_test_key.pub
 
 
 docs/
+# tshark extraction caches, written next to each capture
+*.packets.tsv
+*.features.tsv

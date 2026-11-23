@@ -2,8 +2,8 @@
   <div class="dark-page-container">
     <v-snackbar v-model="snackbar" :color="snackbarType" timeout="3000">
       {{ snackbarText }}
-      <template v-slot:actions>
-        <v-btn color="white" variant="text" @click="snackbar = false">
+      <template v-slot:action="{ attrs }">
+        <v-btn color="white" text v-bind="attrs" @click="snackbar = false">
           Close
         </v-btn>
       </template>
@@ -94,7 +94,7 @@
               "
               class="flex-grow-1"
               hide-details
-              @update:model-value="setCaptureInterface"
+              @change="setCaptureInterface"
             ></v-select>
           </div>
 
@@ -233,7 +233,6 @@ export default {
   data() {
     return {
       wsUrl: process.env.WS_URL || "ws://127.0.0.1:5002",
-      apiUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       chunkSize: 500,
 
       // State
@@ -405,7 +404,7 @@ export default {
       this.uploadQueue = [];
 
       try {
-        const res = await this.$apiFetch(`${this.apiUrl}/save-pcap`, {
+        const res = await this.$apiFetch(this.$api.url(`/save-pcap`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -417,7 +416,7 @@ export default {
         const data = await res.json();
         if (isFinal && data.filename) {
           this.filename = data.filename;
-          this.downloadLink = `${this.apiUrl}/generated_pcaps/${this.filename}`;
+          this.downloadLink = this.$api.url(`/generated_pcaps/${this.filename}`);
           this.showSnackbar("PCAP Generated Successfully", "success");
           this.isGenerating = false;
         }
@@ -462,7 +461,7 @@ export default {
       }
 
       const res = await this.$apiFetch(
-        `${this.apiUrl}/analyze-saved-pcap/${this.filename}`
+        this.$api.url(`/analyze-saved-pcap/${this.filename}`)
       );
       const data = await res.json();
       this.graphData = data.analysis.graph;

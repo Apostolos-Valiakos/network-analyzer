@@ -1,0 +1,26 @@
+# Addresses the browser uses. Replace 10.16.0.90 with the VM's IP. The same
+# values must be passed as build args to the frontend image (the Nuxt bundle
+# has them built in): see scripts/build-images.sh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: penm-settings
+  namespace: team-penm
+data:
+  API_BASE_URL: "http://10.16.0.90:30555"
+  WS_URL: "ws://10.16.0.90:5002"
+  ALLOWED_ORIGINS: "http://10.16.0.90:30080"
+---
+# Resolves to the IP of every PENM pod labelled penm.capture/exclude=true
+# (backend, database, frontend). The sensor reads it every 30 s and leaves
+# those IPs out of the capture, so PENM does not record its own traffic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: penm-capture-exclude
+  namespace: team-penm
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    penm.capture/exclude: "true"

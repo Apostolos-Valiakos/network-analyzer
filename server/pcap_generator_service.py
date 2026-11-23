@@ -1,13 +1,16 @@
-import os
 import base64
+import logging
+import os
 import struct
 import time
 from typing import List, Union
 
-# Resolve path relative to this file so it always points to
-# server/generated_pcaps/ regardless of where Flask is launched from.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-PCAP_OUTPUT_DIR = os.path.join(_HERE, "generated_pcaps")
+import settings
+
+logger = logging.getLogger(__name__)
+
+# Module-level name kept so tests can monkeypatch it.
+PCAP_OUTPUT_DIR = settings.PCAP_GEN_OUTPUT_DIR
 os.makedirs(PCAP_OUTPUT_DIR, exist_ok=True)
 
 # PCAP global header — written once at the start of each new file.
@@ -49,11 +52,13 @@ def handle_pcap_chunk(
                     continue
                 try:
                     pkt_bytes = base64.b64decode(b64_pkt)
-                    f.write(_pcap_packet_header(len(pkt_bytes)))
-                    f.write(pkt_bytes)
-                except Exception as e:
-                    print(f"Error decoding packet: {e}")
+                except ValueError as e:  # binascii.Error: not valid base64
+                    logger.warning("Skipping a packet that is not valid base64: %s", e)
                     continue
+                # Write errors (disk full, ...) are real failures: the outer
+                # handler reports them instead of skipping packet after packet.
+                f.write(_pcap_packet_header(len(pkt_bytes)))
+                f.write(pkt_bytes)
         return True, safe_filename, None
     except Exception as e:
         return False, None, str(e)

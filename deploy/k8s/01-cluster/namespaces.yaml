@@ -1,0 +1,20 @@
+# One namespace per team, as on the XTRUST-6G cluster. Each carries the node
+# label value its pods must select (checked by placement-policy.yaml).
+# Change "penm" here, in post-init.sh and in every nodeSelector if SMTEC gives
+# the team another label.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-5g
+  labels:
+    xtrust6g-node: penm
+    # UPF, DU and the sensor need privileges; this is a private test cluster.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-penm
+  labels:
+    xtrust6g-node: penm
+    pod-security.kubernetes.io/enforce: privileged

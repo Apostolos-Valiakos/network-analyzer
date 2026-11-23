@@ -27,7 +27,7 @@ parameters:
     type: string
     required: false
     default: rule_based
-    description: The ML or rule-based model to use for role classification.
+    description: Accepted for compatibility and ignored; roles always come from the evidence-based rule engine.
 responses:
   200:
     description: Full analysis report including roles, graph data, and file download links.
@@ -70,6 +70,15 @@ responses:
             "10.0.0.5": "AMF"
             "10.0.0.1": "gNB"
             "10.244.0.77": "NEAR_RT_RIC"
+        warnings:
+          type: array
+          description: >
+            Only present when part of the work failed while the rest
+            succeeded. User-readable messages; the rest of the response is
+            still valid but may be incomplete.
+          items:
+            type: string
+          example: ["Privacy record extraction failed; privacy records are empty."]
   400:
     description: Missing file part, no file selected, or the file isn't a .pcap.
     schema:

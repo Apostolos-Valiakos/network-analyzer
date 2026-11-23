@@ -46,6 +46,8 @@
         them.
       </v-alert>
 
+      <warnings-alert :warnings="warnings" />
+
       <v-card class="themed-accent-card rounded-xl pa-5 mb-5">
         <div class="d-flex align-center">
           <v-icon color="primary" class="mr-3">mdi-package-variant</v-icon>
@@ -56,7 +58,6 @@
       <PrivacyPanel
         v-if="response && response.privacy_records && response.privacy_records.length"
         :records="response.privacy_records"
-        :api-base-url="apiBaseUrl"
       />
 
       <div class="d-flex flex-wrap btn-gap">
@@ -85,9 +86,10 @@
 import Assessments from "@/components/Assessments.vue";
 import NetworkGraph from "@/components/NetworkGraph.vue";
 import PrivacyPanel from "@/components/PrivacyPanel.vue";
+import WarningsAlert from "@/components/WarningsAlert.vue";
 
 export default {
-  components: { Assessments, NetworkGraph, PrivacyPanel },
+  components: { Assessments, NetworkGraph, PrivacyPanel, WarningsAlert },
 
   data() {
     return {
@@ -104,113 +106,15 @@ export default {
       clustering: null,
       suggested_clusters: null,
       response: null,
-      apiBaseUrl: process.env.API_BASE_URL || "http://127.0.0.1:5555",
       loadedFromCache: false,
-      privacyInfoDialog: false,
-      privacyPanels: [0, 1, 2],
-      privacyIdentifiers: [],
-      privacySensitiveAttribute: null,
-      privacyPseudonymize: [],
-      privacyPseudonymizationMode: "deterministic",
-      privacyGeneralize: [],
-      privacySuppress: [],
-      privacyGeneralizeProfiles: {},
-      privacySuppressThreshold: 2,
-      privacyLoading: false,
-      privacyError: "",
-      privacySuggestions: [],
-      privacyOriginalMetrics: null,
-      privacyTransformedMetrics: null,
-      privacyTransformedRecords: [],
-      generalizationProfileOptions: [
-        { text: "Auto", value: "auto" },
-        { text: "IP Mask /24", value: "ip_mask_24" },
-        { text: "IP Mask /16", value: "ip_mask_16" },
-        { text: "Numeric bins (size 5)", value: "numeric_bins_5" },
-        { text: "Numeric bins (size 10)", value: "numeric_bins_10" },
-        { text: "Text prefix (1 char)", value: "text_prefix_1" },
-        { text: "Text prefix (3 chars)", value: "text_prefix_3" },
-        { text: "Protocol family", value: "protocol_family" },
-      ],
-      pseudonymizationModeOptions: [
-        { text: "Deterministic", value: "deterministic" },
-        { text: "Per-run", value: "per_run" },
-        { text: "Per-pilot", value: "per_pilot" },
-      ],
 
-      // Table
-      ipProtocolHeaders: [
-        { text: "IP Address", value: "ip" },
-        { text: "Protocols Sent", value: "protocols" },
-      ],
-      expanded: [],
     };
   },
 
   computed: {
-    ipProtocolItems() {
-      if (!this.analysis?.ip_protocols) return [];
-      return Object.entries(this.analysis.ip_protocols).map(
-        ([ip, protocols]) => ({
-          ip,
-          protocols,
-        })
-      );
-    },
-    privacyRecords() {
-      const ipRoles = this.response?.ip_roles || {};
-      const ipProtocols = this.analysis?.ip_protocols || {};
-      const allIps = new Set([
-        ...Object.keys(ipRoles),
-        ...Object.keys(ipProtocols),
-      ]);
-
-      return Array.from(allIps).map((ip) => {
-        const protocols = ipProtocols[ip] || [];
-        return {
-          ip,
-          role: ipRoles[ip] || "Unknown",
-          protocol_count: protocols.length,
-          protocols: protocols.join("|"),
-          pilot: "PUC#1",
-        };
-      });
-    },
-    privacyColumns() {
-      if (!this.privacyRecords.length) return [];
-      return Object.keys(this.privacyRecords[0]);
-    },
-    canComputePrivacy() {
-      return (
-        this.privacyRecords.length > 0 &&
-        this.privacyIdentifiers.length > 0 &&
-        !!this.privacySensitiveAttribute
-      );
-    },
-    privacyTableHeaders() {
-      return this.privacyColumns.map((col) => ({
-        text: col.replace(/_/g, " "),
-        value: col,
-      }));
-    },
-    suppressThresholdMap() {
-      const threshold = Math.max(2, Number(this.privacySuppressThreshold) || 2);
-      return this.privacySuppress.reduce((acc, col) => {
-        acc[col] = threshold;
-        return acc;
-      }, {});
-    },
-  },
-  watch: {
-    privacyGeneralize: {
-      immediate: true,
-      handler(cols) {
-        const next = {};
-        cols.forEach((col) => {
-          next[col] = this.privacyGeneralizeProfiles[col] || "auto";
-        });
-        this.privacyGeneralizeProfiles = next;
-      },
+    // Parts of the analysis that failed while the rest succeeded.
+    warnings() {
+      return (this.response && this.response.warnings) || [];
     },
   },
 
@@ -242,7 +146,7 @@ export default {
         analysis: data.analysis,
         graphData: data.analysis?.graph || null,
         ueInfo: data.ue_sessions || null,
-        roles: data.roles || data.ip_roles || null,
+        roles: data.roles || null,
         clustering: data.clustering || null,
         suggested_clusters: data.suggested_clusters || null,
         response: data,
@@ -262,7 +166,7 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await this.$apiFetch(`${this.apiBaseUrl}/automated-analysis`, {
+        const resp = await this.$apiFetch(this.$api.url(`/automated-analysis`), {
           method: "POST",
           body: form,
         });
@@ -279,7 +183,7 @@ export default {
         this.analysis = data.analysis;
         this.graphData = data.analysis.graph;
         this.ueInfo = data.ue_sessions;
-        this.roles = data.roles || data.ip_roles;
+        this.roles = data.roles;
         this.clustering = data.clustering;
         this.suggested_clusters = data.suggested_clusters;
         this.response = data;
@@ -290,56 +194,6 @@ export default {
         this.loading = false;
       }
     },
-    async callPrivacyMetrics(transformations) {
-      const resp = await fetch(`${this.apiBaseUrl}/privacy-metrics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          records: this.privacyRecords,
-          identifiers: this.privacyIdentifiers,
-          sensitive_attribute: this.privacySensitiveAttribute,
-          transformations,
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || "Privacy metrics failed");
-      }
-      return data;
-    },
-    async computePrivacyMetrics() {
-      if (!this.canComputePrivacy) return;
-      this.privacyLoading = true;
-      this.privacyError = "";
-      this.privacySuggestions = [];
-
-      try {
-        const baseline = await this.callPrivacyMetrics({
-          pseudonymize: [],
-          generalize: [],
-          suppress: [],
-          generalize_profiles: {},
-          suppress_thresholds: {},
-        });
-        const transformed = await this.callPrivacyMetrics({
-          pseudonymize: this.privacyPseudonymize,
-          pseudonymization_mode: this.privacyPseudonymizationMode,
-          generalize: this.privacyGeneralize,
-          suppress: this.privacySuppress,
-          generalize_profiles: this.privacyGeneralizeProfiles,
-          suppress_thresholds: this.suppressThresholdMap,
-        });
-
-        this.privacyOriginalMetrics = baseline.metrics;
-        this.privacyTransformedMetrics = transformed.metrics;
-        this.privacyTransformedRecords = transformed.records.slice(0, 12);
-        this.privacySuggestions = transformed.suggestions || [];
-      } catch (err) {
-        this.privacyError = err.message;
-      } finally {
-        this.privacyLoading = false;
-      }
-    },
 
     async saveRoles(type) {
       if (!this.filename) return;
@@ -347,7 +201,7 @@ export default {
       if (type === "json") this.savingJson = true;
       if (type === "csv") this.savingCsv = true;
 
-      const url = `${this.apiBaseUrl}/save_roles?file=${this.filename}&type=${type}`;
+      const url = this.$api.url(`/save_roles?file=${this.filename}&type=${type}`);
 
       try {
         const resp = await this.$apiFetch(url);

@@ -7,8 +7,9 @@ interrupted copy) end in a partial record. Every complete packet is still
 readable, but tshark reports "cut short in the middle of a packet" and exits
 non-zero. Truncating after the last complete record makes the file clean.
 
-Only a *truncated* tail is removed. A structurally corrupt block in the middle
-of a pcapng file is left untouched so no readable data is ever discarded.
+Only a *truncated* tail is removed, including a zero-filled one. A structurally
+corrupt block in the middle of a pcapng file is left untouched so no readable
+data is ever discarded.
 """
 import logging
 import os
@@ -30,6 +31,16 @@ _PCAP_GLOBAL_HDR_LEN = 24
 _PCAP_RECORD_HDR_LEN = 16
 
 
+def _only_zeros_from(f, offset: int) -> bool:
+    f.seek(offset)
+    while True:
+        chunk = f.read(1 << 20)
+        if not chunk:
+            return True
+        if chunk.count(0) != len(chunk):
+            return False
+
+
 def _pcapng_valid_length(f, size: int):
     """Returns the offset after the last complete block, or None if the file
     is corrupt (rather than truncated) and must not be trimmed."""
@@ -45,7 +56,9 @@ def _pcapng_valid_length(f, size: int):
                 return None
         blen = struct.unpack(endian + "I", hdr[4:8])[0]
         if blen < 12 or blen % 4:
-            return None
+            # All zeros to EOF is unwritten space from copying a capture while
+            # dumpcap was still writing it, not a damaged block.
+            return off if _only_zeros_from(f, off) else None
         if off + blen > size:
             return off  # last block runs past EOF
         f.seek(off + blen - 4)
@@ -59,12 +72,51 @@ def _pcap_valid_length(f, size: int, endian: str) -> int:
     """Returns the offset after the last complete record of a classic pcap."""
     off = _PCAP_GLOBAL_HDR_LEN
     while off + _PCAP_RECORD_HDR_LEN <= size:
-        f.seek(off + 8)
-        incl_len = struct.unpack(endian + "I", f.read(4))[0]
+        f.seek(off)
+        record_header = f.read(_PCAP_RECORD_HDR_LEN)
+        # Zeros parse as empty records; all zeros to EOF is unwritten space
+        # from copying a capture mid-write, as for pcapng.
+        if record_header.count(0) == _PCAP_RECORD_HDR_LEN and _only_zeros_from(f, off):
+            break
+        incl_len = struct.unpack(endian + "I", record_header[8:12])[0]
         if off + _PCAP_RECORD_HDR_LEN + incl_len > size:
             break
         off += _PCAP_RECORD_HDR_LEN + incl_len
     return off
+
+
+def _valid_length(f, size: int):
+    """Offset after the last complete record of the open capture `f`, None if
+    a block before the end is corrupt, or False if it is not a capture."""
+    f.seek(0)
+    magic = f.read(4)
+    if magic == _PCAPNG_SHB:
+        return _pcapng_valid_length(f, size)
+    if magic in _PCAP_MAGICS and size >= _PCAP_GLOBAL_HDR_LEN:
+        return _pcap_valid_length(f, size, _PCAP_MAGICS[magic])
+    return False
+
+
+def complete_length(path: str):
+    """
+    Number of leading bytes of `path` that hold complete records, without
+    changing the file: safe on a capture dumpcap is still writing.
+
+    Returns the file size for an intact capture, a smaller value when the tail
+    is incomplete (partial record or unwritten zeros), and None when the file
+    is not a capture, is corrupt before the end, or cannot be read; callers
+    should then use the whole file.
+    """
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            valid = _valid_length(f, size)
+    except OSError:
+        logger.exception("Could not check capture %s", path)
+        return None
+    if valid is False or valid is None or valid == 0:
+        return None
+    return min(valid, size)
 
 
 def trim_incomplete_tail(path: str) -> int:
@@ -72,18 +124,16 @@ def trim_incomplete_tail(path: str) -> int:
     Truncates `path` right after its last complete record.
     Returns the number of bytes removed (0 if the file is intact, corrupt,
     or not a pcap/pcapng capture).
+
+    Never use this on a capture that is still being written (the sensor's
+    active ring file): use complete_length() and read that many bytes instead.
     """
     try:
         size = os.path.getsize(path)
         with open(path, "r+b") as f:
-            magic = f.read(4)
-            if magic == _PCAPNG_SHB:
-                valid = _pcapng_valid_length(f, size)
-            elif magic in _PCAP_MAGICS and size >= _PCAP_GLOBAL_HDR_LEN:
-                valid = _pcap_valid_length(f, size, _PCAP_MAGICS[magic])
-            else:
+            valid = _valid_length(f, size)
+            if valid is False:
                 return 0
-
             if valid is None:
                 logger.warning("Not trimming %s: corrupt block before end of file", path)
                 return 0

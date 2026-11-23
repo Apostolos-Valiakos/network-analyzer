@@ -1,0 +1,61 @@
+# PENM capture sensor for a Docker production host.
+#
+# Runs dumpcap (ring buffer), Zeek, pcap_server.py (port 5005: pcap slices and
+# Nmap for the backend), zeek_agent.py (flow statistics to the backend) and
+# publisher.py (port 5002: Real Time page), using the same image as the
+# Kubernetes testbed (deploy/k8s/images/sensor). See docs/DOCKER_SETUP.md §10.
+#
+# Settings come from .env next to this file (the app's .env when the sensor
+# runs on the same host, so SECRET_TOKEN is shared automatically):
+#   SECRET_TOKEN             same value as the backend's SECRET_TOKEN (required)
+#   SENSOR_HOST_API_URL      backend ingest URL, e.g. http://10.0.0.5:5555/v1/ingest/zeek (required)
+#   SENSOR_INTERFACE         interface to capture on, e.g. ens18 (required)
+#   SENSOR_EXCLUDE_PORTS     ports never captured (default: the sensor's and backend's own)
+#   SENSOR_RETENTION_MINUTES how long capture files are kept (default 1440 = 24 h)
+#   SENSOR_RING_SECONDS      length of one capture file (default 3600)
+#   SENSOR_ENABLE_PUBLISHER  "false" to skip publisher.py (Real Time page)
+#
+#   docker compose -f docker-compose.sensor.yml up -d
+name: penm-sensor
+
+services:
+  sensor:
+    build:
+      context: .
+      dockerfile: deploy/k8s/images/sensor/Dockerfile
+    image: penm-sensor:latest
+    container_name: penm_sensor
+    restart: unless-stopped
+    # Host networking: the sensor must see the host's real interface, and
+    # ports 5005/5002 must be reachable on the host's own address.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      SECRET_TOKEN: "${SECRET_TOKEN:?set SECRET_TOKEN (same value as the backend)}"
+      HOST_API_URL: "${SENSOR_HOST_API_URL:?set SENSOR_HOST_API_URL, e.g. http://<backend-ip>:5555/v1/ingest/zeek}"
+      CAPTURE_INTERFACE: "${SENSOR_INTERFACE:?set SENSOR_INTERFACE, e.g. ens18 (see: ip -br addr)}"
+      EXCLUDE_PORTS: "${SENSOR_EXCLUDE_PORTS:-5002 5005 5555}"
+      RETENTION_MINUTES: "${SENSOR_RETENTION_MINUTES:-1440}"
+      RING_SECONDS: "${SENSOR_RING_SECONDS:-3600}"
+      ENABLE_PUBLISHER: "${SENSOR_ENABLE_PUBLISHER:-true}"
+    volumes:
+      - sensor_pcaps:/app/sensor/generated_pcaps
+      - sensor_zeek:/var/lib/penm-sensor/zeek
+    healthcheck:
+      # Any HTTP answer from pcap_server.py counts (it returns 401 without the token).
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:5005/get-pcap || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  sensor_pcaps:
+  sensor_zeek:

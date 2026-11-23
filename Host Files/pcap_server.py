@@ -3,10 +3,21 @@ import os
 import glob
 import io
 import re
+import shutil
 import subprocess
+import tempfile
 import threading
+import sys
 import xml.etree.ElementTree as ET
-from flask import Flask, request, send_file, jsonify
+from datetime import datetime
+from flask import Flask, Response, request, send_file, jsonify
+
+try:
+    import pcap_repair  # next to this file in the sensor image
+except ImportError:
+    # Repository checkout or the R13 image: server/ is a sibling folder.
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server"))
+    import pcap_repair
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +37,57 @@ SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
 PCAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_pcaps")
 os.makedirs(PCAP_DIR, exist_ok=True)
 
+# dumpcap names ring files continuous_capture_00001_20261022145722.pcap (local time)
+_RING_STAMP = re.compile(r"_(\d{14})\.pcap$")
+_EDGE_SECONDS = 2  # slack for packets stamped just before a file switch
+
+
+def ring_files_for_window(pcap_files, start_ts, end_ts):
+    """Ring files that can hold packets in [start_ts, end_ts]. A file spans from
+    the time in its name to its last write. Falls back to every file if any name
+    does not parse or nothing overlaps; editcap's time filter still applies."""
+    selected = []
+    for path in pcap_files:
+        match = _RING_STAMP.search(os.path.basename(path))
+        if not match:
+            return list(pcap_files)
+        file_start = datetime.strptime(match.group(1), "%Y%m%d%H%M%S").timestamp()
+        file_end = os.path.getmtime(path)
+        if file_start - _EDGE_SECONDS <= end_ts and file_end + _EDGE_SECONDS >= start_ts:
+            selected.append(path)
+    return selected or list(pcap_files)
+
+
+def _newest(pcap_files):
+    """The ring file dumpcap is writing now."""
+    return max(pcap_files, key=os.path.getmtime)
+
+
+def _read_prefix(path, length, chunk=1 << 20):
+    with open(path, "rb") as f:
+        left = length
+        while left > 0:
+            data = f.read(min(chunk, left))
+            if not data:
+                break
+            left -= len(data)
+            yield data
+
+
+def _complete_copy(path, work_dir):
+    """A copy of the complete records of `path` in work_dir, or `path` itself
+    when there is nothing to trim. The original is never modified: dumpcap may
+    still be writing it."""
+    length = pcap_repair.complete_length(path)
+    if length is None:
+        return path
+    copy = os.path.join(work_dir, "complete_" + os.path.basename(path))
+    with open(copy, "wb") as out:
+        for data in _read_prefix(path, length):
+            out.write(data)
+    return copy
+
+
 @app.before_request
 def check_auth():
     token = request.headers.get("X-Internal-Token")
@@ -44,17 +106,37 @@ def get_pcap():
 
     if not start_time or not end_time:
         latest_pcap = max(pcap_files, key=os.path.getctime)
-        return send_file(latest_pcap, as_attachment=True, download_name="latest_full.pcap")
+        # Usually the file dumpcap is still writing: send only its complete
+        # records, so the download never ends in a partial record or zeros.
+        length = pcap_repair.complete_length(latest_pcap)
+        if length is None:
+            return send_file(latest_pcap, as_attachment=True, download_name="latest_full.pcap")
+        return Response(
+            _read_prefix(latest_pcap, length),
+            mimetype="application/vnd.tcpdump.pcap",
+            headers={
+                "Content-Disposition": "attachment; filename=latest_full.pcap",
+                "Content-Length": str(length),
+            },
+        )
 
-    from datetime import datetime
-    start_dt = datetime.utcfromtimestamp(float(start_time)).strftime('%Y-%m-%d %H:%M:%S')
-    end_dt = datetime.utcfromtimestamp(float(end_time)).strftime('%Y-%m-%d %H:%M:%S')
-    
-    out_filename = f"slice_{int(float(start_time))}.pcap"
-    merged_filename = f"merged_{int(float(start_time))}.pcap"
-    
+    # editcap reads a plain date-time as local time, on every sensor time zone.
+    start_dt = datetime.fromtimestamp(float(start_time)).strftime('%Y-%m-%d %H:%M:%S')
+    end_dt = datetime.fromtimestamp(float(end_time)).strftime('%Y-%m-%d %H:%M:%S')
+
+    download_name = f"slice_{int(float(start_time))}.pcap"
+    # Private folder: two requests for the same second must not share files.
+    work_dir = tempfile.mkdtemp(prefix="slice_")
+    merged_filename = os.path.join(work_dir, "merged.pcap")
+    out_filename = os.path.join(work_dir, download_name)
+
     try:
-        merge_cmd = ["mergecap", "-w", merged_filename] + pcap_files
+        sources = ring_files_for_window(pcap_files, float(start_time), float(end_time))
+        # mergecap fails on a partial last record, which the file dumpcap is
+        # writing usually has: merge a copy of its complete records instead.
+        active = _newest(pcap_files)
+        sources = [_complete_copy(src, work_dir) if src == active else src for src in sources]
+        merge_cmd = ["mergecap", "-w", merged_filename] + sources
         subprocess.run(merge_cmd, check=True, capture_output=True, timeout=30)
 
         cmd = ["editcap", "-A", start_dt, "-B", end_dt]
@@ -67,7 +149,7 @@ def get_pcap():
         with open(out_filename, 'rb') as f:
             return_data = io.BytesIO(f.read())
 
-        return send_file(return_data, as_attachment=True, download_name=out_filename)
+        return send_file(return_data, as_attachment=True, download_name=download_name)
 
     except subprocess.TimeoutExpired:
         logger.warning("PCAP slice timed out for start=%s end=%s", start_time, end_time)
@@ -80,10 +162,7 @@ def get_pcap():
         return jsonify({"error": "Internal server error"}), 500
         
     finally:
-        if os.path.exists(merged_filename):
-            os.remove(merged_filename)
-        if os.path.exists(out_filename):
-            os.remove(out_filename)
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 # ── Active probing (Nmap) — matches docs/Deliverable/api_profiling_probing.html ──
 

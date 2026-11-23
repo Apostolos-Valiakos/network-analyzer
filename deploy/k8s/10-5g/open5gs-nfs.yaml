@@ -1,0 +1,673 @@
+# Open5GS network functions, one Deployment each, plus a headless Service per
+# function. Headless (clusterIP: None) means the DNS name returns the pod IP
+# itself, so traffic between functions carries real pod IPs (PENM sees which
+# pod is the AMF, not a virtual service IP) and SCTP needs no load balancer.
+# publishNotReadyAddresses lets a name resolve as soon as its pod has an IP.
+# Generated: one block per function; keep them in step when editing.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-nrf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-nrf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-nrf
+  namespace: team-5g
+  labels:
+    app: open5gs-nrf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-nrf
+  template:
+    metadata:
+      labels:
+        app: open5gs-nrf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: nrf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/nrf.yaml", "/etc/open5gs/nrf.yaml", "--",
+                    "open5gs-nrfd", "-c", "/etc/open5gs/nrf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/nrf.yaml
+              subPath: nrf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-scp
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-scp
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-scp
+  namespace: team-5g
+  labels:
+    app: open5gs-scp
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-scp
+  template:
+    metadata:
+      labels:
+        app: open5gs-scp
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: scp
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/scp.yaml", "/etc/open5gs/scp.yaml", "--",
+                    "open5gs-scpd", "-c", "/etc/open5gs/scp.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/scp.yaml
+              subPath: scp.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-ausf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-ausf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-ausf
+  namespace: team-5g
+  labels:
+    app: open5gs-ausf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-ausf
+  template:
+    metadata:
+      labels:
+        app: open5gs-ausf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: ausf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/ausf.yaml", "/etc/open5gs/ausf.yaml", "--",
+                    "open5gs-ausfd", "-c", "/etc/open5gs/ausf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/ausf.yaml
+              subPath: ausf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-udm
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-udm
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-udm
+  namespace: team-5g
+  labels:
+    app: open5gs-udm
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-udm
+  template:
+    metadata:
+      labels:
+        app: open5gs-udm
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: udm
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/udm.yaml", "/etc/open5gs/udm.yaml", "--",
+                    "open5gs-udmd", "-c", "/etc/open5gs/udm.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/udm.yaml
+              subPath: udm.yaml
+            - name: hnet
+              mountPath: /etc/open5gs/hnet
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+        - name: hnet
+          secret:
+            secretName: open5gs-hnet
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-udr
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-udr
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-udr
+  namespace: team-5g
+  labels:
+    app: open5gs-udr
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-udr
+  template:
+    metadata:
+      labels:
+        app: open5gs-udr
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: udr
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/udr.yaml", "/etc/open5gs/udr.yaml", "--",
+                    "open5gs-udrd", "-c", "/etc/open5gs/udr.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/udr.yaml
+              subPath: udr.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-pcf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-pcf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-pcf
+  namespace: team-5g
+  labels:
+    app: open5gs-pcf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-pcf
+  template:
+    metadata:
+      labels:
+        app: open5gs-pcf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: pcf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/pcf.yaml", "/etc/open5gs/pcf.yaml", "--",
+                    "open5gs-pcfd", "-c", "/etc/open5gs/pcf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/pcf.yaml
+              subPath: pcf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-nssf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-nssf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-nssf
+  namespace: team-5g
+  labels:
+    app: open5gs-nssf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-nssf
+  template:
+    metadata:
+      labels:
+        app: open5gs-nssf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: nssf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/nssf.yaml", "/etc/open5gs/nssf.yaml", "--",
+                    "open5gs-nssfd", "-c", "/etc/open5gs/nssf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/nssf.yaml
+              subPath: nssf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-bsf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-bsf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-bsf
+  namespace: team-5g
+  labels:
+    app: open5gs-bsf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-bsf
+  template:
+    metadata:
+      labels:
+        app: open5gs-bsf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: bsf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/bsf.yaml", "/etc/open5gs/bsf.yaml", "--",
+                    "open5gs-bsfd", "-c", "/etc/open5gs/bsf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/bsf.yaml
+              subPath: bsf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-amf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-amf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+    - name: ngap
+      port: 38412
+      protocol: SCTP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-amf
+  namespace: team-5g
+  labels:
+    app: open5gs-amf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-amf
+  template:
+    metadata:
+      labels:
+        app: open5gs-amf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: amf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/amf.yaml", "/etc/open5gs/amf.yaml", "--",
+                    "open5gs-amfd", "-c", "/etc/open5gs/amf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/amf.yaml
+              subPath: amf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-smf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-smf
+  ports:
+    - name: sbi
+      port: 7777
+      protocol: TCP
+    - name: pfcp
+      port: 8805
+      protocol: UDP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-smf
+  namespace: team-5g
+  labels:
+    app: open5gs-smf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-smf
+  template:
+    metadata:
+      labels:
+        app: open5gs-smf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: smf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/smf.yaml", "/etc/open5gs/smf.yaml", "--",
+                    "open5gs-smfd", "-c", "/etc/open5gs/smf.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RESOLVE
+              value: "UPF_IP=open5gs-upf.team-5g.svc.cluster.local"
+          volumeMounts:
+            - name: config
+              mountPath: /config/smf.yaml
+              subPath: smf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-upf
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-upf
+  ports:
+    - name: pfcp
+      port: 8805
+      protocol: UDP
+    - name: gtpu
+      port: 2152
+      protocol: UDP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-upf
+  namespace: team-5g
+  labels:
+    app: open5gs-upf
+    app.kubernetes.io/part-of: open5gs
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open5gs-upf
+  template:
+    metadata:
+      labels:
+        app: open5gs-upf
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: upf
+          image: open5gs:2.7.6
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              # UE tunnel and internet access through NAT, as on the core host.
+              ip tuntap add name ogstun mode tun 2>/dev/null || true
+              ip addr replace 10.45.0.1/16 dev ogstun
+              ip link set ogstun up
+              sysctl -w net.ipv4.ip_forward=1
+              iptables -t nat -C POSTROUTING -s 10.45.0.0/16 ! -o ogstun -j MASQUERADE 2>/dev/null \
+                || iptables -t nat -A POSTROUTING -s 10.45.0.0/16 ! -o ogstun -j MASQUERADE
+              exec render.sh /config/upf.yaml /etc/open5gs/upf.yaml -- open5gs-upfd -c /etc/open5gs/upf.yaml
+          securityContext:
+            privileged: true    # creates ogstun and NAT rules in its own network namespace
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/upf.yaml
+              subPath: upf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: open5gs-config

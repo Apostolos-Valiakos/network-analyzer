@@ -239,7 +239,6 @@
 export default {
   props: {
     records: { type: Array, default: () => [] },
-    apiBaseUrl: { type: String, required: true },
   },
 
   data() {
@@ -355,7 +354,7 @@ export default {
 
   methods: {
     async callPrivacyMetrics(transformations) {
-      const resp = await this.$apiFetch(`${this.apiBaseUrl}/privacy-metrics`, {
+      const resp = await this.$apiFetch(this.$api.url(`/privacy-metrics`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,0 +1,81 @@
+{
+  "data": {
+    "graph": {
+      "categories": [
+        {
+          "base": "IP",
+          "keyword": {},
+          "name": "IP"
+        }
+      ],
+      "links": [
+        {
+          "source": 0,
+          "target": 1,
+          "value": 38
+        },
+        {
+          "source": 1,
+          "target": 2,
+          "value": 18
+        }
+      ],
+      "nodes": [
+        {
+          "category": 0,
+          "name": "192.168.100.21",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "192.168.100.5",
+          "value": 1
+        },
+        {
+          "category": 0,
+          "name": "195.251.124.68",
+          "value": 1
+        }
+      ],
+      "type": "force"
+    },
+    "result": {
+      "conversations": {
+        "192.168.100.21|192.168.100.5": {
+          "192.168.100.21_to_192.168.100.5": 19,
+          "192.168.100.5_to_192.168.100.21": 19
+        },
+        "192.168.100.5|195.251.124.68": {
+          "192.168.100.5_to_195.251.124.68": 9,
+          "195.251.124.68_to_192.168.100.5": 9
+        }
+      },
+      "ip_protocols": {
+        "192.168.100.21": [
+          "sctp",
+          "sctp:ngap",
+          "sctp:ngap:nas-5gs"
+        ],
+        "192.168.100.5": [
+          "sctp",
+          "sctp:ngap",
+          "sctp:ngap:nas-5gs",
+          "sctp:ngap:nas-5gs:ngap:nas-5gs",
+          "udp:dns"
+        ],
+        "195.251.124.68": [
+          "udp:dns"
+        ]
+      },
+      "total_packets": 58
+    }
+  },
+  "recorded_with": {
+    "tshark": "4.6"
+  },
+  "same_output_with": [
+    {
+      "tshark": "4.4"
+    }
+  ]
+}

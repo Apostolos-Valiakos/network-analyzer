@@ -1,132 +1,24 @@
-# server/Preprocess.py
-import os
-import sys
-import time
-import multiprocessing as mp
+"""
+The IP role pipeline: runs the role engine on a capture in a child process
+(so a hung tshark can be killed after 600 s) and writes the role summary that
+/save_roles serves.
+"""
+import csv
 import json
-import pandas as pd
+import logging
+import multiprocessing as mp
+import os
+import subprocess
+import time
+
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from rrc_utils import get_cached_packets
+
+import packet_table
+import settings
+from db_setup import database_only_app
 from role_engine import get_or_compute_roles, roles_as_strings
 
-
-class PacketProcessor:
-    """
-    Parses pcap packets to extract features (timestamp, length, protocol).
-    REFACTOR: Removed slow legacy string-matching logic.
-    """
-
-    def __init__(self, pcap_file):
-        self.pcap_file = pcap_file
-        self.extracted_data = []
-
-        # --- 1. Role Identification (evidence-based engine, via TShark) ---
-        # UE detection now happens inside the engine (GTP-U inner IPs, raw RRC).
-        print(f"Loading roles for {pcap_file}...")
-        self.assessments = get_or_compute_roles(pcap_file)
-        self.ip_roles = roles_as_strings(self.assessments)
-
-    def parse_pcap(self, packets=None):
-        # get_cached_packets already yields per-packet feature records
-        # (timestamp, src_ip, packet_len, protocol) via a tshark field pass.
-        if packets is None:
-            packets = get_cached_packets(self.pcap_file)
-            if packets is None:
-                return self.extracted_data, self.ip_roles
-
-        self.extracted_data.extend(packets)
-        return self.extracted_data, self.ip_roles
-
-
-class FeatureEngineer:
-    """
-    Transforms raw packet data into structured dataset for ML.
-    REFACTOR: Uses Numpy vectorization instead of slow Pandas .iloc loops.
-    """
-
-    def __init__(self, raw_data, ip_roles):
-        self.raw_data = raw_data
-        self.ip_roles = ip_roles
-        self.sequence_length = 5
-        self.processed_data = []
-        self.labels = []
-        self.protocol_encoder = LabelEncoder()
-        self.label_encoder = LabelEncoder()
-
-    def run_preprocessing(self):
-        if not self.raw_data:
-            return None, None, None, None
-
-        df = pd.DataFrame(self.raw_data)
-
-        # Cleanup
-        df.fillna(0, inplace=True)
-        if "protocol" not in df.columns:
-            return None, None, None, None
-
-        df = df[df["protocol"].notna()]
-
-        # Encode protocols once
-        df["protocol_encoded"] = self.protocol_encoder.fit_transform(
-            df["protocol"].astype(str)
-        )
-
-        # --- OPTIMIZED LOOP ---
-        # Group by IP and convert to Numpy arrays immediately to avoid DataFrame overhead in loops
-        grouped = df.groupby("src_ip")
-
-        for ip, group in grouped:
-            if ip not in self.ip_roles:
-                continue
-
-            # Sort by time
-            group = group.sort_values("timestamp")
-
-            # Convert to numpy for speed
-            timestamps = group["timestamp"].values
-            lengths = group["packet_len"].values
-            protos = group["protocol_encoded"].values
-
-            num_packets = len(group)
-            if num_packets < self.sequence_length:
-                continue
-
-            # Vectorized windowing logic
-            # We construct sequences without calling .iloc repeatedly
-            for i in range(num_packets - self.sequence_length + 1):
-                # Slice numpy arrays (very fast)
-                seq_t = timestamps[i : i + self.sequence_length]
-                seq_l = lengths[i : i + self.sequence_length]
-                seq_p = protos[i : i + self.sequence_length]
-
-                # Stack features: [timestamp, packet_len, protocol]
-                seq_features = np.column_stack((seq_t, seq_l, seq_p))
-
-                self.processed_data.append(seq_features)
-                self.labels.append(self.ip_roles[ip])
-
-        if not self.processed_data:
-            return None, None, None, None
-
-        # Final Formatting
-        X = np.array(self.processed_data)
-        y = np.array(self.labels)
-
-        # Encode Labels
-        all_possible_roles = list(set(self.ip_roles.values()))
-        self.label_encoder.fit(all_possible_roles)
-        y_encoded = self.label_encoder.transform(y)
-        class_names = self.label_encoder.classes_
-
-        # Scaling
-        num_features = X.shape[2]
-        X_reshaped = X.reshape(-1, num_features)
-        scaler = StandardScaler()
-        X_reshaped = scaler.fit_transform(X_reshaped)
-        X = X_reshaped.reshape(-1, self.sequence_length, num_features)
-
-        return X, y_encoded, class_names, self.label_encoder
+logger = logging.getLogger(__name__)
 
 
 def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None):
@@ -134,33 +26,32 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
     Worker process to run the analysis in the background without blocking Flask.
     """
     try:
-        from app import app
-
-        with app.app_context():
+        with database_only_app().app_context():
             start_time = time.time()
 
-            # 1. Load packet features (tshark field pass, cached next to the pcap)
-            packets = get_cached_packets(pcap_file_path)
-            if packets is None:
+            # 1. Make sure tshark can read the capture. The role engine treats
+            # an unreadable capture as "no evidence", which would look like a
+            # successful run with no roles.
+            try:
+                packet_table.ensure(pcap_file_path)
+            except (OSError, subprocess.SubprocessError, RuntimeError) as e:
                 result_queue.put(
-                    {"status": "failed", "message": "Failed to load packets."}
+                    {"status": "failed", "message": f"Failed to load packets: {e}"}
                 )
                 return
 
-            # 2. Parse & Extract Roles
-            processor = PacketProcessor(pcap_file_path)
-            raw_data, ip_roles = processor.parse_pcap(packets=packets)
+            # 2. Roles from the evidence-based rule engine. `warnings` collects
+            # user-safe messages when the capture could not be read completely.
+            logger.info("Loading roles for %s", pcap_file_path)
+            warnings = []
+            assessments = get_or_compute_roles(pcap_file_path, warnings=warnings)
+            ip_roles = roles_as_strings(assessments)
 
             # Filter if user selected specific IPs
             if selected_ips:
-                raw_data = [d for d in raw_data if d["src_ip"] in selected_ips]
                 ip_roles = {k: v for k, v in ip_roles.items() if k in selected_ips}
 
-            # 3. Feature Engineering (Optimized)
-            engineer = FeatureEngineer(raw_data, ip_roles)
-            X, y, classes, enc = engineer.run_preprocessing()
-
-            # 4. Generate Summary Report
+            # 3. Generate Summary Report
             summary = []
             u_roles, counts = np.unique(list(ip_roles.values()), return_counts=True)
             for r, c in zip(u_roles, counts):
@@ -172,12 +63,18 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                     }
                 )
 
-            # Save result for frontend retrieval
-            results_dir = "./server/results"
+            # Save result for /save_roles (?type=json|csv), which reads
+            # settings.RESULTS_OUTPUT_DIR
+            results_dir = settings.RESULTS_OUTPUT_DIR
             os.makedirs(results_dir, exist_ok=True)
             base = os.path.splitext(os.path.basename(pcap_file_path))[0]
-            with open(f"{results_dir}/{base}.json", "w") as f:
+            with open(os.path.join(results_dir, f"{base}.json"), "w") as f:
                 json.dump(summary, f, indent=4)
+            with open(os.path.join(results_dir, f"{base}.csv"), "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["class_name", "count", "ips"])
+                for row in summary:
+                    writer.writerow([row["class_name"], row["count"], ";".join(row["ips"])])
 
             most_frequent_class = (
                 max(summary, key=lambda x: x["count"])["class_name"]
@@ -185,25 +82,28 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                 else None
             )
 
-            result_queue.put(
-                {
-                    "status": "success",
-                    "total_classified": len(ip_roles),
-                    "most_frequent_class": most_frequent_class,
-                    "processing_time": round(time.time() - start_time, 2),
-                    "rule_based_classification_summary": summary,
-                    "ip_roles": ip_roles,
-                    "ip_role_details": {
-                        ip: {
-                            "role": a.role,
-                            "confidence": a.confidence,
-                            "reasoning": a.reasoning,
-                        }
-                        for ip, a in processor.assessments.items()
-                        if ip in ip_roles
-                    },
-                }
-            )
+            report = {
+                "status": "success",
+                "total_classified": len(ip_roles),
+                "most_frequent_class": most_frequent_class,
+                "processing_time": round(time.time() - start_time, 2),
+                "rule_based_classification_summary": summary,
+                "ip_roles": ip_roles,
+                "ip_role_details": {
+                    ip: {
+                        "role": a.role,
+                        "confidence": a.confidence,
+                        "reasoning": a.reasoning,
+                    }
+                    for ip, a in assessments.items()
+                    if ip in ip_roles
+                },
+            }
+            # Only present when something went wrong, so normal reports keep
+            # their exact shape.
+            if warnings:
+                report["warnings"] = warnings
+            result_queue.put(report)
     except Exception as e:
         import traceback
 
@@ -230,14 +130,10 @@ def _run_pipeline_blocking(pcap_file_path, model_name, selected_ips=None):
 
 def run_ip_role_pipeline(pcap_file_path, model_name, selected_ips=None):
     """
-    Entry point called by app.py.
-    Runs the blocking subprocess in a real OS thread via eventlet.tpool so
-    the Eventlet event loop is not blocked while the pipeline executes.
+    Entry point for the routes. Socket.IO runs in threading mode, so blocking
+    this request thread while the child process works affects no other request.
+
+    `model_name` is accepted for API compatibility and ignored: roles come only
+    from the rule engine (role_engine.py).
     """
-    try:
-        import eventlet.tpool
-        return eventlet.tpool.execute(
-            _run_pipeline_blocking, pcap_file_path, model_name, selected_ips
-        )
-    except ImportError:
-        return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)
+    return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)

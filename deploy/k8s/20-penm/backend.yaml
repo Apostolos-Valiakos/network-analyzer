@@ -1,0 +1,92 @@
+# PENM analyzer backend (server/Dockerfile: gunicorn, 1 worker, 100 threads).
+# Browser API: http://<VM IP>:30555
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: penm-backend-data
+  namespace: team-penm
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: penm-backend
+  namespace: team-penm
+spec:
+  type: NodePort
+  selector:
+    app: penm-backend
+  ports:
+    - name: http
+      port: 5555
+      targetPort: 5555
+      nodePort: 30555
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: penm-backend
+  namespace: team-penm
+spec:
+  replicas: 1          # Socket.IO and the rate limiter live in process memory
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: penm-backend
+  template:
+    metadata:
+      labels:
+        app: penm-backend
+        app.kubernetes.io/part-of: penm
+        penm.capture/exclude: "true"
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: backend
+          image: penm-backend:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: DB_PASSWORD }
+            - name: DATABASE_URL
+              value: postgresql://postgres:$(DB_PASSWORD)@penm-postgres.team-penm.svc.cluster.local:5432/network_analyzer
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: JWT_SECRET_KEY }
+            - name: SECRET_TOKEN
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: SECRET_TOKEN }
+            - name: ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: ADMIN_USERNAME }
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: penm-secrets, key: ADMIN_PASSWORD }
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef: { name: penm-settings, key: ALLOWED_ORIGINS }
+            - name: SENSOR_URL
+              value: http://penm-sensor.team-penm.svc.cluster.local:5005
+            - name: PORT
+              value: "5555"
+          ports:
+            - containerPort: 5555
+          readinessProbe:
+            tcpSocket: { port: 5555 }
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /app/uploads, subPath: uploads }
+            - { name: data, mountPath: /app/generated_pcaps, subPath: generated_pcaps }
+            - { name: data, mountPath: /app/cluster_analysis, subPath: cluster_analysis }
+            - { name: data, mountPath: /app/results, subPath: results }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: penm-backend-data

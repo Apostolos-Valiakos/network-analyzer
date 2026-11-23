@@ -27,11 +27,11 @@ import socket
 import threading
 import time
 
+import settings
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_LOG = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "results", "wp5_notices.log"
-)
+_DEFAULT_LOG = os.path.join(settings.RESULTS_OUTPUT_DIR, "wp5_notices.log")
 
 _lock = threading.Lock()
 # Dedup memory: identifier -> last emit timestamp (per process).

@@ -1,0 +1,73 @@
+# FlexRIC near-RT RIC (commit 7365081, branch br-flexric). The CU and DU E2
+# agents connect to it on SCTP 36421; xApps would use 36422 (E42). No xApps run
+# yet. render.sh writes the pod IP into the default config path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flexric-config
+  namespace: team-5g
+data:
+  flexric.conf: |
+    [NEAR-RIC]
+    NEAR_RIC_IP = ${POD_IP}
+
+    [XAPP]
+    DB_DIR = /tmp/
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flexric-ric
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: flexric-ric
+  ports:
+    - name: e2
+      port: 36421
+      protocol: SCTP
+    - name: e42
+      port: 36422
+      protocol: SCTP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flexric-ric
+  namespace: team-5g
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: flexric-ric
+  template:
+    metadata:
+      labels:
+        app: flexric-ric
+        app.kubernetes.io/part-of: oran
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: ric
+          image: flexric:7365081
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/flexric.conf", "/usr/local/etc/flexric/flexric.conf", "--",
+                    "nearRT-RIC"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config
+              mountPath: /config/flexric.conf
+              subPath: flexric.conf
+      volumes:
+        - name: config
+          configMap:
+            name: flexric-config

@@ -3,6 +3,7 @@ import websockets
 import json
 import base64
 import threading
+import os
 import sys
 
 # Network monitoring imports
@@ -17,7 +18,8 @@ import socket
 WS_HOST = "0.0.0.0"
 WS_PORT = 5002
 # NOTE: This variable is updated by the 'SET_INTERFACE' command
-interface = "enp0s3"
+# Initial capture interface; the sensor container passes its CAPTURE_INTERFACE.
+interface = os.environ.get("CAPTURE_INTERFACE", "enp0s3")
 # Filter out traffic to/from the WebSocket server itself (port 5001)
 bpf_filter = f"not port {WS_PORT}"
 

@@ -2,7 +2,6 @@ Flask
 Flask-Cors
 python-dotenv
 flasgger
-scapy
 pandas
 numpy
 scikit-learn
@@ -10,9 +9,10 @@ networkx
 python-louvain
 websocket-client
 requests
-pyshark
 flask-sqlalchemy
 psycopg2-binary
 flask_jwt_extended
 flask-limiter
 flask-socketio
+Flask-Migrate
+gunicorn

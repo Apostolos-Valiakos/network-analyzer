@@ -1,0 +1,97 @@
+{
+  "data": {
+    "export_csv": "ts,id.orig_h,id.resp_h,proto,conn_state,orig_bytes,resp_bytes,orig_pkts,resp_pkts,conversations\n1792659660.0,10.0.0.1,10.0.0.4,tcp,REJ,60,40,1,1,10.0.0.1 <-> 10.0.0.4\n1792659605.0,10.0.0.3,10.0.0.2,udp,S0,90,0,1,0,10.0.0.3 <-> 10.0.0.2\n1792659600.0,10.0.0.1,10.0.0.2,tcp,SF,1200,800,10,8,10.0.0.1 <-> 10.0.0.2\n",
+    "export_csv_type": "text/csv",
+    "export_json": [
+      {
+        "conn_state": "REJ",
+        "conversations": "10.0.0.1 <-> 10.0.0.4",
+        "id.orig_h": "10.0.0.1",
+        "id.resp_h": "10.0.0.4",
+        "orig_bytes": 60,
+        "orig_pkts": 1,
+        "proto": "tcp",
+        "resp_bytes": 40,
+        "resp_pkts": 1,
+        "ts": 1792659660.0
+      },
+      {
+        "conn_state": "S0",
+        "conversations": "10.0.0.3 <-> 10.0.0.2",
+        "id.orig_h": "10.0.0.3",
+        "id.resp_h": "10.0.0.2",
+        "orig_bytes": 90,
+        "orig_pkts": 1,
+        "proto": "udp",
+        "resp_bytes": 0,
+        "resp_pkts": 0,
+        "ts": 1792659605.0
+      },
+      {
+        "conn_state": "SF",
+        "conversations": "10.0.0.1 <-> 10.0.0.2",
+        "id.orig_h": "10.0.0.1",
+        "id.resp_h": "10.0.0.2",
+        "orig_bytes": 1200,
+        "orig_pkts": 10,
+        "proto": "tcp",
+        "resp_bytes": 800,
+        "resp_pkts": 8,
+        "ts": 1792659600.0
+      }
+    ],
+    "export_json_disposition": "attachment; filename=network_analytics_1792627200_1792713600.json",
+    "roles_latest": [
+      {
+        "confidence": 0.9,
+        "id.orig_h": "10.0.0.2",
+        "reasoning": "seeded",
+        "role": "AMF",
+        "ts": 1792659700.0
+      },
+      {
+        "confidence": 0.8,
+        "id.orig_h": "10.0.0.1",
+        "reasoning": "seeded",
+        "role": "gNB",
+        "ts": 1792659700.0
+      }
+    ],
+    "statistics": [
+      {
+        "conn_state": "REJ",
+        "id.orig_h": "10.0.0.1",
+        "id.resp_h": "10.0.0.4",
+        "orig_bytes": 60,
+        "orig_pkts": 1,
+        "proto": "tcp",
+        "resp_bytes": 40,
+        "resp_pkts": 1,
+        "ts": 1792659660.0
+      },
+      {
+        "conn_state": "S0",
+        "id.orig_h": "10.0.0.3",
+        "id.resp_h": "10.0.0.2",
+        "orig_bytes": 90,
+        "orig_pkts": 1,
+        "proto": "udp",
+        "resp_bytes": 0,
+        "resp_pkts": 0,
+        "ts": 1792659605.0
+      },
+      {
+        "conn_state": "SF",
+        "id.orig_h": "10.0.0.1",
+        "id.resp_h": "10.0.0.2",
+        "orig_bytes": 1200,
+        "orig_pkts": 10,
+        "proto": "tcp",
+        "resp_bytes": 800,
+        "resp_pkts": 8,
+        "ts": 1792659600.0
+      }
+    ]
+  },
+  "recorded_with": {}
+}

@@ -241,10 +241,7 @@ export default {
 
   computed: {
     apiDocsUrl() {
-      return (
-        (process.env.API_BASE_URL || "http://127.0.0.1:5555") +
-        "/apidocs"
-      );
+      return this.$api.url("/apidocs");
     },
   },
 

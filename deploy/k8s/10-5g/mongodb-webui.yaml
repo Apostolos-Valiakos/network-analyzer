@@ -1,0 +1,96 @@
+# Subscriber database (UDR, PCF) and the Open5GS WebUI used to add the TRB500's
+# SIM. MongoDB 5 and later need a CPU with AVX: if the pod crash-loops with
+# "Illegal instruction", enable AVX for the VM in VMware or use mongo:4.4.
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-mongodb
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: open5gs-mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: open5gs-mongodb
+  namespace: team-5g
+spec:
+  serviceName: open5gs-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: open5gs-mongodb
+  template:
+    metadata:
+      labels:
+        app: open5gs-mongodb
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: mongodb
+          image: mongo:6.0
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# Browser: http://<VM IP>:30999  (default login admin / 1423 — change it)
+apiVersion: v1
+kind: Service
+metadata:
+  name: open5gs-webui
+  namespace: team-5g
+spec:
+  type: NodePort
+  selector:
+    app: open5gs-webui
+  ports:
+    - name: http
+      port: 9999
+      targetPort: 9999
+      nodePort: 30999
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open5gs-webui
+  namespace: team-5g
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: open5gs-webui
+  template:
+    metadata:
+      labels:
+        app: open5gs-webui
+        app.kubernetes.io/part-of: open5gs
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: webui
+          image: open5gs-webui:2.7.6
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_URI
+              value: mongodb://open5gs-mongodb.team-5g.svc.cluster.local/open5gs
+          ports:
+            - containerPort: 9999

@@ -1,0 +1,374 @@
+{
+  "data": {
+    "/analyze-saved-pcap/<path:filename>": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/apidocs/": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 200
+      }
+    },
+    "/apidocs/index.html": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 302
+      }
+    },
+    "/apispec_1.json": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 200
+      }
+    },
+    "/auth/login": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "10 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 400
+      }
+    },
+    "/auth/register": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/auth/users": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/auth/users/<int:user_id>": {
+      "methods": [
+        "DELETE"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "DELETE": 401
+      }
+    },
+    "/automated-analysis": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "5 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/clustering": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "10 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/clustering-output/<path:filename>": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/flasgger_static/<path:filename>": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 404
+      }
+    },
+    "/generated_pcaps/<path:filename>": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/oauth2-redirect.html": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 200
+      }
+    },
+    "/privacy-metrics": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/privacy-records/<path:filename>": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/run_pipeline": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "10 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/save-pcap": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "30 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/save-results": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/save_roles": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/start-analysis-from-websocket": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/suggested_clusters": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/analyze_live": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "5 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/v1/history/cluster/<int:cluster_id>": {
+      "methods": [
+        "DELETE"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "DELETE": 401
+      }
+    },
+    "/v1/history/cluster/<int:cluster_id>/result": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/history/clusters": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/history/generated": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/history/pcap/<pcap_id>": {
+      "methods": [
+        "DELETE"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "DELETE": 401
+      }
+    },
+    "/v1/history/pcap/<pcap_id>/reanalyze": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "5 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/v1/history/pcap/<pcap_id>/result": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/history/pcaps": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/ingest/zeek": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "exempt"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
+    "/v1/network/export": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/network/pcap/headers": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/network/pcap/latest/full": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/network/roles/latest": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/network/statistics": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/scan/results": {
+      "methods": [
+        "GET"
+      ],
+      "rate_limits": [],
+      "without_login": {
+        "GET": 401
+      }
+    },
+    "/v1/scan/start": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "5 per 1 minute"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    }
+  },
+  "recorded_with": {}
+}

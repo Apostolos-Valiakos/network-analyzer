@@ -2,12 +2,14 @@ tags:
   - Streaming Analysis
 summary: Start WebSocket Analysis
 description: >
-  Connects out to an external WebSocket source (e.g. the sensor's raw
-  packet publisher) for a fixed duration and captures the incoming
-  traffic. Returns immediately once the client thread is confirmed
-  started — it does not wait for the capture window to finish or return
-  analysis results directly; use the regular PCAP-based endpoints
-  afterward against whatever file this run produced.
+  Connects to a sensor's live packet stream (publisher.py, the same
+  WebSocket the Real Time page uses), sends START_CAPTURE, and captures for
+  the given number of seconds. The packets are then saved as a pcap owned
+  by the caller (it appears in History) and analysed like a re-analysis
+  (traffic graph and roles). Returns 202 at once; the outcome is sent on
+  the WebSocket as {"type": "ANALYSIS_STATUS", "status": "COMPLETE" |
+  "FAILED", "message", "filename", ...}, and the stored result is available
+  from History. Each request is an independent capture.
 consumes:
   - application/json
 produces:

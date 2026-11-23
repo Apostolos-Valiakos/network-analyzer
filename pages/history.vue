@@ -375,7 +375,6 @@ export default {
   data() {
     return {
       tab: 0,
-      apiBaseUrl: process.env.API_BASE_URL || 'http://127.0.0.1:5555',
 
       pcaps: [],
       generated: [],
@@ -445,7 +444,7 @@ export default {
     async loadPcaps() {
       this.loadingPcaps = true
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/v1/history/pcaps`)
+        const r = await this.$apiFetch(this.$api.url(`/v1/history/pcaps`))
         this.pcaps = await r.json()
       } catch {
         this.toast('Failed to load uploaded PCAPs', 'error')
@@ -457,7 +456,7 @@ export default {
     async loadGenerated() {
       this.loadingGenerated = true
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/v1/history/generated`)
+        const r = await this.$apiFetch(this.$api.url(`/v1/history/generated`))
         this.generated = await r.json()
       } catch {
         this.toast('Failed to load generated PCAPs', 'error')
@@ -469,7 +468,7 @@ export default {
     async loadClusters() {
       this.loadingClusters = true
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/v1/history/clusters`)
+        const r = await this.$apiFetch(this.$api.url(`/v1/history/clusters`))
         this.clusters = await r.json()
       } catch {
         this.toast('Failed to load cluster results', 'error')
@@ -484,9 +483,7 @@ export default {
       this.resultDialog = true
       this.resultLoading = true
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/v1/history/pcap/${item.id}/result`)
-        if (!r.ok) throw new Error()
-        this.resultData = await r.json()
+        this.resultData = await this.$api.json(`/v1/history/pcap/${item.id}/result`)
       } catch {
         this.toast('Could not load results', 'error')
         this.resultDialog = false
@@ -501,9 +498,7 @@ export default {
       this.resultDialog = true
       this.resultLoading = true
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/v1/history/cluster/${item.id}/result`)
-        if (!r.ok) throw new Error()
-        this.resultData = await r.json()
+        this.resultData = await this.$api.json(`/v1/history/cluster/${item.id}/result`)
       } catch {
         this.toast('Could not load results', 'error')
         this.resultDialog = false
@@ -516,18 +511,23 @@ export default {
       this.reanalyzing = item.id
       try {
         const r = await this.$apiFetch(
-          `${this.apiBaseUrl}/v1/history/pcap/${item.id}/reanalyze`,
+          this.$api.url(`/v1/history/pcap/${item.id}/reanalyze`),
           { method: 'POST' }
         )
+        const body = await r.json().catch(() => ({}))
         if (!r.ok) {
           // 500 = analysis ran and failed; the backend marked the file ERROR
           if (r.status === 500) item.status = 'ERROR'
-          const err = await r.json().catch(() => ({}))
-          throw new Error(err.error || 'Analysis failed')
+          throw new Error(body.error || 'Analysis failed')
         }
         item.has_result = true
         item.status = 'COMPLETED'
-        this.toast('Re-analysis complete')
+        const warnings = body.warnings || []
+        if (warnings.length) {
+          this.toast(`Re-analysis complete, with problems: ${warnings.join(' ')}`, 'warning')
+        } else {
+          this.toast('Re-analysis complete')
+        }
       } catch (e) {
         this.toast(e.message, 'error')
       } finally {
@@ -556,8 +556,8 @@ export default {
       this.deleting = true
       const { deleteType: type, deleteTarget: item } = this
       const url = type === 'pcap'
-        ? `${this.apiBaseUrl}/v1/history/pcap/${item.id}`
-        : `${this.apiBaseUrl}/v1/history/cluster/${item.id}`
+        ? this.$api.url(`/v1/history/pcap/${item.id}`)
+        : this.$api.url(`/v1/history/cluster/${item.id}`)
       try {
         const r = await this.$apiFetch(url, { method: 'DELETE' })
         if (!r.ok) throw new Error()
@@ -578,7 +578,7 @@ export default {
 
     async downloadPcap(filename) {
       try {
-        const r = await this.$apiFetch(`${this.apiBaseUrl}/generated_pcaps/${filename}`)
+        const r = await this.$apiFetch(this.$api.url(`/generated_pcaps/${filename}`))
         if (!r.ok) throw new Error('Download failed')
         const blob = await r.blob()
         const url = URL.createObjectURL(blob)

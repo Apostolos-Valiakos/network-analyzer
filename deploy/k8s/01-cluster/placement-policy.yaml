@@ -1,0 +1,37 @@
+# Copy of the XTRUST-6G rule: a pod in a labelled namespace is rejected unless
+# its nodeSelector names the same xtrust6g-node value as its namespace.
+# Testing against it here catches a missing nodeSelector before the manifests
+# reach SMTEC's cluster.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: require-team-node-selector
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >-
+        has(object.spec.nodeSelector) &&
+        'xtrust6g-node' in object.spec.nodeSelector &&
+        object.spec.nodeSelector['xtrust6g-node'] == namespaceObject.metadata.labels['xtrust6g-node']
+      messageExpression: >-
+        'pods in namespace ' + namespaceObject.metadata.name +
+        ' must set nodeSelector xtrust6g-node: ' + namespaceObject.metadata.labels['xtrust6g-node']
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: require-team-node-selector
+spec:
+  policyName: require-team-node-selector
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: xtrust6g-node
+          operator: Exists

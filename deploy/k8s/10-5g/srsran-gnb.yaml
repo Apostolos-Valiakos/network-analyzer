@@ -1,0 +1,199 @@
+# srsRAN gNB: CU (25.10) and DU (24.10, B210) as two containers in one pod.
+#
+# Why one pod: the CU's two GTP-U links (F1-U to the DU, NG-U to the UPF) both
+# use UDP 2152, and the testbed separated them by giving the CU two IP
+# addresses. A pod has one IP, and F1 messages carry no port, so the CU and
+# DU share a network namespace and talk F1 over loopback addresses
+# (127.0.10.1 = CU, 127.0.10.2 = DU), as in srsRAN's own examples. NG-U, NGAP
+# and E2 use the pod IP. Trade-off: F1 never leaves the pod, so PENM does not
+# see it (see the guide for splitting them later).
+#
+# Settings taken from E:\testbed_configs\o-cu\cu.yaml and o-du\du.yaml:
+# gNB id 2/22 bits, PLMN 99970, TAC 1, slices sd 66051 and 131844, band 3,
+# DL ARFCN 368500, 5 MHz, SCS 15 kHz, PCI 1, B210 serial 36C3E07, gains 70.
+# The old cu.yaml bound F1-U to 192.168.100.171 while everything else used
+# 10.16.0.x; that mismatch alone would stop user data.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsran-config
+  namespace: team-5g
+data:
+  cu.yaml: |
+    gnb_id: 2
+    gnb_id_bit_length: 22
+    ran_node_name: srs-cu-01
+
+    cu_cp:
+      amf:
+        addr: ${AMF_IP}
+        port: 38412
+        bind_addr: ${POD_IP}
+        supported_tracking_areas:
+          - tac: 1
+            plmn_list:
+              - plmn: "99970"
+                tai_slice_support_list:
+                  - sst: 1
+                    sd: 66051
+                  - sst: 1
+                    sd: 131844
+      f1ap:
+        bind_addr: 127.0.10.1
+      inactivity_timer: 7200
+
+    cu_up:
+      f1u:
+        socket:
+          - bind_addr: 127.0.10.1
+      ngu:
+        socket:
+          - bind_addr: ${POD_IP}
+
+    log:
+      filename: stdout
+      all_level: info
+      f1ap_level: debug
+
+    e2:
+      enable_cu_cp_e2: true
+      enable_cu_up_e2: true
+      e2sm_kpm_enabled: true
+      e2sm_rc_enabled: true
+      addr: ${RIC_IP}
+      bind_addr: ${POD_IP}
+      port: 36421
+
+  du.yaml: |
+    gnb_id: 2
+    gnb_id_bit_length: 22
+    gnb_du_id: 1
+
+    f1ap:
+      cu_cp_addr: 127.0.10.1
+      bind_addr: 127.0.10.2
+
+    nru:
+      bind_addr: 127.0.10.2
+      ext_addr: 127.0.10.2
+
+    cell_cfg:
+      dl_arfcn: 368500
+      band: 3
+      channel_bandwidth_MHz: 5
+      common_scs: 15
+      plmn: "99970"
+      tac: 1
+      pci: 1
+
+    ru_sdr:
+      device_driver: uhd
+      device_args: type=b200,serial=36C3E07
+      srate: 5.76
+      tx_gain: 70
+      rx_gain: 70
+      sync: internal
+      clock: internal
+
+    e2:
+      enable_du_e2: true
+      addr: ${RIC_IP}
+      port: 36421
+      bind_addr: ${POD_IP}
+      e2sm_kpm_enabled: true
+      e2sm_rc_enabled: true
+
+    log:
+      filename: stdout
+      all_level: info
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: srsran-gnb
+  namespace: team-5g
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: srsran-gnb
+  ports:
+    - name: ngu
+      port: 2152
+      protocol: UDP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: srsran-gnb
+  namespace: team-5g
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate     # never two DUs on one B210
+  selector:
+    matchLabels:
+      app: srsran-gnb
+  template:
+    metadata:
+      labels:
+        app: srsran-gnb
+        app.kubernetes.io/part-of: ran
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        # requests == limits with whole CPUs on every container makes the pod
+        # "Guaranteed", so the static CPU manager gives it dedicated cores.
+        - name: cu
+          image: srsran-cu:25.10
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/cu.yaml", "/etc/srsran/cu.yaml", "--",
+                    "srscu", "-c", "/etc/srsran/cu.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RESOLVE
+              value: "AMF_IP=open5gs-amf.team-5g.svc.cluster.local RIC_IP=flexric-ric.team-5g.svc.cluster.local"
+          securityContext:
+            capabilities:
+              add: ["SYS_NICE", "IPC_LOCK"]   # real-time thread priorities
+          resources:
+            requests: { cpu: "2", memory: 2Gi }
+            limits: { cpu: "2", memory: 2Gi }
+          volumeMounts:
+            - name: config
+              mountPath: /config/cu.yaml
+              subPath: cu.yaml
+        - name: du
+          image: srsran-du:24.10
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/du.yaml", "/etc/srsran/du.yaml", "--",
+                    "srsdu", "-c", "/etc/srsran/du.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RESOLVE
+              value: "RIC_IP=flexric-ric.team-5g.svc.cluster.local"
+          securityContext:
+            privileged: true    # USB access to the B210 and real-time scheduling
+          resources:
+            requests: { cpu: "4", memory: 4Gi }
+            limits: { cpu: "4", memory: 4Gi }
+          volumeMounts:
+            - name: config
+              mountPath: /config/du.yaml
+              subPath: du.yaml
+            - name: usb
+              mountPath: /dev/bus/usb
+      volumes:
+        - name: config
+          configMap:
+            name: srsran-config
+        - name: usb
+          hostPath:
+            path: /dev/bus/usb

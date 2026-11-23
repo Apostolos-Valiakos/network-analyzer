@@ -3,11 +3,10 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # System packages
-#   libpcap0.8  – runtime library required by scapy for reading/writing PCAPs
-#   tshark      – required by pyshark for deep packet dissection
+#   tshark      – extracts the packet fields every analysis module reads; the
+#                 backend has no other packet library (Scapy was removed)
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpcap0.8 \
         tshark \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,4 +21,6 @@ RUN mkdir -p uploads generated_pcaps cluster_analysis results
 
 EXPOSE 5555
 
-CMD ["python3", "app.py"]
+# One worker: Socket.IO clients and the rate limiter live in process memory.
+# Threads serve concurrent requests and websockets.
+CMD ["sh", "-c", "exec gunicorn --workers 1 --threads 100 --timeout 120 --bind 0.0.0.0:${PORT:-5555} --access-logfile - wsgi:app"]
