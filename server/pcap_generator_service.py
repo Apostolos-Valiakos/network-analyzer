@@ -1,10 +1,13 @@
-import os
 import base64
+import logging
+import os
 import struct
 import time
 from typing import List, Union
 
 import settings
+
+logger = logging.getLogger(__name__)
 
 # Module-level name kept so tests can monkeypatch it.
 PCAP_OUTPUT_DIR = settings.PCAP_GEN_OUTPUT_DIR
@@ -49,11 +52,13 @@ def handle_pcap_chunk(
                     continue
                 try:
                     pkt_bytes = base64.b64decode(b64_pkt)
-                    f.write(_pcap_packet_header(len(pkt_bytes)))
-                    f.write(pkt_bytes)
-                except Exception as e:
-                    print(f"Error decoding packet: {e}")
+                except ValueError as e:  # binascii.Error: not valid base64
+                    logger.warning("Skipping a packet that is not valid base64: %s", e)
                     continue
+                # Write errors (disk full, ...) are real failures: the outer
+                # handler reports them instead of skipping packet after packet.
+                f.write(_pcap_packet_header(len(pkt_bytes)))
+                f.write(pkt_bytes)
         return True, safe_filename, None
     except Exception as e:
         return False, None, str(e)

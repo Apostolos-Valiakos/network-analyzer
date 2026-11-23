@@ -28,7 +28,7 @@ parameters:
           example: "20260101120000_capture.pcap"
         model_name:
           type: string
-          description: Name of the model to use (e.g., rule_based).
+          description: Accepted for compatibility and ignored; roles always come from the evidence-based rule engine.
           example: "rule_based"
         selected_ips:
           type: array
@@ -102,6 +102,15 @@ responses:
         ip_role_details:
           type: object
           description: Same content as "ip_roles" above (pre-merge source field from the pipeline).
+        warnings:
+          type: array
+          description: >
+            Only present when part of the work failed while the rest
+            succeeded. User-readable messages; the rest of the response is
+            still valid but may be incomplete.
+          items:
+            type: string
+          example: ["Role detection failed while reading the capture (ValueError); roles may be incomplete."]
   403:
     description: The PCAP exists but belongs to a different user.
     schema:

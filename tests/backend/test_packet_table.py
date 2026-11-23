@@ -201,3 +201,22 @@ def test_real_child_process_runs_pipeline_without_database_setup(tmp_path, captu
     assert output.count("Running upgrade") <= 1
     assert "Traceback" not in output
     assert "Loading roles" in output
+
+
+# ── Loading trims an incomplete tail from the stored capture ─────────────────
+
+
+@pytest.mark.skipif(tshark_version() is None, reason="needs tshark on PATH")
+def test_loading_trims_a_zero_tail_from_the_stored_file(capture_copy):
+    path = capture_copy("sample.pcap")
+    size = os.path.getsize(path)
+    with open(path, "ab") as f:
+        f.write(b"\0" * 3952)
+
+    rows = list(packet_table.outer_packets(path))
+
+    assert len(rows) == 58
+    assert os.path.getsize(path) == size
+    # The cache describes the trimmed file, so the next load is a cache hit.
+    with open(path + packet_table.CACHE_SUFFIX, encoding="utf-8") as f:
+        assert f.readline().rstrip("\n") == packet_table._cache_header(path)

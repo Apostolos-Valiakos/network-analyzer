@@ -45,7 +45,7 @@ class PcapFile(db.Model):
     source = db.Column(db.String(20), default="upload")  # "upload" or "generated"
     analysis_result = db.Column(db.JSON, nullable=True)
 
-    # Relationships (Needed for rrc_utils.py and ueAnalysis.py)
+    # Relationships (role cache in role_engine.py, UE sessions)
     roles = db.relationship(
         "IpRole", backref="pcap", lazy=True, cascade="all, delete-orphan"
     )
@@ -106,7 +106,7 @@ class RoleSnapshot(db.Model):
 
 class IpRole(db.Model):
     """
-    Needed for rrc_utils.py caching.
+    Role cache written by role_engine.get_or_compute_roles.
     """
 
     __tablename__ = "ip_roles"

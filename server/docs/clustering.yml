@@ -146,6 +146,15 @@ responses:
               type: integer
               description: cluster id of the highest-scoring entry in cluster_hierarchy, or null if none.
               example: 0
+        warnings:
+          type: array
+          description: >
+            Only present when part of the work failed while the rest
+            succeeded. User-readable messages; the rest of the response is
+            still valid but may be incomplete.
+          items:
+            type: string
+          example: ["The clustering result could not be saved, so it will not appear in History."]
   400:
     description: >
       Missing JSON body, or "clusters"/"anomaly_threshold" out of the

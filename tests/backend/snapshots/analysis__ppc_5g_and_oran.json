@@ -94,43 +94,48 @@
       },
       "ip_protocols": {
         "10.250.100.1": [
-          "UDP -> DNS"
+          "udp:dns"
         ],
         "10.250.100.41": [
-          "SCTP -> SCTPChunkCookieAck",
-          "SCTP -> SCTPChunkData",
-          "SCTP -> SCTPChunkInitAck",
-          "SCTP -> SCTPChunkSACK"
+          "sctp",
+          "sctp:ngap"
         ],
         "10.250.100.42": [
-          "ICMP -> Raw",
-          "SCTP -> SCTPChunkCookieEcho",
-          "SCTP -> SCTPChunkData",
-          "SCTP -> SCTPChunkInit",
-          "SCTP -> SCTPChunkSACK",
-          "TCP",
-          "TCP -> Raw",
-          "UDP -> DNS"
+          "icmp:data",
+          "sctp",
+          "sctp:e2ap:e1ap",
+          "sctp:e2ap:ngap",
+          "sctp:ngap",
+          "tcp",
+          "tcp:data",
+          "tcp:http",
+          "tcp:http:json",
+          "tcp:ssh",
+          "udp:dns"
         ],
         "10.250.100.45": [
-          "SCTP -> SCTPChunkCookieAck",
-          "SCTP -> SCTPChunkInitAck",
-          "SCTP -> SCTPChunkSACK"
+          "sctp"
         ],
         "10.8.0.11": [
-          "TCP",
-          "TCP -> Padding",
-          "TCP -> Raw",
-          "TCP -> Raw -> Padding"
+          "tcp",
+          "tcp:data",
+          "tcp:http",
+          "tcp:sigcomp",
+          "tcp:ssh"
         ],
         "192.178.24.14": [
-          "ICMP -> Raw"
+          "icmp:data"
         ]
       },
       "total_packets": 236
     }
   },
   "recorded_with": {
-    "scapy": "2.7"
-  }
+    "tshark": "4.6"
+  },
+  "same_output_with": [
+    {
+      "tshark": "4.4"
+    }
+  ]
 }

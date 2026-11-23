@@ -76,8 +76,16 @@ responses:
             example: 14
   400:
     description: >
-      Request processing error — invalid start_time/end_time/limit values,
-      or a database error.
+      Invalid parameters: start_time/end_time are not Unix timestamps in
+      seconds, or limit is not an integer in 1-10000.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"
+  500:
+    description: Server-side failure (e.g. database error). The details are in the server log.
     schema:
       type: object
       properties:

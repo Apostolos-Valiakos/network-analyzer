@@ -47,7 +47,11 @@
     "total_packets": 58
   },
   "recorded_with": {
-    "scapy": "2.7",
     "tshark": "4.6"
-  }
+  },
+  "same_output_with": [
+    {
+      "tshark": "4.4"
+    }
+  ]
 }

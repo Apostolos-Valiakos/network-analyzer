@@ -9,7 +9,7 @@ _SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-from pcap_repair import trim_incomplete_tail
+from pcap_repair import complete_length, trim_incomplete_tail
 
 SAMPLE = os.path.join(os.path.dirname(__file__), "fixtures", "sample.pcap")
 
@@ -96,3 +96,47 @@ def test_non_capture_file_is_untouched(tmp_path):
     path.write_bytes(b"just text")
     assert trim_incomplete_tail(str(path)) == 0
     assert path.read_bytes() == b"just text"
+
+
+# ── complete_length: the same check, without changing the file ──────────────
+
+
+def test_complete_length_of_intact_capture_is_its_size(tmp_path):
+    path, good = _pcapng(tmp_path)
+    assert complete_length(path) == good
+
+
+def test_complete_length_excludes_zero_tail_and_leaves_file_alone(tmp_path):
+    path, good = _pcapng(tmp_path, tail=b"\x00" * 3952)
+    assert complete_length(path) == good
+    assert os.path.getsize(path) == good + 3952
+
+
+def test_complete_length_excludes_partial_classic_record(tmp_path):
+    path = tmp_path / "c.pcap"
+    header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
+    record = struct.pack("<IIII", 1, 0, 4, 4) + b"abcd"
+    path.write_bytes(header + record + record[:10])
+    assert complete_length(str(path)) == len(header) + len(record)
+
+
+def test_complete_length_is_none_when_unsure(tmp_path):
+    corrupt, _ = _pcapng(tmp_path, tail=b"\x00" * 8 + b"data")
+    assert complete_length(corrupt) is None
+    text = tmp_path / "notes.txt"
+    text.write_text("not a capture")
+    assert complete_length(str(text)) is None
+    assert complete_length(str(tmp_path / "missing.pcap")) is None
+
+
+def test_zero_filled_tail_of_classic_pcap_is_trimmed(tmp_path):
+    """Zeros parse as empty classic-pcap records, so they need the same
+    all-zeros-to-EOF check as pcapng."""
+    path = tmp_path / "c.pcap"
+    shutil.copy(SAMPLE, path)
+    size = os.path.getsize(path)
+    with open(path, "ab") as f:
+        f.write(bytes(3952))
+    assert complete_length(str(path)) == size
+    assert trim_incomplete_tail(str(path)) == 3952
+    assert os.path.getsize(path) == size

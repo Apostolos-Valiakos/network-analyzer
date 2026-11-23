@@ -17,11 +17,9 @@ import re
 import shutil
 import sys
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
 import pytest
 
-from snapshot_utils import FIXTURE_DIR, SNAPSHOT_CAPTURES, scapy_version, tshark_version
+from snapshot_utils import FIXTURE_DIR, SNAPSHOT_CAPTURES, tshark_version
 
 _SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server"))
 if _SERVER_DIR not in sys.path:
@@ -33,17 +31,8 @@ from models import FlowStatistic, PcapFile, RoleSnapshot
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 
 
-def _real_scapy():
-    try:
-        from scapy.all import PcapReader
-        return not isinstance(PcapReader, MagicMock)
-    except Exception:
-        return False
-
-
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(not _real_scapy(), reason="needs the real scapy package"),
     pytest.mark.skipif(tshark_version() is None, reason="needs tshark on PATH"),
 ]
 
@@ -51,7 +40,7 @@ _UPLOAD_PREFIX = re.compile(r"\d{14}_")
 
 
 def _tools():
-    return {"scapy": scapy_version(), "tshark": tshark_version()}
+    return {"tshark": tshark_version()}
 
 
 def _stem(capture):

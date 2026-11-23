@@ -7,11 +7,10 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 
 from access import current_user_id, is_admin, record_for_user
-from analysis_service import analysis_error_response, run_core_analysis
+from analysis_service import LEGACY_CACHE_SUFFIXES, analysis_error_response, run_core_analysis
 from extensions import limiter
 from models import db, ClusterResult, PcapFile
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
-from rrc_utils import FEATURE_CACHE_SUFFIX
 from settings import CLUSTERING_OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
@@ -133,7 +132,7 @@ def delete_history_pcap(pcap_id):
         for path in (
             record.file_path,
             record.file_path + PACKET_CACHE_SUFFIX,
-            record.file_path + FEATURE_CACHE_SUFFIX,
+            *(record.file_path + suffix for suffix in LEGACY_CACHE_SUFFIXES),
         ):
             if os.path.exists(path):
                 try:

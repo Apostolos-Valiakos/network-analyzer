@@ -31,6 +31,9 @@ COPY ["Host Files/requirements.txt", "/tmp/req-sensor.txt"]
 RUN pip install --no-cache-dir -r /tmp/req-sensor.txt scapy websockets psutil
 
 COPY ["Host Files/", "/app/sensor/"]
+# pcap_server.py sends only the complete records of the ring file dumpcap is
+# writing; the record walker is shared with the backend.
+COPY server/pcap_repair.py /app/sensor/pcap_repair.py
 COPY deploy/k8s/images/sensor/entrypoint.sh /usr/local/bin/sensor-entrypoint.sh
 RUN chmod +x /usr/local/bin/sensor-entrypoint.sh \
     && mkdir -p /app/sensor/generated_pcaps /var/lib/penm-sensor/zeek

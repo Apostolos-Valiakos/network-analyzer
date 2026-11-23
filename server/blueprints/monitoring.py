@@ -189,6 +189,11 @@ def ingest_zeek():
             conn.close()
 
 
+_BAD_TIME_PARAMS = (
+    "start_time and end_time must be Unix timestamps in seconds, and limit an integer"
+)
+
+
 @bp.route("/v1/network/statistics", methods=["GET"])
 @jwt_required()
 @swag_from(doc("get_network_statistics.yml"))
@@ -200,14 +205,15 @@ def get_network_statistics():
         # value as local time and lands hours in the past on non-UTC hosts.
         raw_end = float(request.args.get("end_time", time.time()))
         limit = int(request.args.get("limit", 1000))
-        resp_format = request.args.get("format", "csv").lower()
-
-        if not (1 <= limit <= 10000):
-            return jsonify({"error": "limit must be between 1 and 10000"}), 400
-
         start_dt = utc_from_timestamp(raw_start)
         end_dt = utc_from_timestamp(raw_end)
+    except (ValueError, OverflowError, OSError):
+        return jsonify({"error": _BAD_TIME_PARAMS}), 400
+    resp_format = request.args.get("format", "csv").lower()
+    if not (1 <= limit <= 10000):
+        return jsonify({"error": "limit must be between 1 and 10000"}), 400
 
+    try:
         query = (
             FlowStatistic.query.filter(
                 FlowStatistic.ts >= start_dt, FlowStatistic.ts <= end_dt
@@ -223,9 +229,9 @@ def get_network_statistics():
             return jsonify(results), 200
         return generate_csv_response(results, "network_statistics.csv")
 
-    except Exception as e:
+    except Exception:
         logger.exception("get_network_statistics failed")
-        return jsonify({"error": "Internal server error"}), 400
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @bp.route("/v1/network/roles/latest", methods=["GET"])
@@ -297,16 +303,17 @@ def export_network_statistics():
     try:
         raw_start = float(request.args.get("start_time", 0))
         raw_end = float(request.args.get("end_time", time.time()))  # see get_network_statistics
-        resp_format = request.args.get("format", "csv").lower()
-
         limit_arg = request.args.get("limit")
         limit = int(limit_arg) if limit_arg and limit_arg.strip() else None
-        if limit is not None and not (1 <= limit <= 10000):
-            return jsonify({"error": "limit must be between 1 and 10000"}), 400
-
         start_dt = utc_from_timestamp(raw_start)
         end_dt = utc_from_timestamp(raw_end)
+    except (ValueError, OverflowError, OSError):
+        return jsonify({"error": _BAD_TIME_PARAMS}), 400
+    resp_format = request.args.get("format", "csv").lower()
+    if limit is not None and not (1 <= limit <= 10000):
+        return jsonify({"error": "limit must be between 1 and 10000"}), 400
 
+    try:
         query = FlowStatistic.query.filter(
             FlowStatistic.ts >= start_dt, FlowStatistic.ts <= end_dt
         ).order_by(FlowStatistic.ts.desc())
@@ -339,7 +346,7 @@ def export_network_statistics():
 
     except Exception:
         logger.exception("export_network_statistics failed")
-        return jsonify({"error": "Internal server error"}), 400
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @bp.route("/v1/analyze_live", methods=["POST"])

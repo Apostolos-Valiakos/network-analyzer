@@ -1,7 +1,7 @@
 """
 Evidence-based IP role assessment engine.
 
-Replaces the single-pass if-chain in rrc_utils.get_comprehensive_ip_roles.
+Replaced the single-pass if-chain of the former rrc_utils module.
 Works in two stages over one tshark field-extraction pass:
 
   1. collect_evidence(): per-IP, direction-aware evidence counters
@@ -123,6 +123,9 @@ class PcapObservations:
     )
     redis_clients: Set[str] = field(default_factory=set)
     e2t_clients: Set[str] = field(default_factory=set)
+    # User-safe messages when the capture could not be read completely; the
+    # roles are then based on partial (or no) evidence.
+    warnings: List[str] = field(default_factory=list)
 
     def ev(self, ip: str) -> IpEvidence:
         if ip not in self.evidence:
@@ -282,10 +285,16 @@ def collect_evidence(pcap_file: str) -> PcapObservations:
                 _parse_line(line, obs)
     except subprocess.TimeoutExpired:
         logger.warning("tshark DPI timed out on %s", pcap_file)
+        obs.warnings.append("Role detection timed out reading the capture; roles may be incomplete.")
     except FileNotFoundError:
         logger.error("tshark not found — role assessment unavailable")
-    except Exception:
+        obs.warnings.append("Role detection unavailable: tshark was not found on the server.")
+    except Exception as exc:
         logger.exception("DPI error on %s", pcap_file)
+        obs.warnings.append(
+            f"Role detection failed while reading the capture ({type(exc).__name__}); "
+            "roles may be incomplete."
+        )
 
     _infer_cross_ip(obs)
     return obs
@@ -515,20 +524,29 @@ def resolve_roles(obs: PcapObservations) -> Dict[str, RoleAssessment]:
 # ---------------------------------------------------------------------------
 
 
-def assess_pcap(pcap_file: str) -> Dict[str, RoleAssessment]:
-    """Pure per-pcap analysis: evidence collection + rule resolution."""
+def assess_pcap(pcap_file: str, warnings: Optional[List[str]] = None) -> Dict[str, RoleAssessment]:
+    """Pure per-pcap analysis: evidence collection + rule resolution. When the
+    capture cannot be read completely, user-safe messages are appended to
+    `warnings`."""
     logger.info("Role engine %s analyzing %s", ROLE_ENGINE_VERSION, pcap_file)
-    return resolve_roles(collect_evidence(pcap_file))
+    obs = collect_evidence(pcap_file)
+    if warnings is not None:
+        warnings.extend(obs.warnings)
+    return resolve_roles(obs)
 
 
 def roles_as_strings(assessments: Dict[str, RoleAssessment]) -> Dict[str, str]:
     return {ip: a.role for ip, a in assessments.items()}
 
 
-def get_or_compute_roles(pcap_file: str) -> Dict[str, RoleAssessment]:
+def get_or_compute_roles(
+    pcap_file: str, warnings: Optional[List[str]] = None
+) -> Dict[str, RoleAssessment]:
     """
     Version-checked DB cache around assess_pcap. Falls back to pure
     analysis when there is no app context (background threads).
+    Roles from an incompletely read capture are returned with `warnings`
+    filled in, and are not cached.
     """
     pcap_record = None
     try:
@@ -551,9 +569,12 @@ def get_or_compute_roles(pcap_file: str) -> Dict[str, RoleAssessment]:
         logger.debug("Database lookup skipped (no app context): %s", e)
         pcap_record = None
 
-    assessments = assess_pcap(pcap_file)
+    found_warnings: List[str] = []
+    assessments = assess_pcap(pcap_file, warnings=found_warnings)
+    if warnings is not None:
+        warnings.extend(found_warnings)
 
-    if pcap_record and assessments:
+    if pcap_record and assessments and not found_warnings:
         try:
             # Delete-before-insert: clears stale-version rows and prevents
             # duplicates when the same pcap is analyzed twice.

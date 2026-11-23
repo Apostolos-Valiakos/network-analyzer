@@ -3,11 +3,10 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # System packages
-#   libpcap0.8  – runtime library required by scapy for reading/writing PCAPs
-#   tshark      – extracts the packet fields every analysis module reads
+#   tshark      – extracts the packet fields every analysis module reads; the
+#                 backend has no other packet library (Scapy was removed)
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpcap0.8 \
         tshark \
     && rm -rf /var/lib/apt/lists/*
 

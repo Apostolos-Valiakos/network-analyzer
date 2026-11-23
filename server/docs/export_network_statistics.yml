@@ -79,10 +79,18 @@ responses:
             description: Concatenated "id.orig_h <-> id.resp_h" pair, for spreadsheet readability.
             example: "10.0.0.1 <-> 10.0.0.5"
   400:
-    description: The "limit" parameter is out of the allowed 1-10000 range, or another request processing error.
+    description: Invalid parameters - start_time/end_time are not Unix timestamps in seconds, or limit is not an integer in 1-10000.
     schema:
       type: object
       properties:
         error:
           type: string
           example: "limit must be between 1 and 10000"
+  500:
+    description: Server-side failure (e.g. database error). The details are in the server log.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"

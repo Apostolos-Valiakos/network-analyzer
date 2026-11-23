@@ -68,10 +68,16 @@ def clustering_analysis():
         try:
             db.session.commit()
         except Exception:
+            logger.exception("Could not save the clustering result for pcap %s", pcap.id)
             db.session.rollback()
+            # The result was computed, so return it, but say it is not in History.
+            return jsonify({
+                **result,
+                "warnings": ["The clustering result could not be saved, so it will not appear in History."],
+            }), 200
 
         return jsonify(result), 200
-    except Exception as e:
+    except Exception:
         logger.exception("clustering_analysis failed")
         return jsonify({"error": "Internal server error"}), 500
 

@@ -2,9 +2,10 @@ tags:
   - Core Analysis
 summary: Analyze Saved PCAP
 description: >
-  Runs a single-pass streaming analysis (packet count, per-IP protocol set,
-  and conversation graph) on a PCAP file already owned by the caller (e.g.
-  uploaded via /save-pcap). Lighter-weight than /automated-analysis — no
+  Returns the packet count, the protocol stacks each IP sent, and the
+  conversation graph for a PCAP file already owned by the caller (e.g.
+  uploaded via /save-pcap). Reads the shared tshark packet table, so a
+  capture that was already analyzed is answered without re-reading it. Lighter-weight than /automated-analysis — no
   role classification or UE session extraction, just traffic shape.
 produces:
   - application/json
@@ -36,16 +37,18 @@ responses:
             ip_protocols:
               type: object
               description: >
-                Map of IP address to the list of protocol/layer names seen
-                for that IP (e.g. scapy layer names, or "UNKNOWN(<proto>)"
-                for unrecognized IP protocol numbers).
+                Map of source IP address (outermost IPv4 header) to the
+                protocol stacks it sent, as tshark names them, above the IP
+                layer and joined with ":" (e.g. "sctp:ngap:nas-5gs";
+                "udp:gtp:ip:tcp" for GTP-U tunnels). Repeated adjacent layers
+                are collapsed. "ip" means nothing was decoded above IP.
               additionalProperties:
                 type: array
                 items:
                   type: string
               example:
-                "10.0.0.1": ["TCP", "TCP -> HTTP"]
-                "10.0.0.2": ["UDP"]
+                "192.168.100.5": ["sctp", "sctp:ngap", "sctp:ngap:nas-5gs", "udp:dns"]
+                "10.250.100.42": ["tcp:http2:json", "udp:pfcp"]
             graph:
               type: object
               description: Force-directed graph of IP conversations (ECharts-shaped).

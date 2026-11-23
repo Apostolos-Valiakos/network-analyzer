@@ -1,5 +1,6 @@
-import os
 import json
+import logging
+import os
 from collections import defaultdict
 from datetime import datetime
 from itertools import combinations
@@ -10,6 +11,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
 import networkx as nx
 import community  # python-louvain
+
+logger = logging.getLogger(__name__)
 
 import packet_table
 import settings
@@ -358,7 +361,8 @@ def analyze_pcap_for_clustering(pcap_path, max_clusters=10, anomaly_threshold=2)
                     identifier=f"anomalous-cluster:{a['ip']}",
                 )
     except Exception:
-        pass  # alert emission must never break the analysis pipeline
+        # Alert emission must never break the analysis pipeline, but say so.
+        logger.exception("Could not emit anomalous-cluster notices for %s", pcap_path)
 
     save_results(df, os.path.basename(pcap_path), settings.CLUSTERING_OUTPUT_DIR)
 

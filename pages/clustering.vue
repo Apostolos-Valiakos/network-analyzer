@@ -21,6 +21,8 @@
       </p>
     </v-card>
 
+    <warnings-alert :warnings="warnings" />
+
     <v-stepper v-model="e1" class="mt-4 rounded-xl" style="border: 1px solid var(--border)">
       <v-stepper-header class="themed-stepper-header">
         <v-stepper-step :complete="e1 > 1" step="1">Clustering</v-stepper-step>
@@ -85,12 +87,14 @@
 import StepClustering from "@/components/stepper/StepClustering.vue";
 import StepProfiling from "@/components/stepper/StepProfiling.vue";
 import StepResults from "@/components/stepper/StepResults.vue";
+import WarningsAlert from "@/components/WarningsAlert.vue";
 
 export default {
   components: {
     StepClustering,
     StepProfiling,
     StepResults,
+    WarningsAlert,
   },
 
   data() {
@@ -115,6 +119,8 @@ export default {
       cnnLoading: false,
       cnnError: null,
       clusters: [],
+      // Problems the backend reported while still returning a result
+      warnings: [],
       headers: [
         { text: "Cluster", value: "cluster" },
         { text: "Score", value: "score" },
@@ -226,6 +232,7 @@ export default {
     async fetchAnalysis() {
       this.loading = true;
       this.error = null;
+      this.warnings = [];
 
       try {
         const payload = {
@@ -248,6 +255,7 @@ export default {
         const data = await response.json();
         this.graphData = data.graphData;
         this.clusters = data.clusters;
+        this.warnings = data.warnings || [];
 
         if (this.graphData?.nodes) {
           this.allIps = [

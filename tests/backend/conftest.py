@@ -4,7 +4,7 @@ Shared fixtures for all backend tests.
 Run from the project root:
     pip install -r server/requirements.txt -r tests/requirements.txt
     pytest                          # everything
-    pytest -m "not integration"     # skip tests that need real Scapy / tshark
+    pytest -m "not integration"     # skip tests that need real tshark
     pytest --update-snapshots       # re-record tests/backend/snapshots/*.json
 
 Snapshot tests (test_characterization.py, test_route_snapshots.py) record what
@@ -35,50 +35,7 @@ os.environ["WP5_NOTICE_LOG"] = os.path.join(
     _tempfile.gettempdir(), "penm_tests_wp5_notices.log"
 )
 
-# ── 2. Stub heavy packages only when they are NOT installed ──────────────────
-# Using types.ModuleType (not MagicMock) as the package root is critical:
-# a MagicMock root causes "X is not a package" when code does
-# `from X.sub import Y` because MagicMock has no __path__.
-import types as _types
-
-
-def _stub_package_if_missing(pkg_name, submodules=()):
-    """Create a minimal stub package only when the real one is absent."""
-    try:
-        __import__(pkg_name)
-        return  # real package is importable — leave sys.modules untouched
-    except ImportError:
-        pass
-
-    pkg = _types.ModuleType(pkg_name)
-    pkg.__path__ = []          # marks it as a package to Python's import system
-    pkg.__package__ = pkg_name
-    sys.modules[pkg_name] = pkg
-
-    for sub in submodules:
-        full = f"{pkg_name}.{sub}"
-        if full not in sys.modules:
-            m = MagicMock()
-            m.__name__ = full
-            sys.modules[full] = m
-            # Wire as attribute on the immediate parent module
-            if "." in sub:
-                parent_key, leaf = sub.rsplit(".", 1)
-                parent = sys.modules.get(f"{pkg_name}.{parent_key}", pkg)
-            else:
-                parent, leaf = pkg, sub
-            setattr(parent, leaf, m)
-
-
-_stub_package_if_missing("scapy", [
-    "all", "data", "layers", "layers.l2", "layers.inet",
-    "utils", "packet", "fields", "config",
-])
-
-_ws_mod = MagicMock()
-_ws_mod.startWebSocketClient = MagicMock(return_value=True)
-sys.modules.setdefault("connectToWebsocket", _ws_mod)
-
+# ── 2. Stub modules with import-time side effects ──────────────────────────
 _sched_mod = MagicMock()
 _sched_mod.start_scheduler = MagicMock()
 sys.modules.setdefault("snapshot_scheduler", _sched_mod)

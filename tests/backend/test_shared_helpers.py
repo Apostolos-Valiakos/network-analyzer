@@ -133,3 +133,23 @@ class TestFlowAlert:
         from blueprints.monitoring import flow_alert
 
         assert flow_alert("a", "b", 5_000_000, 5_000, "SF") is None
+
+
+# ── Protocol stack labels for /analyze-saved-pcap ────────────────────────────
+
+
+@pytest.mark.parametrize("frame_protocols, label", [
+    ("eth:ethertype:ip:sctp:ngap:ngap:nas-5gs", "sctp:ngap:nas-5gs"),
+    ("eth:ethertype:ip:udp:dns", "udp:dns"),
+    ("sll:ethertype:ip:tcp:http2:json", "tcp:http2:json"),
+    # GTP-U: the label shows what the tunnel carries
+    ("eth:ethertype:ip:udp:gtp:ip:tcp:tls", "udp:gtp:ip:tcp:tls"),
+    # ICMP error quoting another packet
+    ("eth:ethertype:ip:icmp:ip:udp:dns", "icmp:ip:udp:dns"),
+    # nothing decoded above IP
+    ("eth:ethertype:ip", "ip"),
+])
+def test_protocol_label(frame_protocols, label):
+    from pcap_analysis import protocol_label
+
+    assert protocol_label(frame_protocols) == label

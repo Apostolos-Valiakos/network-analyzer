@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import settings
 from models import db, RoleSnapshot
 from Preprocess import run_ip_role_pipeline
+from pcap_repair import trim_incomplete_tail
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ def run_role_snapshot(app):
             with open(temp_pcap, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
+            trim_incomplete_tail(temp_pcap)
 
             logger.info("PCAP slice downloaded and saved for on-demand analysis.")
 

@@ -10,10 +10,13 @@ from models import db, PcapFile
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 from pcap_analysis import summarize_traffic
 from Preprocess import run_ip_role_pipeline
-from rrc_utils import FEATURE_CACHE_SUFFIX
 from settings import PCAP_GEN_OUTPUT_DIR, UPLOAD_FOLDER
 
 logger = logging.getLogger(__name__)
+
+# Caches older versions wrote next to a capture. Nothing creates them any more,
+# but existing ones are still cleaned up and deleted with their capture.
+LEGACY_CACHE_SUFFIXES = (".features.tsv", ".packets.json")
 
 
 class AnalysisFailed(Exception):
@@ -38,7 +41,9 @@ def run_core_analysis(pcap_path: str, model_name: str, pipeline_label: str) -> d
     """Traffic graph + role pipeline, shared by upload and re-analyze.
 
     Returns the result stored in pcap_files.analysis_result. Raises
-    AnalysisFailed with a user-safe message when either step fails.
+    AnalysisFailed with a user-safe message when either step fails. When the
+    roles are based on an incompletely read capture, the result also has
+    "warnings" (a list of user-safe messages); otherwise that key is absent.
     """
     analysis_result, err = summarize_traffic(pcap_path)
     if err:
@@ -46,11 +51,14 @@ def run_core_analysis(pcap_path: str, model_name: str, pipeline_label: str) -> d
     report = run_ip_role_pipeline(pcap_path, model_name)
     if report.get("status") != "success":
         raise AnalysisFailed(f"{pipeline_label} failed: {report.get('message')}")
-    return {
+    result = {
         "total_packets": analysis_result["total_packets"],
         "graph": build_graph_json(analysis_result["conversations"]),
         "roles": report.get("ip_roles", {}),
     }
+    if report.get("warnings"):
+        result["warnings"] = list(report["warnings"])
+    return result
 
 
 def analysis_error_response(exc: Exception, pcap_id, generic_message: str, log_name: str):
@@ -69,13 +77,13 @@ def analysis_error_response(exc: Exception, pcap_id, generic_message: str, log_n
 
 
 def cleanup_packet_caches(max_age_seconds: int = 3600) -> None:
-    """Deletes stale tshark cache files (.packets.tsv, .features.tsv, legacy
-    .packets.json) older than max_age_seconds."""
+    """Deletes stale tshark cache files (.packets.tsv and the legacy
+    LEGACY_CACHE_SUFFIXES) older than max_age_seconds."""
     now = datetime.now().timestamp()
     for directory in [PCAP_GEN_OUTPUT_DIR, UPLOAD_FOLDER]:
         caches = list(Path(directory).glob("*" + PACKET_CACHE_SUFFIX))
-        caches += Path(directory).glob("*" + FEATURE_CACHE_SUFFIX)
-        caches += Path(directory).glob("*.packets.json")
+        for suffix in LEGACY_CACHE_SUFFIXES:
+            caches += Path(directory).glob("*" + suffix)
         for path in caches:
             try:
                 if now - path.stat().st_mtime > max_age_seconds:

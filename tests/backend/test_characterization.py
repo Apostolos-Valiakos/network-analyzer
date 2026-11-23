@@ -3,7 +3,7 @@ Characterisation tests: record what each analysis module returns today for
 real captures, so refactoring (see docs/architecture-review.html) can prove
 it changed nothing.
 
-These run the real libraries (Scapy, tshark, scikit-learn) and are marked
+These run the real libraries (tshark, scikit-learn) and are marked
 `integration`. Snapshots live in tests/backend/snapshots/.
 
     pytest -m integration                       # check
@@ -12,26 +12,16 @@ These run the real libraries (Scapy, tshark, scikit-learn) and are marked
 
 import os
 import sys
-from unittest.mock import MagicMock
 
 import pytest
 
-from snapshot_utils import SNAPSHOT_CAPTURES, scapy_version, tshark_version
+from snapshot_utils import SNAPSHOT_CAPTURES, tshark_version
 
 _SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server"))
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
 
-def _real_scapy():
-    try:
-        from scapy.all import PcapReader
-        return not isinstance(PcapReader, MagicMock)
-    except Exception:
-        return False
-
-
-needs_scapy = pytest.mark.skipif(not _real_scapy(), reason="needs the real scapy package")
 needs_tshark = pytest.mark.skipif(tshark_version() is None, reason="needs tshark on PATH")
 
 pytestmark = [pytest.mark.integration, pytest.mark.parametrize("capture", SNAPSHOT_CAPTURES)]
@@ -51,10 +41,10 @@ class _ListQueue:
         self.items.append(item)
 
 
-# ── Scapy-based modules ──────────────────────────────────────────────────────
+# ── Traffic summary for /analyze-saved-pcap ─────────────────────────────────
 
 
-@needs_scapy
+@needs_tshark
 def test_traffic_graph_analysis(capture, capture_copy, snapshot):
     from graph_builder import build_graph_json
     from pcap_analysis import initialize_analysis
@@ -64,7 +54,7 @@ def test_traffic_graph_analysis(capture, capture_copy, snapshot):
     snapshot.assert_match(
         f"analysis__{_stem(capture)}",
         {"result": result, "graph": build_graph_json(result["conversations"])},
-        tools={"scapy": scapy_version()},
+        tools={"tshark": tshark_version()},
     )
 
 
@@ -100,18 +90,19 @@ def test_clustering_result(capture, max_clusters, anomaly_threshold, capture_cop
 # ── tshark-based modules ─────────────────────────────────────────────────────
 
 
-@needs_scapy
 @needs_tshark
-def test_tshark_traffic_summary_matches_scapy(capture, capture_copy):
-    """Uploads use summarize_traffic; /analyze-saved-pcap still uses Scapy."""
+def test_saved_pcap_analysis_extends_the_upload_summary(capture, capture_copy):
+    """/analyze-saved-pcap returns the upload's packet count and conversations,
+    plus the per-IP protocol stacks."""
     from pcap_analysis import initialize_analysis, summarize_traffic
 
     path = capture_copy(capture)
-    scapy_result, _ = initialize_analysis(path)
-    table_result, err = summarize_traffic(path)
+    full, err = initialize_analysis(path)
     assert err is None
-    assert table_result["total_packets"] == scapy_result["total_packets"]
-    assert table_result["conversations"] == scapy_result["conversations"]
+    summary, _ = summarize_traffic(path)
+    assert full["total_packets"] == summary["total_packets"]
+    assert full["conversations"] == summary["conversations"]
+    assert set(full["ip_protocols"]) <= {ip for pair in summary["conversations"] for ip in pair}
 
 
 @needs_tshark
@@ -123,19 +114,6 @@ def test_role_engine_assessment(capture, capture_copy, snapshot):
         f"roles__{_stem(capture)}",
         {ip: vars(a) for ip, a in assessments.items()},
         tools={"tshark": tshark_version()},
-    )
-
-
-@needs_tshark
-def test_feature_records(capture, capture_copy, snapshot):
-    from rrc_utils import FEATURE_CACHE_SUFFIX, get_cached_packets
-
-    path = capture_copy(capture)
-    first = get_cached_packets(path)
-    assert os.path.exists(path + FEATURE_CACHE_SUFFIX)
-    assert get_cached_packets(path) == first  # cached read gives the same records
-    snapshot.assert_match(
-        f"feature_records__{_stem(capture)}", first, tools={"tshark": tshark_version()}
     )
 
 

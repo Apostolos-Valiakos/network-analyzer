@@ -7,9 +7,17 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, Response, request, send_file, jsonify
+
+try:
+    import pcap_repair  # next to this file in the sensor image
+except ImportError:
+    # Repository checkout or the R13 image: server/ is a sibling folder.
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server"))
+    import pcap_repair
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +58,36 @@ def ring_files_for_window(pcap_files, start_ts, end_ts):
     return selected or list(pcap_files)
 
 
+def _newest(pcap_files):
+    """The ring file dumpcap is writing now."""
+    return max(pcap_files, key=os.path.getmtime)
+
+
+def _read_prefix(path, length, chunk=1 << 20):
+    with open(path, "rb") as f:
+        left = length
+        while left > 0:
+            data = f.read(min(chunk, left))
+            if not data:
+                break
+            left -= len(data)
+            yield data
+
+
+def _complete_copy(path, work_dir):
+    """A copy of the complete records of `path` in work_dir, or `path` itself
+    when there is nothing to trim. The original is never modified: dumpcap may
+    still be writing it."""
+    length = pcap_repair.complete_length(path)
+    if length is None:
+        return path
+    copy = os.path.join(work_dir, "complete_" + os.path.basename(path))
+    with open(copy, "wb") as out:
+        for data in _read_prefix(path, length):
+            out.write(data)
+    return copy
+
+
 @app.before_request
 def check_auth():
     token = request.headers.get("X-Internal-Token")
@@ -68,7 +106,19 @@ def get_pcap():
 
     if not start_time or not end_time:
         latest_pcap = max(pcap_files, key=os.path.getctime)
-        return send_file(latest_pcap, as_attachment=True, download_name="latest_full.pcap")
+        # Usually the file dumpcap is still writing: send only its complete
+        # records, so the download never ends in a partial record or zeros.
+        length = pcap_repair.complete_length(latest_pcap)
+        if length is None:
+            return send_file(latest_pcap, as_attachment=True, download_name="latest_full.pcap")
+        return Response(
+            _read_prefix(latest_pcap, length),
+            mimetype="application/vnd.tcpdump.pcap",
+            headers={
+                "Content-Disposition": "attachment; filename=latest_full.pcap",
+                "Content-Length": str(length),
+            },
+        )
 
     # editcap reads a plain date-time as local time, on every sensor time zone.
     start_dt = datetime.fromtimestamp(float(start_time)).strftime('%Y-%m-%d %H:%M:%S')
@@ -82,6 +132,10 @@ def get_pcap():
 
     try:
         sources = ring_files_for_window(pcap_files, float(start_time), float(end_time))
+        # mergecap fails on a partial last record, which the file dumpcap is
+        # writing usually has: merge a copy of its complete records instead.
+        active = _newest(pcap_files)
+        sources = [_complete_copy(src, work_dir) if src == active else src for src in sources]
         merge_cmd = ["mergecap", "-w", merged_filename] + sources
         subprocess.run(merge_cmd, check=True, capture_output=True, timeout=30)
 

@@ -46,6 +46,8 @@
         them.
       </v-alert>
 
+      <warnings-alert :warnings="warnings" />
+
       <v-card class="themed-accent-card rounded-xl pa-5 mb-5">
         <div class="d-flex align-center">
           <v-icon color="primary" class="mr-3">mdi-package-variant</v-icon>
@@ -84,9 +86,10 @@
 import Assessments from "@/components/Assessments.vue";
 import NetworkGraph from "@/components/NetworkGraph.vue";
 import PrivacyPanel from "@/components/PrivacyPanel.vue";
+import WarningsAlert from "@/components/WarningsAlert.vue";
 
 export default {
-  components: { Assessments, NetworkGraph, PrivacyPanel },
+  components: { Assessments, NetworkGraph, PrivacyPanel, WarningsAlert },
 
   data() {
     return {
@@ -106,6 +109,13 @@ export default {
       loadedFromCache: false,
 
     };
+  },
+
+  computed: {
+    // Parts of the analysis that failed while the rest succeeded.
+    warnings() {
+      return (this.response && this.response.warnings) || [];
+    },
   },
 
   methods: {

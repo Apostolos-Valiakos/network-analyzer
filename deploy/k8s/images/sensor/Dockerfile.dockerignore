@@ -1,0 +1,14 @@
+# Build context for the sensor image (used instead of the repository's root
+# .dockerignore, which is written for the frontend image and excludes server/).
+# Only what the Dockerfile copies is sent.
+*
+!Host Files/
+!deploy/k8s/images/sensor/entrypoint.sh
+!server/pcap_repair.py
+
+# Captures, logs and caches from local sensor runs never go into the image.
+Host Files/generated_pcaps
+Host Files/**/__pycache__
+Host Files/venv
+Host Files/*.log
+Host Files/conn.log

@@ -16,6 +16,7 @@ import os
 import subprocess
 from typing import Dict, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
+import pcap_repair
 import tshark
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,12 @@ def _load(pcap: str) -> str:
     except OSError:
         pass  # no cache yet
 
+    # A capture copied while it was being written ends in a partial record or
+    # unwritten zeros. Trim the stored file before reading it, so tshark sees a
+    # clean capture and later downloads are clean too. Only an incomplete tail
+    # is removed. Trimming changes size and mtime, so recompute the header.
+    if pcap_repair.trim_incomplete_tail(pcap):
+        header = _cache_header(pcap)
     text = _extract(pcap)
     # Atomic, because the web process and the pipeline child can both get here.
     tmp_path = f"{cache_path}.{os.getpid()}.tmp"

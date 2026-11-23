@@ -3,7 +3,7 @@ Unit tests for agglomerative_clustering module.
 
 Strategy
 --------
-* Unit tests mock `extract_features` (which calls scapy) so the tests run
+* Unit tests mock `extract_features` (which runs tshark) so the tests run
   without any network-capture library.
 * An integration test is provided and marked with @pytest.mark.integration.
   It is SKIPPED unless:
@@ -198,7 +198,7 @@ class TestEdgeCases:
         assert "clusterSummary" in result
 
 
-# ── Integration test (requires real scapy + tshark) ──────────────────────────
+# ── Integration test (requires real tshark) ──────────────────────────────────
 
 
 @pytest.mark.integration

@@ -163,8 +163,15 @@ def automated_analysis():
 
         model_name = request.form.get("model_name", "rule_based")
         stored_result = run_core_analysis(str(pcap_path), model_name, "ML Pipeline")
+        # Parts that failed while the rest succeeded; shown to the user.
+        warnings = list(stored_result.get("warnings", []))
 
-        ue_data = initialize_analysis_for_ue(str(pcap_path))
+        try:
+            ue_data = initialize_analysis_for_ue(str(pcap_path))
+        except Exception:
+            logger.exception("UE analysis failed on %s", pcap_path)
+            ue_data = []
+            warnings.append("UE identity extraction failed; no UE sessions were stored.")
         if ue_data:
             ue_objects = []
             for ue in ue_data:
@@ -182,8 +189,9 @@ def automated_analysis():
         try:
             privacy_records = records_from_pcap(str(pcap_path))
         except Exception:
-            logger.exception("privacy records failed")
+            logger.exception("Privacy records failed on %s", pcap_path)
             privacy_records = []
+            warnings.append("Privacy record extraction failed; privacy records are empty.")
 
         pcap_record.status = "COMPLETED"
         pcap_record.analysis_result = stored_result
@@ -200,6 +208,8 @@ def automated_analysis():
             "roles": stored_result["roles"],
             "privacy_records": privacy_records,
         }
+        if warnings:
+            response["warnings"] = warnings
         return jsonify(response), 200
 
     except Exception as exc:

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from flasgger import swag_from
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 
 import settings
@@ -93,7 +93,9 @@ def start_analysis_from_websocket():
     if not (1 <= seconds <= 3600):
         return jsonify({"status": "Error", "message": "seconds must be between 1 and 3600"}), 400
 
-    success = startWebSocketClient(ws_url, seconds)
+    success = startWebSocketClient(
+        ws_url, seconds, app=current_app._get_current_object(), user_id=current_user_id()
+    )
     if success:
         return jsonify({"status": "Accepted", "message": "Pipeline started."}), 202
     return jsonify({"status": "Failed", "message": "Failed to start."}), 500

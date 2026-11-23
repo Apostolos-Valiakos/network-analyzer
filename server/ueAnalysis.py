@@ -77,10 +77,10 @@ def extract_ue_info(row: Dict[str, str]) -> Optional[Dict[str, str]]:
 
 
 def initialize_analysis_for_ue(filepath: str) -> List[Dict[str, Any]]:
-    """Extracts UE information (IMSI, GUTI, PDU session) from a PCAP."""
-    try:
-        records = (extract_ue_info(row) for row in packet_table.row_dicts(filepath, _FIELDS))
-        return [record for record in records if record]
-    except Exception:
-        logger.exception("UE analysis failed on %s", filepath)
-        return []
+    """Extracts UE information (IMSI, GUTI, PDU session) from a PCAP.
+
+    Errors reading the capture propagate, so the caller can tell "no UEs"
+    from "could not look".
+    """
+    records = (extract_ue_info(row) for row in packet_table.row_dicts(filepath, _FIELDS))
+    return [record for record in records if record]

@@ -9,7 +9,7 @@
     "paths": {
       "/analyze-saved-pcap/{filename}": {
         "get": {
-          "description": "Runs a single-pass streaming analysis (packet count, per-IP protocol set, and conversation graph) on a PCAP file already owned by the caller (e.g. uploaded via /save-pcap). Lighter-weight than /automated-analysis — no role classification or UE session extraction, just traffic shape.\n",
+          "description": "Returns the packet count, the protocol stacks each IP sent, and the conversation graph for a PCAP file already owned by the caller (e.g. uploaded via /save-pcap). Reads the shared tshark packet table, so a capture that was already analyzed is answered without re-reading it. Lighter-weight than /automated-analysis — no role classification or UE session extraction, just traffic shape.\n",
           "parameters": [
             {
               "description": "The name of the PCAP file to analyze (must belong to the caller).",
@@ -105,14 +105,17 @@
                           },
                           "type": "array"
                         },
-                        "description": "Map of IP address to the list of protocol/layer names seen for that IP (e.g. scapy layer names, or \"UNKNOWN(<proto>)\" for unrecognized IP protocol numbers).\n",
+                        "description": "Map of source IP address (outermost IPv4 header) to the protocol stacks it sent, as tshark names them, above the IP layer and joined with \":\" (e.g. \"sctp:ngap:nas-5gs\"; \"udp:gtp:ip:tcp\" for GTP-U tunnels). Repeated adjacent layers are collapsed. \"ip\" means nothing was decoded above IP.\n",
                         "example": {
-                          "10.0.0.1": [
-                            "TCP",
-                            "TCP -> HTTP"
+                          "10.250.100.42": [
+                            "tcp:http2:json",
+                            "udp:pfcp"
                           ],
-                          "10.0.0.2": [
-                            "UDP"
+                          "192.168.100.5": [
+                            "sctp",
+                            "sctp:ngap",
+                            "sctp:ngap:nas-5gs",
+                            "udp:dns"
                           ]
                         },
                         "type": "object"
@@ -197,7 +200,7 @@
             },
             {
               "default": "rule_based",
-              "description": "The ML or rule-based model to use for role classification.",
+              "description": "Accepted for compatibility and ignored; roles always come from the evidence-based rule engine.",
               "in": "formData",
               "name": "model_name",
               "required": false,
@@ -251,6 +254,16 @@
                       "10.244.0.77": "NEAR_RT_RIC"
                     },
                     "type": "object"
+                  },
+                  "warnings": {
+                    "description": "Only present when part of the work failed while the rest succeeded. User-readable messages; the rest of the response is still valid but may be incomplete.\n",
+                    "example": [
+                      "Privacy record extraction failed; privacy records are empty."
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "type": "object"
@@ -516,6 +529,16 @@
                       }
                     },
                     "type": "object"
+                  },
+                  "warnings": {
+                    "description": "Only present when part of the work failed while the rest succeeded. User-readable messages; the rest of the response is still valid but may be incomplete.\n",
+                    "example": [
+                      "The clustering result could not be saved, so it will not appear in History."
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "type": "object"
@@ -842,7 +865,7 @@
               "schema": {
                 "properties": {
                   "model_name": {
-                    "description": "Name of the model to use (e.g., rule_based).",
+                    "description": "Accepted for compatibility and ignored; roles always come from the evidence-based rule engine.",
                     "example": "rule_based",
                     "type": "string"
                   },
@@ -954,6 +977,16 @@
                     "description": "Number of IPs that received a role assignment.",
                     "example": 14,
                     "type": "integer"
+                  },
+                  "warnings": {
+                    "description": "Only present when part of the work failed while the rest succeeded. User-readable messages; the rest of the response is still valid but may be incomplete.\n",
+                    "example": [
+                      "Role detection failed while reading the capture (ValueError); roles may be incomplete."
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "type": "object"
@@ -1321,7 +1354,7 @@
           "consumes": [
             "application/json"
           ],
-          "description": "Connects out to an external WebSocket source (e.g. the sensor's raw packet publisher) for a fixed duration and captures the incoming traffic. Returns immediately once the client thread is confirmed started — it does not wait for the capture window to finish or return analysis results directly; use the regular PCAP-based endpoints afterward against whatever file this run produced.\n",
+          "description": "Connects to a sensor's live packet stream (publisher.py, the same WebSocket the Real Time page uses), sends START_CAPTURE, and captures for the given number of seconds. The packets are then saved as a pcap owned by the caller (it appears in History) and analysed like a re-analysis (traffic graph and roles). Returns 202 at once; the outcome is sent on the WebSocket as {\"type\": \"ANALYSIS_STATUS\", \"status\": \"COMPLETE\" | \"FAILED\", \"message\", \"filename\", ...}, and the stored result is available from History. Each request is an independent capture.\n",
           "parameters": [
             {
               "in": "body",
@@ -1804,11 +1837,23 @@
               }
             },
             "400": {
-              "description": "The \"limit\" parameter is out of the allowed 1-10000 range, or another request processing error.",
+              "description": "Invalid parameters - start_time/end_time are not Unix timestamps in seconds, or limit is not an integer in 1-10000.",
               "schema": {
                 "properties": {
                   "error": {
                     "example": "limit must be between 1 and 10000",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Server-side failure (e.g. database error). The details are in the server log.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
                     "type": "string"
                   }
                 },
@@ -2156,7 +2201,19 @@
               }
             },
             "400": {
-              "description": "Request processing error — invalid start_time/end_time/limit values, or a database error.\n",
+              "description": "Invalid parameters: start_time/end_time are not Unix timestamps in seconds, or limit is not an integer in 1-10000.\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Server-side failure (e.g. database error). The details are in the server log.",
               "schema": {
                 "properties": {
                   "error": {

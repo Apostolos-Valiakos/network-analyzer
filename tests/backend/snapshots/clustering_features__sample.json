@@ -46,5 +46,10 @@
   ],
   "recorded_with": {
     "tshark": "4.6"
-  }
+  },
+  "same_output_with": [
+    {
+      "tshark": "4.4"
+    }
+  ]
 }

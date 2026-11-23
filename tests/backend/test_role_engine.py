@@ -350,7 +350,7 @@ class TestCacheVersioning:
             "5.6.7.8": RoleAssessment(ip="5.6.7.8", role="gNB",
                                       confidence=0.95, reasoning="new engine"),
         }
-        monkeypatch.setattr(role_engine, "assess_pcap", lambda p: fresh)
+        monkeypatch.setattr(role_engine, "assess_pcap", lambda p, warnings=None: fresh)
 
         with app.app_context():
             result = get_or_compute_roles(path)
@@ -376,7 +376,7 @@ class TestCacheVersioning:
                                    reasoning="cached", engine_version=ROLE_ENGINE_VERSION))
             _db.session.commit()
 
-        def _boom(p):
+        def _boom(p, warnings=None):
             raise AssertionError("assess_pcap must not run on a cache hit")
 
         monkeypatch.setattr(role_engine, "assess_pcap", _boom)

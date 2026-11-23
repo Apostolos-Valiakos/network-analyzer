@@ -1,325 +1,189 @@
-import websocket
-import json
+"""
+Server-side capture from a sensor's live packet stream (publisher.py, the
+WebSocket the Real Time page also uses), started by
+POST /start-analysis-from-websocket.
+
+Each request starts one CaptureRun with its own packets, session and
+WebSocket, so runs never share state. A run:
+  1. connects and sends START_CAPTURE, collecting PACKET_DATA messages;
+  2. after the requested number of seconds sends STOP_CAPTURE;
+  3. writes the packets as a pcap and a pcap_files row owned by the requesting
+     user, as /save-pcap does (in-process, no HTTP call back to this server);
+  4. analyses it as History's re-analyze does (traffic graph + roles) and
+     stores the result;
+  5. reports ANALYSIS_STATUS (COMPLETE or FAILED) on the WebSocket, then closes.
+"""
 import base64
-import requests
+import json
+import logging
+import os
+import threading
 import time
 import uuid
-import threading
-import os
 
-# --- Configuration (Dynamic parameters removed from here) ---
-API_URL = "http://127.0.0.1:5000"
-CHUNK_SIZE = 1000  # Number of packets to send per HTTP chunk
-MAX_RETRIES = 3  # Max retry attempts for API calls
-# CAPTURE_DURATION is now passed dynamically
+import websocket
 
-# --- Global State ---
-raw_packets = []
-is_capturing = False
-session_id = None
-filename = None
+import pcap_generator_service
+from analysis_service import AnalysisFailed, mark_pcap_error, run_core_analysis
+from models import db, PcapFile
+from pcap_repair import trim_incomplete_tail
 
-# --- Utility Functions ---
+logger = logging.getLogger(__name__)
+
+CHUNK_SIZE = 1000  # packets written per append, as the browser sends them
 
 
-def generate_unique_id():
-    """Generates a unique ID for the PCAP session."""
-    return f"pcap_{uuid.uuid4().hex}"
+class CaptureRun:
+    """One capture: its own packet list, session id and WebSocket."""
 
+    def __init__(self, app, ws_url: str, duration: int, user_id):
+        self.app = app
+        self.ws_url = ws_url
+        self.duration = duration
+        self.user_id = user_id
+        self.session_id = f"pcap_{uuid.uuid4().hex}"
+        self.packets = []
+        self._lock = threading.Lock()
+        self.ws = None
 
-def convert_tuple_keys_to_str(obj):
-    """Recursively converts all tuple keys in a dictionary to string keys."""
-    if isinstance(obj, dict):
-        new_dict = {}
-        for k, v in obj.items():
-            v = convert_tuple_keys_to_str(v)
-            if isinstance(k, tuple):
-                new_key = "|".join(map(str, k))
-            else:
-                new_key = k
-            new_dict[new_key] = v
-        return new_dict
+    # ── WebSocket callbacks ──────────────────────────────────────────────────
 
-    elif isinstance(obj, list):
-        return [convert_tuple_keys_to_str(item) for item in obj]
+    def on_open(self, ws):
+        logger.info("Capture %s connected to %s", self.session_id, self.ws_url)
+        self.send_command("START_CAPTURE")
 
-    else:
-        return obj
-
-
-# --- WebSocket Handlers (Unchanged) ---
-
-
-def on_message(ws, message):
-    global is_capturing
-    try:
-        msg_obj = json.loads(message)
-    except json.JSONDecodeError:
-        return
-
-    if msg_obj.get("type") == "STATUS":
-        status = msg_obj.get("status")
-        if status == "CAPTURE_STARTED":
-            is_capturing = True
-            print("Capture started on server.")
-        elif status == "CAPTURE_STOPPED":
-            is_capturing = False
-            print("Capture stopped on server.")
-        return
-
-    if msg_obj.get("type") == "PACKET_DATA" and isinstance(msg_obj.get("packet"), str):
-        base64_packet = msg_obj["packet"]
+    def on_message(self, ws, message):
         try:
-            packet_length = len(base64.b64decode(base64_packet))
-            if packet_length < 4:
-                return
-            raw_packets.append(base64_packet)
-        except Exception:
+            msg = json.loads(message)
+        except (json.JSONDecodeError, TypeError):
             return
-
-
-def on_error(ws, error):
-    print(f"WebSocket Error: {error}")
-
-
-def on_close(ws, close_status_code, close_msg):
-    global is_capturing
-    is_capturing = False
-    print(
-        f"WebSocket Connection Closed. Status: {close_status_code}, Message: {close_msg}"
-    )
-
-
-def on_open(ws):
-    print(f"WebSocket connection established.")
-    send_control_command(ws, "START_CAPTURE")
-
-
-def send_control_command(ws, command):
-    if ws.sock and ws.sock.connected:
-        payload = json.dumps({"command": command, "timestamp": int(time.time() * 1000)})
-        ws.send(payload)
-    else:
-        print(f"Cannot send command {command}: WebSocket not connected.")
-
-
-# --- API Interaction Functions (Unchanged) ---
-
-
-def send_packets_to_flask(
-    chunk, chunk_index, total_chunks, is_final_chunk, current_session_id
-):
-    """Sends a chunk of Base64 packets to the Flask API's /save-pcap endpoint."""
-    global filename
-    attempt = 0
-
-    payload = {
-        "session_id": current_session_id,
-        "packets": chunk,
-        "is_final_chunk": is_final_chunk,
-    }
-
-    while attempt < MAX_RETRIES:
-        attempt += 1
+        if msg.get("type") != "PACKET_DATA" or not isinstance(msg.get("packet"), str):
+            return
         try:
-            print(
-                f"Sending chunk {chunk_index + 1}/{total_chunks} (Attempt {attempt})..."
-            )
-            response = requests.post(f"{API_URL}/save-pcap", json=payload, timeout=30)
-            if not response.content:
-                raise Exception(f"Empty response received from API.")
-            data = response.json()
+            if len(base64.b64decode(msg["packet"])) < 4:
+                return
+        except ValueError:
+            logger.warning("Capture %s: skipping a packet that is not valid base64", self.session_id)
+            return
+        with self._lock:
+            self.packets.append(msg["packet"])
 
-            if response.ok and data.get("success"):
-                if is_final_chunk and data.get("filename"):
-                    filename = data["filename"]
-                return data
-            else:
-                error_message = (
-                    data.get("error") or f"Unknown API error: {response.status_code}"
-                )
-                print(f"API error (attempt {attempt}): {error_message}")
-                raise Exception(error_message)
+    def on_error(self, ws, error):
+        logger.warning("Capture %s: WebSocket error: %s", self.session_id, error)
 
-        except (requests.exceptions.RequestException, Exception) as e:
-            print(f"Error processing chunk {chunk_index + 1} (Attempt {attempt}): {e}")
-            if attempt == MAX_RETRIES:
-                raise Exception(
-                    f"Failed to process chunk {chunk_index + 1} after {MAX_RETRIES} attempts. Last error: {e}"
-                )
-            time.sleep(1 * (2**attempt))
+    def on_close(self, ws, status_code, message):
+        logger.info("Capture %s: WebSocket closed (%s %s)", self.session_id, status_code, message)
 
+    def send_command(self, command: str) -> None:
+        self._send({"command": command, "timestamp": int(time.time() * 1000)})
 
-def call_automated_analysis_endpoint_server_side(ws, pcap_filename):
-    """
-    Calls the new server-side analysis endpoint using the saved filename
-    and sends a completion message back through the WebSocket.
-    """
-    analysis_url = f"{API_URL}/analyze-saved-pcap-full/{pcap_filename}"
-    params = {"model_name": "rule_based"}
+    def _send(self, payload: dict) -> None:
+        if self.ws is not None and self.ws.sock and self.ws.sock.connected:
+            self.ws.send(json.dumps(payload))
 
-    print(f"\nPhase 2: Calling server-side analysis on '{pcap_filename}'...")
+    # ── The run ──────────────────────────────────────────────────────────────
 
-    notification = {
-        "type": "ANALYSIS_STATUS",
-        "status": "FAILED",
-        "filename": pcap_filename,
-        "message": "Analysis started but failed unexpectedly.",
-    }
-
-    headers = {
-        "Accept": "application/json",
-    }
-
-    try:
-        response = requests.get(
-            analysis_url, params=params, headers=headers, timeout=180
+    def start(self) -> None:
+        self.ws = websocket.WebSocketApp(
+            self.ws_url,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
         )
-        analysis_data = None
+        threading.Thread(target=self.ws.run_forever, daemon=True).start()
+        threading.Thread(target=self.run, daemon=True).start()
 
-        if response.status_code == 200:
-            analysis_data = response.json()
-            print("\nServer-Side Automated Analysis Complete!")
-            print(json.dumps(analysis_data, indent=4))
+    def run(self) -> None:
+        time.sleep(self.duration)
+        self.send_command("STOP_CAPTURE")
+        time.sleep(0.5)  # packets already in flight
+        try:
+            self._send(self.finish())
+        finally:
+            if self.ws is not None:
+                self.ws.close()
 
-            notification["status"] = "COMPLETE"
-            notification["message"] = f"Analysis complete for {pcap_filename}."
-        else:
-            error_details = f"Status {response.status_code}"
+    def finish(self) -> dict:
+        """Saves and analyses the captured packets; returns the notification."""
+        with self._lock:
+            packets = list(self.packets)
+        if not packets:
+            logger.warning("Capture %s: no packets received", self.session_id)
+            return _status("FAILED", "No packets were captured.")
+
+        with self.app.app_context():
             try:
-                error_details += f": {response.json().get('error', response.text[:50])}"
-            except:
-                error_details += f": {response.text[:50]}..."
+                record = self._save(packets)
+            except Exception as exc:
+                logger.exception("Capture %s: saving the pcap failed", self.session_id)
+                db.session.rollback()
+                return _status("FAILED", f"PCAP generation failed: {exc}")
 
-            print(f"\nServer-Side Analysis Failed: {error_details}")
-            notification["message"] = f"Analysis failed: {error_details}"
+            try:
+                result = run_core_analysis(record.file_path, "rule_based", "Role pipeline")
+                record.analysis_result = result
+                record.status = "COMPLETED"
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                mark_pcap_error(record.id)
+                if isinstance(exc, AnalysisFailed):
+                    logger.error("Capture %s: %s", self.session_id, exc)
+                    message = str(exc)
+                else:
+                    logger.exception("Capture %s: analysis failed", self.session_id)
+                    message = "Analysis failed"
+                return _status("FAILED", message, filename=record.filename)
 
-    except requests.exceptions.RequestException as e:
-        print(f"\nRequest to /analyze-saved-pcap-full failed: {e}")
-        notification["message"] = f"Network request failed: {str(e)}"
-
-    # --- FINAL NOTIFICATION VIA WEBSOCKET ---
-    if ws.sock and ws.sock.connected:
-        ws.send(json.dumps(notification))
-        print(f"Sent WebSocket notification: {notification['status']}")
-
-
-# --- Core Pipeline Logic ---
-
-
-def execute_pipeline(ws_url, ws, capture_duration):  # USED capture_duration
-    """
-    The main logic to run inside the background thread.
-    1. Wait for capture.
-    2. Stop capture.
-    3. Upload and trigger analysis.
-    """
-    global session_id
-
-    # Wait for the defined duration (using capture_duration argument)
-    print(f"\nCapturing packets for {capture_duration} seconds...")
-    try:
-        time.sleep(capture_duration)  # USED capture_duration
-    except KeyboardInterrupt:
-        print("Capture interrupted by user.")
-
-    # 1. Stop Capture
-    send_control_command(ws, "STOP_CAPTURE")
-    time.sleep(0.5)
-
-    if not raw_packets:
-        print("No packets captured to upload.")
-        return
-
-    # --- Phase 1: Upload Packets to /save-pcap (PCAP GENERATION) ---
-    session_id = generate_unique_id()
-    total_packets = len(raw_packets)
-    total_chunks = (total_packets + CHUNK_SIZE - 1) // CHUNK_SIZE
-    print(f"\nPhase 1: Uploading {total_packets} packets to /save-pcap...")
-
-    try:
-        for i in range(total_chunks):
-            start = i * CHUNK_SIZE
-            end = min(start + CHUNK_SIZE, total_packets)
-            chunk = raw_packets[start:end]
-            is_final_chunk = i == total_chunks - 1
-
-            send_packets_to_flask(chunk, i, total_chunks, is_final_chunk, session_id)
-
-        if not filename:
-            raise Exception(
-                "PCAP file was not created on the server (no filename returned)."
+            notification = _status(
+                "COMPLETE",
+                f"Analysis complete for {record.filename}.",
+                filename=record.filename,
+                total_packets=result["total_packets"],
+                roles=result["roles"],
             )
+            if result.get("warnings"):
+                notification["warnings"] = result["warnings"]
+            return notification
 
-    except Exception as e:
-        print(f"\nPhase 1 (PCAP Save) Failed: {e}")
-        # Send failure notification before closing
-        if ws.sock and ws.sock.connected:
-            failure_notification = {
-                "type": "ANALYSIS_STATUS",
-                "status": "FAILED",
-                "message": f"PCAP Generation failed: {str(e)}",
-            }
-            ws.send(json.dumps(failure_notification))
-            print("Sent WebSocket notification: FAILED (Phase 1)")
-        return
+    def _save(self, packets) -> PcapFile:
+        """Writes the pcap and its pcap_files row, as /save-pcap does."""
+        filename = None
+        for start in range(0, len(packets), CHUNK_SIZE):
+            chunk = packets[start:start + CHUNK_SIZE]
+            ok, filename, error = pcap_generator_service.handle_pcap_chunk(self.session_id, chunk)
+            if not ok:
+                raise RuntimeError(error)
+        file_path = os.path.join(pcap_generator_service.PCAP_OUTPUT_DIR, filename)
+        trim_incomplete_tail(file_path)
+        record = PcapFile(
+            filename=filename,
+            original_filename=self.session_id,
+            file_path=file_path,
+            file_size=os.path.getsize(file_path),
+            status="PROCESSING",
+            source="generated",
+            user_id=self.user_id,
+        )
+        db.session.add(record)
+        db.session.commit()
+        logger.info("Capture %s: saved %d packets as %s", self.session_id, len(packets), filename)
+        return record
 
-    # --- Phase 2: Call Server-Side Automated Analysis and NOTIFY ---
-    call_automated_analysis_endpoint_server_side(ws, filename)
 
-    # Close the WebSocket connection gracefully
-    print("\nClosing connection...")
-    ws.close()
+def _status(status: str, message: str, **extra) -> dict:
+    return {"type": "ANALYSIS_STATUS", "status": status, "message": message, **extra}
 
 
-# --- Public Entry Point for Flask ---
-
-
-def startWebSocketClient(ws_url, capture_duration):  # ADDED capture_duration
-    """
-    Initializes the WebSocket client and spawns the execution pipeline in a background thread.
-    This function returns immediately (non-blocking).
-    """
-    global raw_packets, filename
-    # Reset state for a new run
-    raw_packets.clear()
-    filename = None
-    print(f"Starting WebSocket client for URL: {ws_url}...")
-
-    # 1. Setup WebSocket client
-    ws = websocket.WebSocketApp(
-        ws_url,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close,
-    )
-
-    # 2. Run WebSocket client in a thread
-    wst = threading.Thread(target=ws.run_forever, daemon=True)
-    wst.start()
-
-    # 3. Start the execution pipeline (timing, upload, analysis) in a separate thread
-    # PASSED capture_duration to execute_pipeline
-    pipeline_thread = threading.Thread(
-        target=execute_pipeline,
-        args=(
-            ws_url,
-            ws,
-            capture_duration,
-        ),
-        daemon=True,
-    )
-    pipeline_thread.start()
-
-    print("Background pipeline started. Check server logs for progress.")
+def startWebSocketClient(ws_url: str, capture_duration: int, app=None, user_id=None) -> bool:
+    """Starts a capture in the background and returns at once."""
+    if app is None:
+        logger.error("startWebSocketClient needs the Flask app")
+        return False
+    try:
+        CaptureRun(app, ws_url, capture_duration, user_id).start()
+    except Exception:
+        logger.exception("Could not start the capture from %s", ws_url)
+        return False
     return True
-
-
-if __name__ == "__main__":
-    # Test execution when run directly (using a default URL and duration)
-    # The default duration must be passed here
-    startWebSocketClient("ws://127.0.0.1:5001", 30)
-    # Keep the main thread alive so the daemon threads can run
-    while True:
-        time.sleep(1)

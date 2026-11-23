@@ -1,144 +1,24 @@
-# server/Preprocess.py
-import os
-import subprocess
-import sys
-import time
-import multiprocessing as mp
+"""
+The IP role pipeline: runs the role engine on a capture in a child process
+(so a hung tshark can be killed after 600 s) and writes the role summary that
+/save_roles serves.
+"""
 import csv
 import json
+import logging
+import multiprocessing as mp
+import os
+import subprocess
+import time
+
 import numpy as np
 
 import packet_table
 import settings
-from rrc_utils import get_cached_packets
 from db_setup import database_only_app
 from role_engine import get_or_compute_roles, roles_as_strings
 
-
-class PacketProcessor:
-    """
-    Parses pcap packets to extract features (timestamp, length, protocol).
-    REFACTOR: Removed slow legacy string-matching logic.
-    """
-
-    def __init__(self, pcap_file):
-        self.pcap_file = pcap_file
-        self.extracted_data = []
-
-        # --- 1. Role Identification (evidence-based engine, via TShark) ---
-        # UE detection now happens inside the engine (GTP-U inner IPs, raw RRC).
-        print(f"Loading roles for {pcap_file}...")
-        self.assessments = get_or_compute_roles(pcap_file)
-        self.ip_roles = roles_as_strings(self.assessments)
-
-    def parse_pcap(self, packets=None):
-        # get_cached_packets already yields per-packet feature records
-        # (timestamp, src_ip, packet_len, protocol) via a tshark field pass.
-        if packets is None:
-            packets = get_cached_packets(self.pcap_file)
-            if packets is None:
-                return self.extracted_data, self.ip_roles
-
-        self.extracted_data.extend(packets)
-        return self.extracted_data, self.ip_roles
-
-
-class FeatureEngineer:
-    """
-    Transforms raw packet data into structured dataset for ML.
-    REFACTOR: Uses Numpy vectorization instead of slow Pandas .iloc loops.
-
-    pandas and scikit-learn are imported here, not at module level: the pipeline
-    child process imports this module and does not need them.
-    """
-
-    def __init__(self, raw_data, ip_roles):
-        from sklearn.preprocessing import LabelEncoder
-
-        self.raw_data = raw_data
-        self.ip_roles = ip_roles
-        self.sequence_length = 5
-        self.processed_data = []
-        self.labels = []
-        self.protocol_encoder = LabelEncoder()
-        self.label_encoder = LabelEncoder()
-
-    def run_preprocessing(self):
-        import pandas as pd
-        from sklearn.preprocessing import StandardScaler
-
-        if not self.raw_data:
-            return None, None, None, None
-
-        df = pd.DataFrame(self.raw_data)
-
-        # Cleanup
-        df.fillna(0, inplace=True)
-        if "protocol" not in df.columns:
-            return None, None, None, None
-
-        df = df[df["protocol"].notna()]
-
-        # Encode protocols once
-        df["protocol_encoded"] = self.protocol_encoder.fit_transform(
-            df["protocol"].astype(str)
-        )
-
-        # --- OPTIMIZED LOOP ---
-        # Group by IP and convert to Numpy arrays immediately to avoid DataFrame overhead in loops
-        grouped = df.groupby("src_ip")
-
-        for ip, group in grouped:
-            if ip not in self.ip_roles:
-                continue
-
-            # Sort by time
-            group = group.sort_values("timestamp")
-
-            # Convert to numpy for speed
-            timestamps = group["timestamp"].values
-            lengths = group["packet_len"].values
-            protos = group["protocol_encoded"].values
-
-            num_packets = len(group)
-            if num_packets < self.sequence_length:
-                continue
-
-            # Vectorized windowing logic
-            # We construct sequences without calling .iloc repeatedly
-            for i in range(num_packets - self.sequence_length + 1):
-                # Slice numpy arrays (very fast)
-                seq_t = timestamps[i : i + self.sequence_length]
-                seq_l = lengths[i : i + self.sequence_length]
-                seq_p = protos[i : i + self.sequence_length]
-
-                # Stack features: [timestamp, packet_len, protocol]
-                seq_features = np.column_stack((seq_t, seq_l, seq_p))
-
-                self.processed_data.append(seq_features)
-                self.labels.append(self.ip_roles[ip])
-
-        if not self.processed_data:
-            return None, None, None, None
-
-        # Final Formatting
-        X = np.array(self.processed_data)
-        y = np.array(self.labels)
-
-        # Encode Labels
-        all_possible_roles = list(set(self.ip_roles.values()))
-        self.label_encoder.fit(all_possible_roles)
-        y_encoded = self.label_encoder.transform(y)
-        class_names = self.label_encoder.classes_
-
-        # Scaling
-        num_features = X.shape[2]
-        X_reshaped = X.reshape(-1, num_features)
-        scaler = StandardScaler()
-        X_reshaped = scaler.fit_transform(X_reshaped)
-        X = X_reshaped.reshape(-1, self.sequence_length, num_features)
-
-        return X, y_encoded, class_names, self.label_encoder
+logger = logging.getLogger(__name__)
 
 
 def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None):
@@ -160,11 +40,12 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                 )
                 return
 
-            # 2. Extract Roles. Roles come only from the rule engine, so the ML
-            # feature step (PacketProcessor.parse_pcap + FeatureEngineer), whose
-            # output nothing reads, is not run here.
-            processor = PacketProcessor(pcap_file_path)
-            ip_roles = processor.ip_roles
+            # 2. Roles from the evidence-based rule engine. `warnings` collects
+            # user-safe messages when the capture could not be read completely.
+            logger.info("Loading roles for %s", pcap_file_path)
+            warnings = []
+            assessments = get_or_compute_roles(pcap_file_path, warnings=warnings)
+            ip_roles = roles_as_strings(assessments)
 
             # Filter if user selected specific IPs
             if selected_ips:
@@ -201,25 +82,28 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                 else None
             )
 
-            result_queue.put(
-                {
-                    "status": "success",
-                    "total_classified": len(ip_roles),
-                    "most_frequent_class": most_frequent_class,
-                    "processing_time": round(time.time() - start_time, 2),
-                    "rule_based_classification_summary": summary,
-                    "ip_roles": ip_roles,
-                    "ip_role_details": {
-                        ip: {
-                            "role": a.role,
-                            "confidence": a.confidence,
-                            "reasoning": a.reasoning,
-                        }
-                        for ip, a in processor.assessments.items()
-                        if ip in ip_roles
-                    },
-                }
-            )
+            report = {
+                "status": "success",
+                "total_classified": len(ip_roles),
+                "most_frequent_class": most_frequent_class,
+                "processing_time": round(time.time() - start_time, 2),
+                "rule_based_classification_summary": summary,
+                "ip_roles": ip_roles,
+                "ip_role_details": {
+                    ip: {
+                        "role": a.role,
+                        "confidence": a.confidence,
+                        "reasoning": a.reasoning,
+                    }
+                    for ip, a in assessments.items()
+                    if ip in ip_roles
+                },
+            }
+            # Only present when something went wrong, so normal reports keep
+            # their exact shape.
+            if warnings:
+                report["warnings"] = warnings
+            result_queue.put(report)
     except Exception as e:
         import traceback
 
@@ -248,5 +132,8 @@ def run_ip_role_pipeline(pcap_file_path, model_name, selected_ips=None):
     """
     Entry point for the routes. Socket.IO runs in threading mode, so blocking
     this request thread while the child process works affects no other request.
+
+    `model_name` is accepted for API compatibility and ignored: roles come only
+    from the rule engine (role_engine.py).
     """
     return _run_pipeline_blocking(pcap_file_path, model_name, selected_ips)

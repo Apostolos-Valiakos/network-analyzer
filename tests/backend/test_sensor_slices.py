@@ -126,3 +126,57 @@ class TestGetPcapSlice:
             f"/get-pcap?start_time={first - 2}&end_time={last + 2}", headers=TOKEN
         )
         assert list(work.iterdir()) == []
+
+
+# ── Incomplete ring files (dumpcap still writing) ────────────────────────────
+
+
+def _count_packets(path):
+    return len(subprocess.run(
+        ["tshark", "-r", str(path), "-T", "fields", "-e", "frame.number"],
+        capture_output=True, text=True,
+    ).stdout.split())
+
+
+@pytest.mark.skipif(
+    not (shutil.which("mergecap") and shutil.which("editcap") and shutil.which("tshark")),
+    reason="needs tshark, mergecap and editcap on PATH",
+)
+class TestIncompleteRingFile:
+    ZEROS = b"\x00" * 3952  # what a copy of a file mid-write ended in (30 Jul)
+
+    def test_latest_full_sends_only_complete_records(self, sensor, tmp_path):
+        path = _ring_file(tmp_path, 1, time.time() - 60, time.time())
+        size = os.path.getsize(path)
+        with open(path, "ab") as f:
+            f.write(self.ZEROS)
+
+        res = sensor.app.test_client().get("/get-pcap", headers=TOKEN)
+        assert res.status_code == 200
+        assert res.headers["Content-Disposition"].endswith("latest_full.pcap")
+        assert len(res.data) == size
+        out = tmp_path / "result.pcap"
+        out.write_bytes(res.data)
+        assert _count_packets(out) == 58
+        # The file dumpcap is writing is never modified.
+        assert os.path.getsize(path) == size + len(self.ZEROS)
+
+    def test_slice_merges_the_complete_part_of_the_active_file(self, sensor, tmp_path):
+        out = subprocess.run(
+            ["tshark", "-r", SAMPLE, "-T", "fields", "-e", "frame.time_epoch"],
+            capture_output=True, text=True,
+        ).stdout.split()
+        first, last = float(out[0]), float(out[-1])
+        path = _ring_file(tmp_path, 1, first - 5, last + 5)
+        with open(path, "ab") as f:
+            f.write(b"\x06\x00\x00\x00\x40\x00\x00")  # a block cut off mid-write
+        size = os.path.getsize(path)
+
+        res = sensor.app.test_client().get(
+            f"/get-pcap?start_time={first - 2}&end_time={last + 2}", headers=TOKEN
+        )
+        assert res.status_code == 200
+        result = tmp_path / "slice.pcap"
+        result.write_bytes(res.data)
+        assert _count_packets(result) == 58
+        assert os.path.getsize(path) == size
