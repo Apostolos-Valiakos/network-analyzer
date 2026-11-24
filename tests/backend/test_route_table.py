@@ -83,3 +83,18 @@ def test_cors_preflight(client, snapshot):
         "disallowed_status": disallowed.status_code,
         "disallowed_allow_origin": disallowed.headers.get("Access-Control-Allow-Origin"),
     })
+
+
+def test_swagger_declares_the_token_for_every_protected_route(app, client):
+    """Swagger UI only sends the Bearer token to operations that declare
+    `security`; a protected route without it fails in /apidocs with
+    "Missing Authorization Header"."""
+    spec = client.get("/apispec_1.json").get_json()
+    missing = []
+    for path, operations in spec["paths"].items():
+        for method, operation in operations.items():
+            url = re.sub(r"\{[^}]+\}", "x", path)
+            if client.open(url, method=method.upper()).status_code == 401 and "ingest" not in path:
+                if not operation.get("security"):
+                    missing.append(f"{method.upper()} {path}")
+    assert missing == []
