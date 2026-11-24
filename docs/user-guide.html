@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PENM User Guide</title>
+<link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="home" href="index.html">&larr; Documentation home</a>
+  <a href="#start">1. Getting started</a>
+  <a href="#analyze">2. Analyze a capture</a>
+  <a href="#history">3. History</a>
+  <a href="#clustering">4. Clustering and roles</a>
+  <a href="#realtime">5. Real Time capture</a>
+  <a href="#monitoring">6. Continuous Monitoring</a>
+  <a class="sub" href="#mon-data">Statistics and downloads</a>
+  <a class="sub" href="#mon-live">Live analysis</a>
+  <a class="sub" href="#mon-scan">Nmap scans</a>
+  <a href="#users">7. Users (admins)</a>
+  <a href="#roles">8. What the roles mean</a>
+  <a href="#problems">9. When something goes wrong</a>
+  <a href="#glossary">10. Glossary</a>
+</nav>
+<main>
+<header class="doc-head">
+  <p class="eyebrow">User Guide</p>
+  <h1>Using PENM</h1>
+  <p class="lede">For analysts and operators using the web application: every page, what it shows and how to use it.</p>
+</header>
+
+<h2 id="start">1. Getting started</h2>
+<p>PENM (Privacy Enhanced Network Monitor) analyses 5G/6G network traffic. It identifies what each IP address is (gNB, AMF, UPF, UE, O-RAN components…), extracts UE identities, groups devices by behaviour, measures privacy risk, and monitors a live network through a capture sensor.</p>
+<ol class="steps">
+  <li>Open the address your administrator gave you (<code>http://&lt;server&gt;</code>) and log in. Accounts are created by an administrator; there is no self-registration.</li>
+  <li>The header links to every page: <em>Home</em>, <em>Analyze</em>, <em>History</em>, <em>Real Time</em>, <em>Monitoring</em>, <em>About</em>, <em>Contact</em>, <em>API Docs</em>, and <em>Users</em> for admins. The sun/moon button switches light and dark theme.</li>
+  <li>A login lasts 8 hours. After that, or after <em>Logout</em>, you are sent back to the login page.</li>
+</ol>
+<table>
+  <tr><th>I want to…</th><th>Go to</th></tr>
+  <tr><td>Analyse a capture file I have</td><td><a href="#analyze">Analyze</a></td></tr>
+  <tr><td>See which device has which role, or group devices by behaviour</td><td><a href="#clustering">Clustering</a> (from History or after a capture)</td></tr>
+  <tr><td>Find, re-run, download or delete earlier work</td><td><a href="#history">History</a></td></tr>
+  <tr><td>Capture traffic now and analyse it</td><td><a href="#realtime">Real Time</a></td></tr>
+  <tr><td>Watch the live network, download its traffic, scan devices</td><td><a href="#monitoring">Monitoring</a></td></tr>
+  <tr><td>Use PENM from scripts</td><td>The <a href="api-guide.html">API Guide</a></td></tr>
+</table>
+
+<h2 id="analyze">2. Analyze a capture</h2>
+<ol class="steps">
+  <li>On <em>Analyze</em>, choose a <code>.pcap</code> file and press <em>Analyse</em>. Files must have the <code>.pcap</code> extension (pcapng content is fine). At most 5 uploads per minute.</li>
+  <li>PENM stores the file, counts packets and conversations, assigns a role to every IP address, extracts UE identities (IMSI, 5G-TMSI, PDU session, UE address) and builds privacy records. A large capture (hundreds of thousands of packets) takes about 20 seconds.</li>
+  <li>The page shows the <em>Total Packets</em> and, when the capture has host data, the <a href="#privacy">privacy panel</a>.</li>
+  <li><em>Save Roles as JSON</em> / <em>as CSV</em> download the role summary. <em>Clear cached results</em> forgets the last result kept in your browser.</li>
+</ol>
+<p>The role table, reasoning and network graph for this file are in <a href="#history">History</a> (<em>View Results</em>) and on the <a href="#clustering">Clustering</a> page (<em>Open in Clustering</em>).</p>
+<div class="note"><p>If part of the analysis failed while the rest worked (for example the UE extraction), a yellow box lists what is missing. The rest of the result is still valid.</p></div>
+
+<h3 id="privacy">Privacy panel</h3>
+<p>Shows how identifiable the hosts in the capture are, and how much anonymisation would help:</p>
+<ul>
+  <li>Choose the <em>Identifiers (quasi-identifiers)</em> and the <em>Sensitive Attribute</em>.</li>
+  <li>Optionally choose transformations: <em>Pseudonymize Columns</em> (mode and technique: SHA256 with salt, HMAC-SHA256, format-preserving IP, random tokens), <em>Generalize Columns</em> (with a profile per column) and <em>Suppress Columns</em> / a suppression threshold.</li>
+  <li><em>Compute Privacy Metrics</em> shows the metrics before and after the transformations, suggestions, and a preview of the transformed records. The info button explains each technique.</li>
+</ul>
+
+<h2 id="history">3. History</h2>
+<p>Everything you have uploaded, captured or clustered. Admins see everyone's files, with a <em>User</em> column.</p>
+<table>
+  <tr><th>Tab</th><th>Actions</th></tr>
+  <tr><td><em>Uploaded PCAPs</em></td><td><em>View Results</em> (roles with confidence, packet and node counts, and any warnings), <em>Re-run Analysis</em> (analyse again with the current version), <em>Open in Clustering</em>, <em>Download PCAP</em>, <em>Delete</em></td></tr>
+  <tr><td><em>Generated PCAPs</em></td><td>Captures made on the Real Time page or by a server-side capture: <em>Open in Clustering</em>, <em>Download PCAP</em>, <em>Delete</em></td></tr>
+  <tr><td><em>Cluster Results</em></td><td><em>View Results</em> (best k, modularity, clusters), <em>Re-cluster</em>, <em>Delete</em></td></tr>
+</table>
+<p>The status shows <code>COMPLETED</code>, <code>PROCESSING</code> or <code>ERROR</code>. A re-analysis that fails marks the file <code>ERROR</code> and keeps the previous result. <em>Delete</em> removes the file from the server and cannot be undone.</p>
+
+<h2 id="clustering">4. Clustering and roles</h2>
+<p>Opened from History, from Real Time (<em>Analyze</em>), or with <code>/clustering?id=&lt;file&gt;</code>. Three steps:</p>
+<ol class="steps">
+  <li><strong>Clustering.</strong> PENM suggests a number of clusters from the traffic graph's modularity, and draws the devices coloured by cluster. Change <em>Number of Clusters</em> to recompute. Clusters with very few members are flagged as anomalous. <em>Select Cluster(s) to analyze</em> picks the devices for the next step.</li>
+  <li><strong>Profiling.</strong> <em>Start Rule Based Analysis</em> assigns each selected IP a role, with a confidence and the evidence behind it (see <a href="#roles">section 8</a>).</li>
+  <li><strong>Results.</strong> <em>Download Roles</em> (JSON or CSV), <em>Download PCAP File</em>, <em>Previous</em>, <em>Start Over</em>.</li>
+</ol>
+<p>The page also shows the download link and API address of the capture. Each clustering result is saved in History; if it could not be saved, a yellow box says so.</p>
+
+<h2 id="realtime">5. Real Time capture</h2>
+<p>Captures live packets from the sensor's packet stream in your browser, saves them as a pcap, and analyses it.</p>
+<ol class="steps">
+  <li>Check the <em>WebSocket URL</em> (pre-filled with the sensor's address) and press <em>Connect</em>. The status turns green.</li>
+  <li><em>Get Interfaces</em> lists the sensor's interfaces; choose one in <em>Select Interface</em>. Stop the capture before switching interfaces.</li>
+  <li><em>Start</em> begins capturing. The metrics show packets and size, the packet log the latest packets, and the graph preview the devices seen so far.</li>
+  <li><em>Generate PCAP</em> (at the top, while capturing) saves what has been captured so far and keeps capturing; a <em>Download PCAP</em> link appears.</li>
+  <li><em>Visualize</em> builds the network graph from the capture. <em>Analyze</em> stops the capture, saves it and opens it in Clustering.</li>
+  <li><em>Stop</em> stops capturing; <em>Clear</em> resets the counters and graph.</li>
+</ol>
+<div class="note"><p>Your browser connects to the sensor directly, so its port 5002 must be reachable from your computer. Only the address the application was built for is allowed; ask your administrator if the sensor moved.</p></div>
+
+<h2 id="monitoring">6. Continuous Monitoring</h2>
+<p>A dashboard of the network the sensor watches, from flow records (Zeek) stored by the backend.</p>
+<h3 id="mon-data">Statistics and downloads</h3>
+<ul>
+  <li><strong>Timeframe:</strong> set <em>Start Time</em> and <em>End Time</em> and press <em>Apply</em>, or turn on <em>Live Mode</em> to add new flows as they arrive.</li>
+  <li><strong>Cards and charts:</strong> total packets and flow records; traffic trend over time, protocol distribution, top talkers, connection states and the conversation topology (refreshed every minute).</li>
+  <li><strong>Network Flow Logs:</strong> every flow in the timeframe; <em>Search IP or Protocol</em> filters it.</li>
+  <li><strong>Pcap downloads:</strong> <em>Headers Only</em> downloads the timeframe's traffic with headers only (no payloads); <em>Full Payload</em> downloads the sensor's most recent capture file with payloads. Capture history is limited (usually 6–24 hours).</li>
+  <li><strong>Export:</strong> <em>CSV</em> or <em>JSON</em> exports the timeframe's flows; <em>Limit</em> caps the number of rows (blank = all).</li>
+</ul>
+<h3 id="mon-live">Live analysis</h3>
+<p>Every few minutes (5 by default) the server takes a snapshot of the sensor's latest traffic and assigns roles to every device in it. <em>Run Analysis on Latest Slice</em> analyses the newest snapshot and shows the <em>Identified Roles</em>. Devices that match no known role are reported to the XTRUST-6G alert feed. If it says no snapshot is available yet, wait a few minutes or ask your administrator to check the sensor.</p>
+<h3 id="mon-scan">Nmap scans</h3>
+<p>Scans devices from the sensor, to see their open ports and services:</p>
+<ol class="steps">
+  <li>Choose a profile: <em>Fast Scan</em> (100 common ports), <em>Deep Version Scan</em> (service versions) or <em>Vulnerability Scan</em> (10,000 ports plus known vulnerabilities; slowest).</li>
+  <li>Enter a <em>Custom Target</em> (address or range such as <code>192.168.100.1/26</code>), or leave it blank to scan the devices found by the last live analysis.</li>
+  <li><em>Launch Background Scan</em>. Results appear per host when the scan finishes; <em>Download CSV</em> saves them.</li>
+</ol>
+<div class="warn"><p>Scans send active traffic. Only scan networks you are allowed to test. There is one scan at a time for all users: a new scan replaces the previous results. At most 5 scan requests per minute.</p></div>
+
+<h2 id="users">7. Users (admins)</h2>
+<p><em>Users</em> lists all accounts. Create one with <em>Username</em>, <em>Password (min 8 characters)</em> and optionally <em>Admin</em>; delete with the bin icon. Admins see all users' files in History and can manage accounts; other users see only their own files.</p>
+
+<h2 id="roles">8. What the roles mean</h2>
+<p>Roles come from evidence in the traffic, for example which side listens on a protocol's well-known port. Each role has a confidence and a short reasoning.</p>
+<table>
+  <tr><th>Role</th><th>Typical evidence</th></tr>
+  <tr><td><code>AMF</code></td><td>Listens for NGAP (SCTP 38412); serves the <code>namf</code> SBI API</td></tr>
+  <tr><td><code>gNB</code></td><td>Connects to the AMF over NGAP; GTP-U tunnel endpoint toward the UPF</td></tr>
+  <tr><td><code>SMF</code>, <code>UPF</code></td><td>PFCP control side and user-plane side (UDP 8805), by message direction</td></tr>
+  <tr><td>Other core functions (NRF, UDM, AUSF, PCF, SCP…)</td><td>Serve their SBI API paths over HTTP/2</td></tr>
+  <tr><td><code>NEAR_RT_RIC</code>, <code>E2_NODE</code>, E2 termination, RIC clients</td><td>O-RAN E2AP (SCTP 36421/36422), by which side listens</td></tr>
+  <tr><td><code>UE</code></td><td>Inner address of GTP-U tunnels, or seen in RRC</td></tr>
+  <tr><td>Data network / internet hosts</td><td>Talk to UEs only inside tunnels</td></tr>
+  <tr><td><code>Unidentified</code></td><td>Seen, but no rule matched</td></tr>
+</table>
+
+<h2 id="problems">9. When something goes wrong</h2>
+<table>
+  <tr><th>What you see</th><th>What to do</th></tr>
+  <tr><td>Sent back to the login page</td><td>Your 8-hour login expired; log in again.</td></tr>
+  <tr><td>A yellow box: "Completed with problems"</td><td>Part of the analysis failed; the listed parts are missing, the rest is valid. Try <em>Re-run Analysis</em> later, or tell your administrator.</td></tr>
+  <tr><td>Upload rejected</td><td>Only <code>.pcap</code> file names are accepted, at most 5 uploads per minute.</td></tr>
+  <tr><td>Monitoring empty, or "Sensor is unreachable"</td><td>The sensor is not running or not reachable; tell your administrator.</td></tr>
+  <tr><td>Real Time cannot connect</td><td>The sensor's port 5002 is not reachable from your computer, or the address changed.</td></tr>
+  <tr><td>A page keeps showing "Loading"</td><td>Reload with Ctrl+F5.</td></tr>
+</table>
+
+<h2 id="glossary">10. Glossary</h2>
+<table>
+  <tr><td>PCAP / pcapng</td><td>File formats for captured network packets</td></tr>
+  <tr><td>gNB, AMF, SMF, UPF, UE</td><td>5G base station, access and mobility function, session function, user-plane function, user device</td></tr>
+  <tr><td>NGAP, NAS, PFCP, GTP-U, SBI</td><td>5G protocols: gNB↔AMF signalling, device↔core signalling, SMF↔UPF control, user-data tunnels, core functions' HTTP/2 APIs</td></tr>
+  <tr><td>E2AP, near-RT RIC</td><td>O-RAN: the RAN Intelligent Controller and the protocol it uses with base stations</td></tr>
+  <tr><td>IMSI, SUCI, 5G-TMSI</td><td>Subscriber identity, its (possibly concealed) form, and the temporary identity</td></tr>
+  <tr><td>Zeek</td><td>Network monitor producing the flow records</td></tr>
+  <tr><td>Modularity</td><td>How well a graph splits into groups; used to suggest the number of clusters</td></tr>
+  <tr><td>Quasi-identifier, k-anonymity</td><td>Attributes that together can identify a host; how many hosts share each combination</td></tr>
+</table>
+
+<footer class="doc-foot">Part of the PENM documentation. Supersedes the User Manual (in <code>docs/archive/</code>). Updated 24 November 2026.</footer>
+</main>
+</div>
+</body>
+</html>

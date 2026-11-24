@@ -123,7 +123,10 @@ r13/testing/manager_test_key.pub
 *.srt
 
 
-docs/
+# docs/ is tracked; site-specific and superseded documents stay local
+# (the repository is public).
+docs/local/
+docs/archive/
 # tshark extraction caches, written next to each capture
 *.packets.tsv
 *.features.tsv

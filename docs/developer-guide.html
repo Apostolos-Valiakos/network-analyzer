@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PENM Developer Guide</title>
+<link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="home" href="index.html">&larr; Documentation home</a>
+  <a href="#layout">1. Repository layout</a>
+  <a href="#local">2. Run it locally</a>
+  <a href="#backend">3. Backend architecture</a>
+  <a href="#frontend">4. Frontend</a>
+  <a href="#sensor">5. Sensor</a>
+  <a href="#conventions">6. Conventions</a>
+  <a href="#tests">7. Tests</a>
+  <a href="#schema">8. Database changes</a>
+  <a href="#release">9. Building and shipping</a>
+  <a href="#docs">10. Keeping the docs current</a>
+</nav>
+<main>
+<header class="doc-head">
+  <p class="eyebrow">Developer Guide</p>
+  <h1>Working on the PENM code</h1>
+  <p class="lede">For developers changing PENM: layout, local setup, how the parts fit, conventions, tests and releases. <code>CLAUDE.md</code> in the repository root is the condensed version of the same rules.</p>
+</header>
+
+<h2 id="layout">1. Repository layout</h2>
+<table>
+  <tr><th>Path</th><th>What</th></tr>
+  <tr><td><code>server/</code></td><td>Flask backend (Python 3.10 in Docker): <code>app.py</code> (<code>create_app()</code>), <code>wsgi.py</code> (gunicorn), analysis modules</td></tr>
+  <tr><td><code>server/blueprints/</code></td><td>All HTTP routes, one blueprint per area: auth, pcaps, privacy, clustering, analysis, monitoring, scan, history</td></tr>
+  <tr><td><code>server/docs/*.yml</code></td><td>Swagger description of each route</td></tr>
+  <tr><td><code>server/migrations/</code></td><td>Alembic database migrations</td></tr>
+  <tr><td><code>pages/</code>, <code>components/</code>, <code>plugins/</code>, <code>utils/</code>, <code>store/</code>, <code>middleware/</code>, <code>layouts/</code></td><td>Nuxt 2 / Vue 2.7 / Vuetify 2 single-page app</td></tr>
+  <tr><td><code>Host Files/</code></td><td>Sensor scripts: <code>pcap_server.py</code>, <code>zeek_agent.py</code>, <code>publisher.py</code>, <code>tuning.zeek</code>, <code>start_sensor.sh</code></td></tr>
+  <tr><td><code>tests/backend/</code>, <code>tests/frontend/</code></td><td>pytest and Jest suites, fixtures and snapshots</td></tr>
+  <tr><td><code>docker-compose.yml</code>, <code>docker-compose.sensor.yml</code>, <code>Dockerfile</code>, <code>server/Dockerfile</code></td><td>Production images and stacks</td></tr>
+  <tr><td><code>deploy/k8s/</code></td><td>Kubernetes testbed manifests, image Dockerfiles (sensor, Open5GS, srsRAN, FlexRIC) and scripts</td></tr>
+  <tr><td><code>docs/</code></td><td>This documentation. <code>docs/local/</code> and <code>docs/archive/</code> are not in git</td></tr>
+</table>
+
+<h2 id="local">2. Run it locally</h2>
+<h3>Backend</h3>
+<p>Needs Python 3.10+, tshark on <code>PATH</code> (or <code>TSHARK_PATH</code>; on Windows the Wireshark install is found automatically) and PostgreSQL, preferably with TimescaleDB.</p>
+<pre><code>cd server
+python -m venv .venv &amp;&amp; source .venv/bin/activate        <span class="c"># Windows: .\.venv\Scripts\Activate.ps1</span>
+pip install -r requirements.txt
+<span class="c"># server/.env: JWT_SECRET_KEY, DATABASE_URL=postgresql://postgres:&lt;pw&gt;@localhost:5432/network_analyzer,</span>
+<span class="c"># SECRET_TOKEN, ADMIN_USERNAME/ADMIN_PASSWORD, ALLOWED_ORIGINS=http://localhost:3000,</span>
+<span class="c"># optionally SENSOR_URL and SNAPSHOT_ENABLED=false when no sensor is running</span>
+python app.py                 <span class="c"># http://127.0.0.1:5555, applies migrations; FLASK_DEBUG=1 for the debugger (never on an exposed host)</span></code></pre>
+<h3>Frontend</h3>
+<pre><code>npm ci                                         <span class="c"># exactly the committed package-lock.json</span>
+API_BASE_URL=http://127.0.0.1:5555 WS_URL=ws://127.0.0.1:5002 npm run dev          <span class="c"># http://localhost:3000</span>
+NODE_OPTIONS=--openssl-legacy-provider npm run generate                         <span class="c"># production build into dist/ (Node 17+)</span></code></pre>
+<p><code>API_BASE_URL</code> and <code>WS_URL</code> are read at build time (<code>nuxt.config.js</code>); a root <code>.env</code> sets them too. A build made with someone else's <code>.env</code> points at their server.</p>
+
+<h2 id="backend">3. Backend architecture</h2>
+<ul>
+  <li><strong>App factory.</strong> <code>create_app(init_database=True)</code> builds the app with no import side effects. On start, <code>db_setup.init_database</code> applies migrations, enables TimescaleDB (the <code>flow_statistics</code> hypertable) and seeds the first admin, under a Postgres advisory lock.</li>
+  <li><strong>Production:</strong> gunicorn with one worker and 100 threads. One worker on purpose: Socket.IO clients, the rate limiter and the snapshot scheduler live in process memory.</li>
+  <li><strong>One tshark pass per capture</strong> (<code>packet_table.py</code>): one <code>tshark -T fields</code> run extracts the union of all modules' fields into <code>&lt;pcap&gt;.packets.tsv</code>. Its header holds file size, modification time and field list, so a changed capture or field list re-extracts. Roles, privacy records, the traffic graph, clustering and UE extraction all read it. There is no other packet library in the backend.</li>
+  <li><strong>Role engine</strong> (<code>role_engine.py</code>): direction-aware evidence (who listens on NGAP 38412 or E2AP 36421/36422, PFCP message direction, which side serves an SBI path), then a rule table gives one role per IP with confidence, reasoning and runner-ups. Results are cached per capture in <code>ip_roles</code> with the engine version; partial results are not cached.</li>
+  <li><strong>Role pipeline</strong> (<code>Preprocess.py</code>): runs the role engine in a child process, so a hung tshark can be killed after 600 s, and writes the role summary served by <code>/save_roles</code>.</li>
+  <li><strong>UE extraction</strong> (<code>ueAnalysis.py</code>): IMSI (also from null-scheme SUCI), 5G-TMSI, PDU session, and the UE address from the PDU Session Establishment Accept, linked to the IMSI through the HTTP/2 stream's <code>/ue-contexts/imsi-…</code> URL or the RAN UE NGAP ID.</li>
+  <li><strong>Monitoring</strong> (<code>blueprints/monitoring.py</code>): Zeek flows into <code>flow_statistics</code> (naive UTC), statistics and export, pcap endpoints proxying the sensor's <code>/get-pcap</code>, and Socket.IO events.</li>
+  <li><strong>Snapshot scheduler</strong> (<code>snapshot_scheduler.py</code>): a thread started from <code>wsgi.py</code> fetches the sensor's latest <code>SNAPSHOT_INTERVAL_SECONDS</code>, stores role-engine results as <code>RoleSnapshot</code> rows (pruned after <code>SNAPSHOT_RETENTION_HOURS</code>) and keeps <code>results/latest_snapshot.pcap</code> for <code>/v1/analyze_live</code>.</li>
+  <li><strong>Server-side capture</strong> (<code>connectToWebsocket.py</code>): each <code>/start-analysis-from-websocket</code> request runs its own <code>CaptureRun</code>, saving and analysing in-process.</li>
+  <li><strong>WP5 notices</strong> (<code>wp5_notices.py</code>): PENM's own alerts as Zeek <code>Notice::Info</code> JSON lines in <code>WP5_NOTICE_LOG</code>, forwarded to the XTRUST-6G alert system.</li>
+  <li><strong>Auth:</strong> flask-jwt-extended, 8-hour tokens, admin checks in <code>access.py</code>. Sensor traffic uses <code>X-Internal-Token</code> = <code>SECRET_TOKEN</code>, checked with <code>settings.token_matches</code> (constant time, never true when unset).</li>
+</ul>
+
+<h2 id="frontend">4. Frontend</h2>
+<ul>
+  <li>Static SPA (<code>ssr: false</code>), built with <code>nuxt generate</code> and served by nginx. nginx's Content Security Policy is generated at container start from <code>API_BASE_URL</code> and <code>WS_URL</code>.</li>
+  <li>Call the backend through <code>plugins/api.js</code>: <code>this.$api.json(path, options, fallbackMessage)</code> for JSON (shows the backend's error, else the fallback); <code>$apiFetch</code> only for downloads and where the status code matters. Both add the token and log out on 401.</li>
+  <li>Large pages are split into components: <code>components/realtime/</code>, <code>components/history/</code>, <code>components/monitoring/</code>, <code>components/stepper/</code>; pure helpers in <code>utils/</code>.</li>
+  <li>Use Vuetify 2 props and classes (<code>outlined</code>, <code>dense</code>, <code>large</code>, <code>depressed</code>, <code>&lt;v-icon left&gt;</code>, <code>primary--text</code>). Vuetify 3 forms (<code>variant=</code>, <code>density=</code>, <code>size=</code> on buttons) silently do nothing.</li>
+  <li>Jest compiles templates without optional chaining: write <code>a &amp;&amp; a.b</code> instead of <code>a?.b</code> in templates.</li>
+</ul>
+
+<h2 id="sensor">5. Sensor</h2>
+<p><code>pcap_server.py</code> picks the ring files <code>continuous_capture_*.pcap</code> that overlap a requested window, merges and cuts them with <code>mergecap</code>/<code>editcap</code>, and serves Nmap scans. For the file dumpcap is still writing it sends, or merges, only the complete records (<code>pcap_repair.complete_length</code>), and never modifies that file. The sensor image (<code>deploy/k8s/images/sensor/</code>) copies <code>server/pcap_repair.py</code>; it has its own <code>Dockerfile.dockerignore</code> because the root one excludes <code>server/</code>.</p>
+
+<h2 id="conventions">6. Conventions</h2>
+<ul>
+  <li><strong>Swagger:</strong> every route has a <code>server/docs/&lt;name&gt;.yml</code>. Protected routes need <code>security: [{Bearer: []}]</code>, or Swagger UI will not send the token. A test enforces this.</li>
+  <li><strong>Partial failures:</strong> never swallow an exception. Log it with <code>logger.exception</code>; if the rest of the request still succeeds, add a readable message to a <code>warnings</code> list in the response (only when non-empty). The frontend shows it with <code>components/WarningsAlert.vue</code>. Bad parameters are 400, server errors 500.</li>
+  <li><strong>Incomplete captures:</strong> stored captures are trimmed with <code>pcap_repair.trim_incomplete_tail</code> (on upload, Real Time save, scheduler download, and when first loaded).</li>
+  <li><strong>Time:</strong> stored datetimes are naive UTC; the API uses Unix seconds.</li>
+  <li><strong>Secrets:</strong> never commit <code>.env</code>, tokens, <code>r13/secrets/</code> or Open5GS home-network keys. <code>SECRET_TOKEN</code> has no default anywhere.</li>
+  <li><strong>Commits:</strong> topic commits on a branch, merged into <code>main</code> when the tests pass. There is no CI: run the tests yourself.</li>
+</ul>
+
+<h2 id="tests">7. Tests</h2>
+<pre><code>pip install -r server/requirements.txt -r tests/requirements.txt
+pytest                                   <span class="c"># backend (from the repository root)</span>
+pytest -m "not integration"              <span class="c"># without tests that need real tshark</span>
+npx jest --config tests/frontend/jest.config.js</code></pre>
+<ul>
+  <li><strong>Snapshot tests</strong> (<code>tests/backend/snapshots/*.json</code>) pin current output: analysis results for two fixture captures, every route's response, the route table, the Swagger spec and CORS. After an intended change, re-record with <code>pytest --update-snapshots</code> and review the diff.</li>
+  <li>Snapshots record the tshark version. The main file is from the dev machine (tshark 4.6); the production image's tshark 4.4 is recorded as a mark (same output) or a <code>&lt;name&gt;.tshark-4.4.json</code> file. Re-record locally first, then in the image:
+<pre><code>docker run --rm -v "&lt;repo&gt;:/repo" -w /repo --entrypoint sh network-analyzer-backend:latest \
+  -c 'pip install -q -r tests/requirements.txt &amp;&amp; python -m pytest --update-snapshots'</code></pre></li>
+  <li>Patch where a name is used (<code>blueprints.&lt;area&gt;.X</code>). <code>conftest.py</code> sends WP5 notices to a temporary file, disables rate limits, and stubs <code>snapshot_scheduler</code> (its own tests load the real file).</li>
+  <li><code>PENM_TEST_POSTGRES_URL</code> also runs the PostgreSQL-only migration tests against a throwaway database whose name contains "test".</li>
+</ul>
+
+<h2 id="schema">8. Database changes</h2>
+<pre><code>cd server
+flask --app wsgi db migrate -m "describe the change"   <span class="c"># after editing models.py</span></code></pre>
+<p>Review the new file in <code>migrations/versions/</code> and commit it; the next start applies it. <code>test_models_match_the_migrations</code> fails if a model changes without a migration.</p>
+
+<h2 id="release">9. Building and shipping</h2>
+<pre><code>docker build -t network-analyzer-backend:latest ./server
+docker build -t network-analyzer-frontend:latest --build-arg API_BASE_URL=&lt;api-base-url&gt; --build-arg WS_URL=&lt;ws-url&gt; .
+docker build -f deploy/k8s/images/sensor/Dockerfile -t penm-sensor:latest .</code></pre>
+<p>Shipping to a server and rolling back: <a href="deployment.html#update">Deployment Guide, section 8</a>. The frontend image installs with <code>npm ci</code> from the committed <code>package-lock.json</code>, which pins webpack 4 (webpack 5 breaks Nuxt 2). Change dependencies with <code>npm install</code> and commit the lockfile.</p>
+
+<h2 id="docs">10. Keeping the docs current</h2>
+<table>
+  <tr><th>Document</th><th>Update when</th></tr>
+  <tr><td><code>docs/deployment.html</code></td><td>Settings, ports, images, deployment steps change</td></tr>
+  <tr><td><code>docs/user-guide.html</code></td><td>A page or its behaviour changes</td></tr>
+  <tr><td><code>docs/api-guide.html</code> and <code>server/docs/*.yml</code></td><td>A route, parameter or response changes</td></tr>
+  <tr><td><code>docs/developer-guide.html</code>, <code>CLAUDE.md</code></td><td>Architecture, conventions or tooling change</td></tr>
+  <tr><td><code>docs/local/</code></td><td>Site-specific values (addresses, testbed, R13). Not in git: the repository is public</td></tr>
+</table>
+<p>Guides use placeholders such as <code>&lt;server-ip&gt;</code>; never put real addresses, credentials or partner contacts in <code>docs/</code> outside <code>docs/local/</code>.</p>
+
+<footer class="doc-foot">Part of the PENM documentation. Supersedes the README's setup sections and the unit test report (in <code>docs/archive/</code>). Updated 24 November 2026.</footer>
+</main>
+</div>
+</body>
+</html>

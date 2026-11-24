@@ -19,7 +19,7 @@ Ask clarifying questions before making code changes in this repo (the user's sta
 | `docker-compose.sensor.yml` | Sensor container (host network), built from `deploy/k8s/images/sensor/Dockerfile` |
 | `deploy/k8s/` | Single-node Kubernetes testbed: Open5GS, srsRAN, FlexRIC (`10-5g`) and PENM (`20-penm`), image Dockerfiles, `scripts/build-images.sh` |
 | `r13/` | XTRUST-6G R13 (C-XDR Cluster Manager) worker-node integration. **Gitignored**: no history, back up before big edits |
-| `docs/` | **Gitignored** (some files force-added): `DOCKER_SETUP.md`, operator/user/installation guides (HTML), `k8s-testbed/index.html` |
+| `docs/` | Documentation, start at `docs/index.html`: `deployment.html`, `user-guide.html`, `api-guide.html`, `developer-guide.html` (in git, placeholders only: the repo is **public**). `docs/local/` (site notes with real addresses, Kubernetes testbed guide, R13 guide, architecture review) and `docs/archive/` (superseded docs) are gitignored |
 
 ## Commands
 
@@ -80,6 +80,6 @@ There is no CI and no linter config; run the relevant tests yourself.
 
 ## Deployment notes
 
-- **Production server** (Docker Compose): images are built on a workstation, shipped with `docker save | gzip`, then `docker load` and `docker compose up -d --no-build backend frontend` run from the folder that holds `docker-compose.yml`. Procedure, backup and rollback are in `docs/DOCKER_SETUP.md` §9; the sensor is in §10.
-- **Kubernetes testbed**: `docs/k8s-testbed/index.html` is the step-by-step guide. Namespaces `team-5g` / `team-penm`, Cilium with Hubble, and pinned CU/DU/FlexRIC versions (keep them).
+- **Production server** (Docker Compose): images are built on a workstation, shipped with `docker save | gzip`, then `docker load` and `docker compose up -d --no-build backend frontend` run from the folder that holds `docker-compose.yml`. Procedure, backup and rollback are in `docs/deployment.html` §8; the sensor is in §6. Real addresses: `docs/local/site-notes.html`.
+- **Kubernetes testbed**: `docs/local/kubernetes-testbed.html` is the step-by-step guide. Namespaces `team-5g` / `team-penm`, Cilium with Hubble, and pinned CU/DU/FlexRIC versions (keep them).
 - **R13**: see `r13/README.md` and `r13/INTEGRATION_GUIDE.md`. The node registers as engine `penm`, role `worker`, over HTTPS with OCSP stapling, ships alerts with syslog-ng over TLS on 6514, and is controlled through `penmctl` over SSH on 2222. There is deliberately no switch to skip the TLS/OCSP checks.

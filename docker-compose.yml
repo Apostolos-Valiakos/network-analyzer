@@ -18,7 +18,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     # Loopback-only: lets you connect with psql/pgAdmin from the Docker host
-    # itself (see docs/DOCKER_SETUP.md §5) without exposing Postgres to the
+    # itself (see docs/deployment.html §5) without exposing Postgres to the
     # network the way a bare "5432:5432" mapping would.
     ports:
       - "127.0.0.1:5432:5432"

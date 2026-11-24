@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PENM Deployment Guide</title>
+<link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="home" href="index.html">&larr; Documentation home</a>
+  <a href="#overview">1. What you are deploying</a>
+  <a href="#requirements">2. Requirements</a>
+  <a href="#docker">3. Install Docker</a>
+  <a href="#configure">4. Configure</a>
+  <a class="sub" href="#env">Settings reference</a>
+  <a href="#start">5. Start and log in</a>
+  <a href="#sensor">6. The capture sensor</a>
+  <a href="#remote">7. Access from other machines</a>
+  <a href="#update">8. Updating a running server</a>
+  <a href="#operate">9. Daily operations and backups</a>
+  <a href="#kubernetes">10. Kubernetes testbed</a>
+  <a href="#trouble">11. Troubleshooting</a>
+</nav>
+<main>
+<header class="doc-head">
+  <p class="eyebrow">Deployment Guide</p>
+  <h1>Install, run and update PENM</h1>
+  <p class="lede">For whoever installs or maintains a PENM server: Docker on one Linux host, the capture sensor, updates and backups. Addresses are shown as placeholders such as <code>&lt;server-ip&gt;</code>.</p>
+</header>
+
+<h2 id="overview">1. What you are deploying</h2>
+<p>PENM has four parts. Three run as one Docker Compose stack (<code>docker-compose.yml</code>); the sensor is a separate container (<code>docker-compose.sensor.yml</code>) on the machine whose network interface it captures.</p>
+<pre class="diagram">  Browser ──► frontend (nginx, :80) ──► backend (Flask/gunicorn, :5555) ──► db (PostgreSQL + TimescaleDB)
+                                             ▲  │
+              flows (POST /v1/ingest/zeek)   │  │ pcap slices, Nmap (:5005)
+                                             │  ▼
+                                   sensor (dumpcap, Zeek, pcap_server, publisher :5002)
+  Real Time page ── WebSocket (:5002) ──► publisher.py on the sensor</pre>
+<table>
+  <tr><th>Container</th><th>What it does</th><th>Port</th></tr>
+  <tr><td><code>penm_frontend</code></td><td>The web application (Nuxt, served by nginx)</td><td>80</td></tr>
+  <tr><td><code>penm_backend</code></td><td>REST API, analysis, Swagger docs at <code>/apidocs</code>, live role snapshots</td><td>5555</td></tr>
+  <tr><td><code>penm_db</code></td><td>PostgreSQL 14 with TimescaleDB; data in the <code>db_data</code> volume</td><td>5432, local only</td></tr>
+  <tr><td><code>penm_sensor</code></td><td>Captures traffic, ships flows, serves pcaps and Nmap scans, streams packets to the Real Time page</td><td>5005, 5002</td></tr>
+</table>
+<p>Which setup to use:</p>
+<table>
+  <tr><th>Setup</th><th>When</th><th>Where</th></tr>
+  <tr><td>App and sensor on one Linux host</td><td>Usual production setup: the host sees the traffic to monitor</td><td>Sections 3–6</td></tr>
+  <tr><td>App on one host, sensor on another</td><td>The traffic is only visible on a different machine</td><td>Sections 3–6, <a href="#sensor-elsewhere">6.3</a></td></tr>
+  <tr><td>Kubernetes testbed</td><td>The 5G testbed cluster (Open5GS, srsRAN, FlexRIC and PENM in one cluster)</td><td><a href="#kubernetes">Section 10</a></td></tr>
+  <tr><td>Local development</td><td>Working on the code</td><td><a href="developer-guide.html#local">Developer Guide</a></td></tr>
+</table>
+<div class="note"><p>You never create the database or tables by hand. The database container creates <code>network_analyzer</code> on first start, and the backend applies its schema (Alembic migrations), enables TimescaleDB and creates the first admin account each time it starts, if needed.</p></div>
+
+<h2 id="requirements">2. Requirements</h2>
+<ul>
+  <li>A Linux host (Ubuntu 22.04/24.04 or Debian), x86_64, with Docker Engine and the Compose plugin. Nothing else is installed on the host: Python, Node.js, nginx, PostgreSQL and tshark run inside the containers.</li>
+  <li>About 10 GB of disk for images and the database, plus space for capture files on the sensor host (see <a href="#sensor-settings">6.2</a>).</li>
+  <li>Ports 80 and 5555 reachable by the users' browsers; 5002 by browsers using the Real Time page; 5005 from the backend to the sensor.</li>
+</ul>
+
+<h2 id="docker">3. Install Docker</h2>
+<pre><code>sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER &amp;&amp; newgrp docker   <span class="c"># run docker without sudo</span>
+docker compose version                           <span class="c"># check</span></code></pre>
+<p>On Debian, replace <code>ubuntu</code> with <code>debian</code> in both URLs. If <code>apt-get update</code> fails with "cdrom … does not have a Release file", comment out the <code>deb cdrom:</code> line in <code>/etc/apt/sources.list</code> (a leftover from installing from an ISO).</p>
+
+<h2 id="configure">4. Configure</h2>
+<p>Copy the project to the server (<code>git clone</code>, or copy the folder), then create <code>.env</code> next to <code>docker-compose.yml</code>. Compose reads it from the folder that holds the compose file, not from your current directory.</p>
+<pre><code>cd &lt;project-folder&gt;
+cp .env.example .env
+python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_hex(32)); print('SECRET_TOKEN=' + secrets.token_hex(32))"
+nano .env          <span class="c"># paste the two values and fill in the rest (table below)</span></code></pre>
+<div class="warn"><p><code>.env</code> holds secrets: never commit it or send it by e-mail. <code>SECRET_TOKEN</code> has no default. Without it the backend refuses all sensor traffic, and the sensor refuses all requests.</p></div>
+
+<h3 id="env">Settings reference</h3>
+<table>
+  <tr><th>Setting</th><th>Meaning</th><th>Example / default</th></tr>
+  <tr><td><code>DB_PASSWORD</code></td><td>Password of the database's <code>postgres</code> user (used by the database and the backend)</td><td>a long random string</td></tr>
+  <tr><td><code>JWT_SECRET_KEY</code></td><td>Signs login tokens. Changing it logs everyone out</td><td>64 hex characters</td></tr>
+  <tr><td><code>SECRET_TOKEN</code></td><td>Shared secret between backend and sensor (<code>X-Internal-Token</code>). Must be identical on both</td><td>64 hex characters</td></tr>
+  <tr><td><code>ADMIN_USERNAME</code>, <code>ADMIN_PASSWORD</code></td><td>First admin account, created only if no admin exists yet</td><td><code>admin</code>, a strong password</td></tr>
+  <tr><td><code>ALLOWED_ORIGINS</code></td><td>Browser origins allowed to call the API (comma-separated): the address users type</td><td><code>http://&lt;server-ip&gt;,http://localhost</code></td></tr>
+  <tr><td><code>API_BASE_URL</code></td><td>Backend address <em>as the browser sees it</em>. Built into the frontend</td><td><code>http://&lt;server-ip&gt;:5555</code></td></tr>
+  <tr><td><code>WS_URL</code></td><td>Default address of the sensor's packet stream on the Real Time page. Built into the frontend</td><td><code>ws://&lt;sensor-ip&gt;:5002</code></td></tr>
+  <tr><td><code>SENSOR_URL</code></td><td>Where the backend reaches the sensor's <code>pcap_server.py</code></td><td>default <code>http://172.18.0.1:5005</code> (the Docker host); else <code>http://&lt;sensor-ip&gt;:5005</code></td></tr>
+  <tr><td><code>SNAPSHOT_ENABLED</code></td><td>Live role snapshots (feed <em>Latest roles</em> and <em>Live Analysis</em>)</td><td><code>true</code></td></tr>
+  <tr><td><code>SNAPSHOT_INTERVAL_SECONDS</code></td><td>How often the backend takes a snapshot of the sensor's latest traffic</td><td><code>300</code></td></tr>
+  <tr><td><code>SNAPSHOT_RETENTION_HOURS</code></td><td>How long snapshot history is kept</td><td><code>168</code> (one week)</td></tr>
+  <tr><td><code>SENSOR_*</code></td><td>Sensor container settings, see <a href="#sensor-settings">6.2</a></td><td></td></tr>
+</table>
+<div class="note"><p><code>API_BASE_URL</code> and <code>WS_URL</code> are compiled into the frontend, and nginx's security policy only lets the browser connect to those two addresses. After changing either, rebuild the frontend: <code>docker compose build frontend &amp;&amp; docker compose up -d frontend</code>.</p></div>
+
+<h2 id="start">5. Start and log in</h2>
+<pre><code>docker compose up -d --build        <span class="c"># first build: 5–10 minutes</span>
+docker compose logs -f backend      <span class="c"># wait for "Booting worker" and "TimescaleDB initialized successfully.", then Ctrl+C</span></code></pre>
+<table>
+  <tr><th>Address</th><th>What</th></tr>
+  <tr><td><code>http://&lt;server-ip&gt;</code></td><td>The application. Log in with <code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code></td></tr>
+  <tr><td><code>http://&lt;server-ip&gt;:5555/apidocs</code></td><td>Interactive API documentation (see the <a href="api-guide.html">API Guide</a>)</td></tr>
+  <tr><td><code>127.0.0.1:5432</code> on the server</td><td>The database, for <code>psql</code> or pgAdmin on the server itself only</td></tr>
+</table>
+<p>Create the other user accounts in the application under <em>Users</em> (admins only). There is no self-registration.</p>
+
+<h2 id="sensor">6. The capture sensor</h2>
+<p>One container, <code>penm_sensor</code>, built from <code>deploy/k8s/images/sensor/Dockerfile</code>, runs everything the sensor needs:</p>
+<table>
+  <tr><th>Process</th><th>Purpose</th><th>Port</th></tr>
+  <tr><td><code>dumpcap</code></td><td>Ring buffer of capture files (one per <code>SENSOR_RING_SECONDS</code>)</td><td>—</td></tr>
+  <tr><td>Zeek + <code>zeek_agent.py</code></td><td>Flow records, posted to the backend's <code>/v1/ingest/zeek</code></td><td>—</td></tr>
+  <tr><td><code>pcap_server.py</code></td><td>Pcap slices and Nmap scans for the backend (token-protected)</td><td>5005</td></tr>
+  <tr><td><code>publisher.py</code></td><td>Live packet stream for the Real Time page</td><td>5002</td></tr>
+</table>
+<p>It uses host networking, so it sees the host's real interface and opens 5005 and 5002 on the host itself. If a process stops, the container exits and Docker restarts it. Old capture files are deleted after <code>SENSOR_RETENTION_MINUTES</code>, and Zeek restarts daily so its log does not grow without limit. The sensor never sends a half-written capture: for the file being written it sends only the complete packets.</p>
+
+<h3 id="sensor-build">6.1 Build the image</h3>
+<pre><code>docker build -f deploy/k8s/images/sensor/Dockerfile -t penm-sensor:latest .   <span class="c"># from the project root</span></code></pre>
+<p>Build on the server, or on another machine and copy it as in <a href="#update">section 8</a> (<code>docker save penm-sensor:latest | gzip &gt; penm-sensor.tar.gz</code>).</p>
+
+<h3 id="sensor-settings">6.2 Settings</h3>
+<p>Put <code>docker-compose.sensor.yml</code> next to <code>docker-compose.yml</code>, so it shares <code>.env</code> (and <code>SECRET_TOKEN</code>) with the backend, and add:</p>
+<pre><code><span class="c"># ── Sensor ──</span>
+SENSOR_INTERFACE=&lt;interface&gt;                          <span class="c"># list them with: ip -br addr</span>
+SENSOR_HOST_API_URL=http://127.0.0.1:5555/v1/ingest/zeek
+SENSOR_URL=http://&lt;sensor-ip&gt;:5005
+<span class="c"># optional</span>
+SENSOR_RETENTION_MINUTES=360                          <span class="c"># capture history (default 1440 = 24 h)</span>
+SENSOR_RING_SECONDS=3600                              <span class="c"># one capture file per hour</span>
+SENSOR_EXCLUDE_PORTS=5002 5005 5555                   <span class="c"># never captured (add 22 to drop SSH)</span>
+SENSOR_ENABLE_PUBLISHER=true                          <span class="c"># false: no Real Time stream</span></code></pre>
+<div class="warn"><p>Capture files grow fast on a busy link: one hour at 100 Mbit/s is up to about 45 GB. Check <code>df -h /var/lib/docker</code> and size <code>SENSOR_RETENTION_MINUTES</code> to the free space.</p></div>
+
+<h3 id="sensor-start">6.3 Start and check</h3>
+<pre><code>sudo ss -ltnp | grep -E ':(5005|5002)\b'                 <span class="c"># must print nothing (ports free)</span>
+docker compose -f docker-compose.sensor.yml up -d
+docker logs penm_sensor | head                           <span class="c"># "[sensor] interface=&lt;interface&gt; filter: ..."</span>
+docker compose up -d --no-build backend                  <span class="c"># the backend reads SENSOR_URL at start</span>
+
+docker ps --format '{{.Names}}  {{.Status}}' | grep penm_sensor          <span class="c"># Up … (healthy)</span>
+docker logs penm_backend 2&gt;&amp;1 | grep "ingest/zeek" | tail -3           <span class="c"># flows arriving</span></code></pre>
+<p>Within a few minutes the Monitoring page shows statistics and <em>Full Payload</em> downloads a pcap. After the first snapshot interval, <em>Run Analysis on Latest Slice</em> works.</p>
+<p id="sensor-elsewhere"><strong>Sensor on another machine:</strong> install Docker there, copy the image and <code>docker-compose.sensor.yml</code>, and create a <code>.env</code> next to it with <code>SECRET_TOKEN</code> (the backend's value), <code>SENSOR_INTERFACE</code> and <code>SENSOR_HOST_API_URL=http://&lt;server-ip&gt;:5555/v1/ingest/zeek</code>. On the backend set <code>SENSOR_URL=http://&lt;sensor-ip&gt;:5005</code>, and build the frontend with <code>WS_URL=ws://&lt;sensor-ip&gt;:5002</code>.</p>
+<p>Without Docker, <code>Host Files/start_sensor.sh &lt;interface&gt;</code> starts the same processes on a host that has tshark, Zeek and Python installed; it requires <code>SECRET_TOKEN</code> in the environment.</p>
+
+<h2 id="remote">7. Access from other machines</h2>
+<ol class="steps">
+  <li>In <code>.env</code>: <code>API_BASE_URL=http://&lt;server-ip&gt;:5555</code> and add <code>http://&lt;server-ip&gt;</code> to <code>ALLOWED_ORIGINS</code>.</li>
+  <li>Rebuild the frontend: <code>docker compose build frontend &amp;&amp; docker compose up -d</code>.</li>
+  <li>If the firewall is on, open the ports:
+<pre><code>sudo ufw allow 80/tcp &amp;&amp; sudo ufw allow 5555/tcp &amp;&amp; sudo ufw allow 5002/tcp
+sudo ufw allow from 172.16.0.0/12 to any port 5005 proto tcp   <span class="c"># backend container → sensor on the same host</span></code></pre></li>
+</ol>
+
+<h2 id="update">8. Updating a running server</h2>
+<p>Build the images on a workstation, copy them, and recreate only the backend and frontend. The database and its data are untouched. The backend upgrades the schema on its first start; upgrades only add what is missing, so keep a backup anyway.</p>
+<h3>8.1 On the server: find the project, back up, keep the old images</h3>
+<pre><code>docker inspect penm_backend --format '{{index .Config.Labels "com.docker.compose.project"}}  {{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+docker inspect penm_frontend --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'API_BASE_URL|WS_URL'
+docker exec penm_db pg_dump -U postgres -Fc network_analyzer &gt; ~/penm_db_$(date +%F).dump
+docker tag network-analyzer-backend:latest  network-analyzer-backend:old-$(date +%F)
+docker tag network-analyzer-frontend:latest network-analyzer-frontend:old-$(date +%F)</code></pre>
+<p>The first command prints the Compose project name and <code>&lt;project-folder&gt;</code>. Compose names the images <code>&lt;project&gt;-backend</code> and <code>&lt;project&gt;-frontend</code>; the commands here assume the project is <code>network-analyzer</code>. The second prints the frontend's current addresses: reuse them below.</p>
+<h3>8.2 On the workstation: build and copy</h3>
+<p>In Git Bash or a Linux/macOS shell (not Windows <code>cmd</code>), from the project root:</p>
+<pre><code>docker build -t network-analyzer-backend:latest ./server
+docker build -t network-analyzer-frontend:latest --build-arg API_BASE_URL=&lt;api-base-url&gt; --build-arg WS_URL=&lt;ws-url&gt; .
+docker save network-analyzer-backend:latest network-analyzer-frontend:latest | gzip &gt; penm-app.tar.gz
+sha256sum penm-app.tar.gz
+scp penm-app.tar.gz &lt;user&gt;@&lt;server-ip&gt;:~/</code></pre>
+<h3>8.3 On the server: load and restart</h3>
+<pre><code>sha256sum ~/penm-app.tar.gz                      <span class="c"># must match</span>
+gunzip -c ~/penm-app.tar.gz | docker load
+cd &lt;project-folder&gt;                              <span class="c"># the folder holding docker-compose.yml</span>
+docker compose up -d --no-build backend frontend
+docker logs -f penm_backend                      <span class="c"># "Starting gunicorn", migrations (if any), then Ctrl+C</span></code></pre>
+<p><code>--no-build</code> makes Compose use the loaded images instead of building from the server's older source. Then reload the application in the browser with Ctrl+F5.</p>
+<h3>8.4 Roll back</h3>
+<pre><code>docker tag network-analyzer-backend:old-&lt;date&gt;  network-analyzer-backend:latest
+docker tag network-analyzer-frontend:old-&lt;date&gt; network-analyzer-frontend:latest
+docker compose up -d --no-build backend frontend
+<span class="c"># restore the data itself, if needed:</span>
+docker exec -i penm_db pg_restore -U postgres -d network_analyzer --clean --if-exists &lt; ~/penm_db_&lt;date&gt;.dump</code></pre>
+<p>The sensor is updated the same way: load the new <code>penm-sensor</code> image, then <code>docker compose -f docker-compose.sensor.yml up -d</code>.</p>
+
+<h2 id="operate">9. Daily operations and backups</h2>
+<pre><code>docker compose ps                                  <span class="c"># status</span>
+docker compose logs -f backend                     <span class="c"># logs (frontend, db likewise)</span>
+docker compose restart backend
+docker compose stop                                <span class="c"># stop, keep everything</span>
+docker compose down                                <span class="c"># remove containers, keep data volumes</span>
+docker compose -f docker-compose.sensor.yml logs -f
+docker exec penm_db pg_dump -U postgres -Fc network_analyzer &gt; ~/penm_db_$(date +%F).dump   <span class="c"># backup</span></code></pre>
+<div class="warn"><p><code>docker compose down -v</code>, <code>docker volume prune</code> and <code>docker system prune --volumes</code> delete the database volume. To free disk space, use <code>docker builder prune</code> and <code>docker image prune</code>, which keep volumes.</p></div>
+<p>Data on the server: the database volume <code>db_data</code>; uploaded and generated captures, clustering output and results in the backend volumes; capture files in the sensor volumes. Back up the database regularly; the capture files are a rolling window and need no backup.</p>
+
+<h2 id="kubernetes">10. Kubernetes testbed</h2>
+<p>For the 5G testbed (Open5GS, srsRAN CU/DU, FlexRIC and PENM in one single-node cluster), the manifests, image Dockerfiles and scripts are in <code>deploy/k8s/</code>:</p>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>00-node/</code></td><td><code>node-prep.sh</code> (host preparation), <code>kubeadm-config.yaml</code>, <code>post-init.sh</code></td></tr>
+  <tr><td><code>01-cluster/</code></td><td>Namespaces <code>team-5g</code> / <code>team-penm</code>, placement</td></tr>
+  <tr><td><code>10-5g/</code></td><td>Open5GS, MongoDB + WebUI (admin created from a Secret), srsRAN, FlexRIC</td></tr>
+  <tr><td><code>20-penm/</code></td><td>PENM backend, frontend, PostgreSQL, sensor, settings</td></tr>
+  <tr><td><code>images/</code>, <code>scripts/</code></td><td>Image Dockerfiles, <code>build-images.sh</code>, <code>create-secrets.sh</code></td></tr>
+</table>
+<p>The step-by-step guide uses the testbed's own addresses and is kept locally, not in git: <code>docs/local/kubernetes-testbed.html</code> (see the <a href="index.html#local">documentation home</a>).</p>
+
+<h2 id="trouble">11. Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>Cause and fix</th></tr>
+  <tr><td>The app loads but every request fails, or the browser console shows "Content Security Policy" errors</td><td>The frontend was built with a different <code>API_BASE_URL</code> than the address in use. Set it in <code>.env</code> and rebuild the frontend. Also check <code>ALLOWED_ORIGINS</code>.</td></tr>
+  <tr><td>Real Time page cannot connect</td><td><code>WS_URL</code> was built for another sensor address (nginx allows only that one), or port 5002 is closed, or the sensor runs with <code>SENSOR_ENABLE_PUBLISHER=false</code>.</td></tr>
+  <tr><td>Monitoring: "Sensor is unreachable" (503)</td><td><code>SENSOR_URL</code> wrong, sensor down, or firewall blocking 5005 from the Docker network (<a href="#remote">section 7</a>). Restart the backend after changing <code>SENSOR_URL</code>.</td></tr>
+  <tr><td>No flows on the Monitoring page; backend log shows <code>/v1/ingest/zeek … 401</code></td><td><code>SECRET_TOKEN</code> differs between backend and sensor, or is unset. It must be the same value in both <code>.env</code> files.</td></tr>
+  <tr><td><em>Run Analysis on Latest Slice</em> says no snapshot</td><td>The backend has not fetched one yet (wait one <code>SNAPSHOT_INTERVAL_SECONDS</code>), the sensor is unreachable (backend log: "could not fetch a slice"), or <code>SNAPSHOT_ENABLED=false</code>.</td></tr>
+  <tr><td><code>/apidocs</code>: "Missing Authorization Header"</td><td>In <em>Authorize</em>, enter <code>Bearer &lt;token&gt;</code> and press <em>Authorize</em>. See the <a href="api-guide.html#swagger">API Guide</a>.</td></tr>
+  <tr><td><code>docker compose</code>: "no configuration file provided"</td><td>You are not in the folder that holds <code>docker-compose.yml</code>; find it with the first command of <a href="#update">8.1</a>.</td></tr>
+  <tr><td>The update did not take effect (containers still "Up 2 weeks")</td><td><code>docker compose up -d --no-build backend frontend</code> was not run in the project folder, or the images were tagged under another project name.</td></tr>
+  <tr><td>Frontend image build fails in webpack</td><td>Build from the repository with its <code>package-lock.json</code> (the image uses <code>npm ci</code>); webpack 5 breaks Nuxt 2.</td></tr>
+  <tr><td>Uploaded or downloaded capture reported as "damaged"</td><td>Captures copied while being written end in a partial record. PENM trims those on upload and when it reads a stored file; tools outside PENM may still complain about old copies.</td></tr>
+</table>
+
+<footer class="doc-foot">Part of the PENM documentation. Supersedes <code>DOCKER_SETUP.md</code>, the Installation Guide and the Sensor IP Setup Guide (in <code>docs/archive/</code>). Updated 24 November 2026.</footer>
+</main>
+</div>
+</body>
+</html>
