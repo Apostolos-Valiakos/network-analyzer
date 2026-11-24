@@ -166,17 +166,11 @@ export default {
       form.append("file", this.file);
 
       try {
-        const resp = await this.$apiFetch(this.$api.url(`/automated-analysis`), {
-          method: "POST",
-          body: form,
-        });
-
-        const data = await resp.json();
-        this.response = await data;
-
-        if (!resp.ok) {
-          throw new Error(data.error || "Analysis failed");
-        }
+        const data = await this.$api.json(
+          `/automated-analysis`,
+          { method: "POST", body: form },
+          "Analysis failed"
+        );
 
         // Populate all sections
         this.filename = data.filename;

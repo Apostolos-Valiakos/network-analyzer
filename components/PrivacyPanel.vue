@@ -354,21 +354,20 @@ export default {
 
   methods: {
     async callPrivacyMetrics(transformations) {
-      const resp = await this.$apiFetch(this.$api.url(`/privacy-metrics`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          records: this.privacyRecords,
-          identifiers: this.privacyIdentifiers,
-          sensitive_attribute: this.privacySensitiveAttribute,
-          transformations,
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || "Privacy metrics failed");
-      }
-      return data;
+      return this.$api.json(
+        `/privacy-metrics`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            records: this.privacyRecords,
+            identifiers: this.privacyIdentifiers,
+            sensitive_attribute: this.privacySensitiveAttribute,
+            transformations,
+          }),
+        },
+        "Privacy metrics failed"
+      );
     },
     async computePrivacyMetrics() {
       if (!this.canComputePrivacy) return;

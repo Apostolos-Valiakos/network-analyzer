@@ -1,19 +1,19 @@
 <template>
   <div>
     <v-card class="pa-6 mb-8 rounded-xl connection-card">
-      <h3 class="text-h6 font-weight-bold mb-4 text-primary">
+      <h3 class="text-h6 font-weight-bold mb-4 primary--text">
         <v-icon color="primary" class="mr-2">mdi-brain</v-icon>
         Rule Based Analysis
       </h3>
 
-      <v-alert v-if="cnnError" type="error" class="mb-4" variant="tonal">
+      <v-alert v-if="cnnError" type="error" class="mb-4" text>
         {{ cnnError }}
       </v-alert>
 
       <div class="d-flex align-center mb-4">
         <v-btn
           color="primary"
-          size="large"
+          large
           @click="startAnalysis"
           :loading="cnnLoading"
           :disabled="cnnLoading"
@@ -42,18 +42,18 @@
             sm="6"
             md="4"
           >
-            <v-card class="pa-3" variant="outlined" elevation="0">
-              <div class="text-caption text-medium-emphasis">
+            <v-card class="pa-3" outlined elevation="0">
+              <div class="text-caption text--secondary">
                 {{ labels[key] }}
               </div>
               <div
                 class="text-h5 font-weight-bold"
                 :class="
                   key === 'most_frequent_class'
-                    ? 'text-success'
+                    ? 'success--text'
                     : key === 'total_classified'
-                    ? 'text-info'
-                    : 'text-warning'
+                    ? 'info--text'
+                    : 'warning--text'
                 "
               >
                 {{ val }}
@@ -69,8 +69,6 @@
           :headers="cnnHeaders"
           :items="enhancedTableItems"
           class="packet-table elevation-2"
-          density="comfortable"
-          hover
         >
           <template v-slot:item.class_name="{ item }">
             <div class="d-flex align-center font-weight-bold">
@@ -93,7 +91,7 @@
                 striped
                 class="mr-2"
               ></v-progress-linear>
-              <span class="text-caption text-medium-emphasis"
+              <span class="text-caption text--secondary"
                 >{{ item.percentage }}%</span
               >
             </div>
@@ -104,15 +102,14 @@
               <v-chip
                 v-for="(ip, index) in item.ips"
                 :key="ip"
-                size="x-small"
+                x-small
                 color="primary"
-                variant="flat"
                 class="mr-1 mb-1 font-weight-bold"
               >
                 {{ ip }}
               </v-chip>
             </div>
-            <div v-else class="text-grey text-caption font-italic">
+            <div v-else class="grey--text text-caption font-italic">
               No IPs assigned
             </div>
           </template>
@@ -130,7 +127,7 @@
 
       <div v-else-if="!cnnLoading" class="text-center pa-4">
         <v-icon size="48" color="grey-lighten-1">mdi-monitor-dashboard</v-icon>
-        <p class="text-subtitle-1 text-medium-emphasis mt-2">
+        <p class="text-subtitle-1 text--secondary mt-2">
           Click "Start Rule Based Analysis" to process data.
         </p>
       </div>

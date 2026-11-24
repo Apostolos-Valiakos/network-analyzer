@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-card class="pa-6 mb-8 rounded-xl connection-card">
-      <h3 class="text-h6 font-weight-bold mb-4 text-primary">
+      <h3 class="text-h6 font-weight-bold mb-4 primary--text">
         <v-icon color="primary" class="mr-2">mdi-file-export</v-icon>
         Export & Final Results
       </h3>
@@ -44,7 +44,7 @@
 
       <div class="text-center pa-4">
         <v-icon size="48" color="primary">mdi-check-decagram</v-icon>
-        <p class="text-subtitle-1 text-medium-emphasis mt-2">
+        <p class="text-subtitle-1 text--secondary mt-2">
           All analysis completed successfully.
         </p>
       </div>

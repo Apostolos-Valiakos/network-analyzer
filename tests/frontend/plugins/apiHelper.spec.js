@@ -49,6 +49,18 @@ describe('$api.json', () => {
     await expect(buildApi().api.json('/x')).rejects.toThrow('Pipeline failed')
   })
 
+  it('uses the fallback message when the backend sends none', async () => {
+    mockFetch(500, {})
+    await expect(buildApi().api.json('/x', {}, 'Delete failed')).rejects.toThrow('Delete failed')
+  })
+
+  it('prefers the backend message over the fallback', async () => {
+    mockFetch(400, { error: 'Username already exists' })
+    await expect(buildApi().api.json('/x', {}, 'Failed to create user')).rejects.toThrow(
+      'Username already exists'
+    )
+  })
+
   it('reports the status when the error body is not JSON', async () => {
     mockFetch(502, null, { invalidJson: true })
     await expect(buildApi().api.json('/x')).rejects.toThrow('Request failed (502)')

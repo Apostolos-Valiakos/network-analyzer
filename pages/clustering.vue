@@ -241,18 +241,15 @@ export default {
           anomaly_threshold: 3,
         };
 
-        const response = await this.$apiFetch(this.$api.url(`/clustering`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const err = await response.text();
-          throw new Error(`API error: ${response.status} – ${err}`);
-        }
-
-        const data = await response.json();
+        const data = await this.$api.json(
+          `/clustering`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          "Clustering failed"
+        );
         this.graphData = data.graphData;
         this.clusters = data.clusters;
         this.warnings = data.warnings || [];
@@ -297,18 +294,15 @@ export default {
           type: this.fileType,
         };
 
-        const response = await this.$apiFetch(this.$api.url(`/save-results`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || `Save failed (${response.status})`);
-        }
-
-        const data = await response.json();
+        const data = await this.$api.json(
+          `/save-results`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          "Save failed"
+        );
         if (data.download_url) {
           const link = document.createElement("a");
           link.href = this.$api.url(data.download_url);
@@ -326,16 +320,11 @@ export default {
     async askForClusters() {
       try {
         const params = new URLSearchParams({ file: this.filename });
-        const response = await this.$apiFetch(
-          this.$api.url(`/suggested_clusters?${params}`)
+        const data = await this.$api.json(
+          `/suggested_clusters?${params}`,
+          {},
+          "Could not get suggested clusters"
         );
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`API error: ${response.status} - ${errText}`);
-        }
-
-        const data = await response.json();
 
         this.suggestedClusters = data.best_k;
         this.noOfclusters = data.best_k;
@@ -364,19 +353,15 @@ export default {
       };
 
       try {
-        const response = await this.$apiFetch(this.$api.url(`/run_pipeline`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Pipeline error");
-        }
-
-        const data = await response.json();
-        this.cnnResults = data;
+        this.cnnResults = await this.$api.json(
+          `/run_pipeline`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          "Pipeline error"
+        );
       } catch (error) {
         this.cnnError = error.message;
       } finally {

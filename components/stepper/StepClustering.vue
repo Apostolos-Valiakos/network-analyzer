@@ -2,14 +2,14 @@
   <div>
     <!-- ──────── CLUSTERING CARD ──────── -->
     <v-card class="pa-6 mb-8 rounded-xl connection-card">
-      <h3 class="text-h6 font-weight-bold mb-4 text-primary">
+      <h3 class="text-h6 font-weight-bold mb-4 primary--text">
         <v-icon color="primary" class="mr-2">mdi-chart-cluster</v-icon>
         Network Clustering Overview
       </h3>
 
       <p class="text-subtitle-1 mb-2">
         Using the Graph Modularity Method, the suggested number of clusters is:
-        <b class="text-primary">{{ suggestedClusters }}</b
+        <b class="primary--text">{{ suggestedClusters }}</b
         >.
       </p>
 
@@ -43,12 +43,12 @@
       <v-alert
         v-if="mostImportantCluster"
         type="info"
-        variant="tonal"
+        text
         color="primary"
         class="mb-6"
       >
         The most important cluster is:
-        <b class="text-primary">{{ mostImportantCluster }}</b>
+        <b class="primary--text">{{ mostImportantCluster }}</b>
       </v-alert>
 
       <!-- Cluster selector (multiple) -->
@@ -85,9 +85,9 @@
       <v-data-table
         :headers="headers"
         :items="clusterHierarchy"
-        item-value="cluster"
+        item-key="cluster"
         class="packet-table"
-        density="compact"
+        dense
       >
         <template v-slot:item.cluster="{ item }">
           <b>{{ item.cluster }}</b>
@@ -126,7 +126,7 @@
 
     <!-- ──────── SAVE RESULTS ──────── -->
     <v-card class="pa-6 rounded-xl connection-card">
-      <h4 class="text-subtitle-1 font-weight-bold mb-3 text-primary">
+      <h4 class="text-subtitle-1 font-weight-bold mb-3 primary--text">
         <v-icon color="primary" class="mr-2">mdi-content-save</v-icon>
         Save Clustering Results
       </h4>
@@ -144,7 +144,7 @@
       </v-btn>
     </v-card>
     <v-card class="pa-6 mt-8 rounded-xl connection-card">
-      <h4 class="text-subtitle-1 font-weight-bold mb-4 text-primary">
+      <h4 class="text-subtitle-1 font-weight-bold mb-4 primary--text">
         <v-icon color="deep-purple-accent-4" class="mr-2">
           mdi-chart-line
         </v-icon>

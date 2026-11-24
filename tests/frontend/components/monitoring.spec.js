@@ -104,8 +104,12 @@ describe('continuous_monitoring page', () => {
   function mountPage(body = [flow]) {
     return shallowMount(ContinuousMonitoring, {
       mocks: {
-        $apiFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => body }),
-        $api: { baseUrl: 'http://api', url: (p) => `http://api${p}` },
+        $apiFetch: jest.fn(),
+        $api: {
+          baseUrl: 'http://api',
+          url: (p) => `http://api${p}`,
+          json: jest.fn().mockResolvedValue(body),
+        },
       },
       stubs: ['v-container', 'v-snackbar', 'v-row', 'v-col', 'v-card', 'v-icon', 'v-text-field', 'v-switch', 'v-btn'],
     })
@@ -115,7 +119,7 @@ describe('continuous_monitoring page', () => {
     const wrapper = mountPage()
     await new Promise((resolve) => setTimeout(resolve))
     expect(io.mock.calls[0][0]).toBe('http://api')
-    expect(wrapper.vm.$apiFetch.mock.calls[0][0]).toMatch(/^http:\/\/api\/v1\/network\/statistics\?start_time=/)
+    expect(wrapper.vm.$api.json.mock.calls[0][0]).toMatch(/^\/v1\/network\/statistics\?start_time=/)
     expect(wrapper.vm.stats).toEqual([flow])
     expect(wrapper.vm.loading).toBe(false)
   })
@@ -138,7 +142,7 @@ describe('continuous_monitoring page', () => {
 
   it('shows an error when statistics cannot be loaded', async () => {
     const wrapper = mountPage()
-    wrapper.vm.$apiFetch.mockResolvedValue({ ok: false })
+    wrapper.vm.$api.json.mockRejectedValue(new Error('Request failed (500)'))
     await wrapper.vm.fetchStatistics()
     expect(wrapper.vm.snackbarText).toBe('Could not load stats.')
     expect(wrapper.vm.snackbarType).toBe('error')

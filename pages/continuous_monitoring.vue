@@ -121,26 +121,26 @@
       <v-row class="mt-4">
         <v-col cols="12" md="4">
           <v-card class="elevation-4 rounded-xl pa-4 text-center">
-            <h4 class="text-subtitle-1 text-grey-darken-1">
+            <h4 class="text-subtitle-1 grey--text text--darken-1">
               Total Bytes Transferred
             </h4>
-            <h2 class="text-h3 text-primary font-weight-bold">
+            <h2 class="text-h3 primary--text font-weight-bold">
               {{ formatBytes(totalBytes) }}
             </h2>
           </v-card>
         </v-col>
         <v-col cols="12" md="4">
           <v-card class="elevation-4 rounded-xl pa-4 text-center">
-            <h4 class="text-subtitle-1 text-grey-darken-1">Total Packets</h4>
-            <h2 class="text-h3 text-info font-weight-bold">
+            <h4 class="text-subtitle-1 grey--text text--darken-1">Total Packets</h4>
+            <h2 class="text-h3 info--text font-weight-bold">
               {{ totalPackets.toLocaleString() }}
             </h2>
           </v-card>
         </v-col>
         <v-col cols="12" md="4">
           <v-card class="elevation-4 rounded-xl pa-4 text-center">
-            <h4 class="text-subtitle-1 text-grey-darken-1">Total Flow Records</h4>
-            <h2 class="text-h3 text-success font-weight-bold">
+            <h4 class="text-subtitle-1 grey--text text--darken-1">Total Flow Records</h4>
+            <h2 class="text-h3 success--text font-weight-bold">
               {{ stats.length }}
             </h2>
           </v-card>
@@ -264,13 +264,10 @@ export default {
     async fetchStatistics() {
       this.loading = true;
       try {
-        const res = await this.$apiFetch(
-          this.$api.url(
-            `/v1/network/statistics?${this.timeRangeQuery}&format=json&limit=5000`
-          )
+        const stats = await this.$api.json(
+          `/v1/network/statistics?${this.timeRangeQuery}&format=json&limit=5000`
         );
-        if (!res.ok) throw new Error("Failed to fetch");
-        this.stats = (await res.json()).reverse();
+        this.stats = stats.reverse();
       } catch (err) {
         this.showSnackbar("Could not load stats.", "error");
       } finally {
