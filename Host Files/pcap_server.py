@@ -1,6 +1,7 @@
 import logging
 import os
 import glob
+import hmac
 import io
 import re
 import shutil
@@ -31,7 +32,10 @@ app = Flask(__name__)
 # Edit this value before deploying to the sensor machine.
 
 # Shared secret — must match SECRET_TOKEN in the backend .env file.
-SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
+# No default: without a token every request is refused.
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
+if not SECRET_TOKEN:
+    logger.error("SECRET_TOKEN is not set: every request will be refused")
 # ──────────────────────────────────────────────────────────────────────────────
 
 PCAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_pcaps")
@@ -90,8 +94,8 @@ def _complete_copy(path, work_dir):
 
 @app.before_request
 def check_auth():
-    token = request.headers.get("X-Internal-Token")
-    if token != SECRET_TOKEN:
+    token = request.headers.get("X-Internal-Token") or ""
+    if not SECRET_TOKEN or not hmac.compare_digest(token.encode(), SECRET_TOKEN.encode()):
         return jsonify({"error": "Unauthorized"}), 401
 
 @app.route("/get-pcap", methods=["GET"])

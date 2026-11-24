@@ -4,9 +4,10 @@ summary: Get Latest Role Snapshot
 description: >
   Retrieves the most recent role-assessment snapshot from the
   RoleSnapshot table (all rows sharing the single latest "ts" value).
-  This table is populated by a periodic snapshot scheduler; if it has
-  never run, or the table is empty, the response is an empty result
-  rather than an error.
+  The backend's snapshot scheduler fills this table every
+  SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic
+  and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the
+  first snapshot, the response is an empty result rather than an error.
 produces:
   - application/json
   - text/csv
@@ -32,8 +33,8 @@ responses:
       Returns the latest role assessments. With format=json, a JSON array
       (empty array "[]" if no snapshot exists yet). With format=csv
       (default), a downloadable CSV — EXCEPT when no snapshot exists yet,
-      in which case the response is the plain text "No data" (not CSV) at
-      200.
+      in which case the response is the plain text "No data available"
+      (not CSV) at 200.
     schema:
       type: array
       items:
@@ -57,7 +58,7 @@ responses:
             type: string
             example: "E2AP control-plane traffic observed as the RIC side of the association."
   400:
-    description: The "limit" parameter is out of the allowed 1-10000 range.
+    description: The "limit" parameter is not an integer in the allowed 1-10000 range.
     schema:
       type: object
       properties:

@@ -1708,8 +1708,20 @@
                 "type": "object"
               }
             },
+            "400": {
+              "description": "The body is not a JSON object with a \"flows\" list.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Expected a JSON object with a \"flows\" list",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
             "401": {
-              "description": "Missing or incorrect X-Internal-Token header.",
+              "description": "Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not configured on the backend (then every request is refused).\n",
               "schema": {
                 "properties": {
                   "error": {
@@ -2008,7 +2020,7 @@
       },
       "/v1/network/roles/latest": {
         "get": {
-          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows sharing the single latest \"ts\" value). This table is populated by a periodic snapshot scheduler; if it has never run, or the table is empty, the response is an empty result rather than an error.\n",
+          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows sharing the single latest \"ts\" value). The backend's snapshot scheduler fills this table every SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the first snapshot, the response is an empty result rather than an error.\n",
           "parameters": [
             {
               "default": 1000,
@@ -2037,7 +2049,7 @@
           ],
           "responses": {
             "200": {
-              "description": "Returns the latest role assessments. With format=json, a JSON array (empty array \"[]\" if no snapshot exists yet). With format=csv (default), a downloadable CSV — EXCEPT when no snapshot exists yet, in which case the response is the plain text \"No data\" (not CSV) at 200.\n",
+              "description": "Returns the latest role assessments. With format=json, a JSON array (empty array \"[]\" if no snapshot exists yet). With format=csv (default), a downloadable CSV — EXCEPT when no snapshot exists yet, in which case the response is the plain text \"No data available\" (not CSV) at 200.\n",
               "schema": {
                 "items": {
                   "properties": {
@@ -2070,7 +2082,7 @@
               }
             },
             "400": {
-              "description": "The \"limit\" parameter is out of the allowed 1-10000 range.",
+              "description": "The \"limit\" parameter is not an integer in the allowed 1-10000 range.",
               "schema": {
                 "properties": {
                   "error": {

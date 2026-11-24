@@ -1,6 +1,6 @@
 <template>
   <v-card class="elevation-4 rounded-xl pa-6 mb-8 connection-card">
-    <h3 class="text-h5 font-weight-bold mb-4 text-primary">
+    <h3 class="text-h5 font-weight-bold mb-4 primary--text">
       <v-icon color="primary" class="mr-2" size="large">mdi-brain</v-icon>
       Live Rule Based Analysis
     </h3>
@@ -75,7 +75,7 @@
               striped
               class="mr-2"
             ></v-progress-linear>
-            <span class="text-caption text-medium-emphasis font-weight-bold"
+            <span class="text-caption text--secondary font-weight-bold"
               >{{ item.percentage }}%</span
             >
           </div>
@@ -90,7 +90,7 @@
               >{{ ip }}</v-chip
             >
           </div>
-          <div v-else class="text-grey text-caption font-italic">
+          <div v-else class="grey--text text-caption font-italic">
             No IPs assigned
           </div>
         </template>
@@ -166,14 +166,11 @@ export default {
       this.loading = true;
       this.error = null;
       try {
-        const response = await this.$apiFetch(this.$api.url("/v1/analyze_live"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        const data = await response.json();
-        if (!response.ok)
-          throw new Error(data.message || "Failed to analyze live PCAP.");
-        this.results = data;
+        this.results = await this.$api.json(
+          "/v1/analyze_live",
+          { method: "POST", headers: { "Content-Type": "application/json" } },
+          "Failed to analyze live PCAP."
+        );
         // The scan panel can target the IPs this analysis found
         const ips = new Set();
         this.summary.forEach((item) => (item.ips || []).forEach((ip) => ips.add(ip)));

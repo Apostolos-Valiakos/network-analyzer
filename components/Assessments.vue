@@ -19,7 +19,7 @@
           :key="index"
           class="me-2 mb-1"
           color="primary"
-          variant="tonal"
+          outlined
           small
         >
           {{ role }}
@@ -37,14 +37,14 @@
                 :key="'expanded-' + index"
                 class="me-2 mb-2"
                 color="secondary"
-                variant="tonal"
+                outlined
                 small
               >
                 {{ role }}
               </v-chip>
             </div>
             <strong>Reasoning:</strong>
-            <v-alert type="info" variant="tonal" class="mt-2" dense>
+            <v-alert type="info" text class="mt-2" dense>
               {{ item.reasoning }}
             </v-alert>
           </div>

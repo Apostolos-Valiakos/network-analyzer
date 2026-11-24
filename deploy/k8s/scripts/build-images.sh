@@ -7,7 +7,7 @@
 #   VM_IP=10.16.0.90 ./build-images.sh flexric    # only the ones named
 #
 # FlexRIC's E2AP/KPM versions must match the current RIC build:
-#   E2AP_VERSION=E2AP_V2 KPM_VERSION=KPM_V2_03 ./build-images.sh flexric
+#   E2AP_VERSION=E2AP_V2 KPM_VERSION=KPM_V3_00 ./build-images.sh flexric
 # (read them with: grep -E "E2AP_VERSION|KPM_VERSION" ~/flexric/build/CMakeCache.txt
 #  on the current RIC machine)
 set -euo pipefail
@@ -16,7 +16,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 IMAGES="$REPO/deploy/k8s/images"
 VM_IP="${VM_IP:?set VM_IP to the VM address the browser uses, e.g. VM_IP=10.16.0.90}"
 E2AP_VERSION="${E2AP_VERSION:-E2AP_V2}"
-KPM_VERSION="${KPM_VERSION:-KPM_V2_03}"
+KPM_VERSION="${KPM_VERSION:-KPM_V3_00}"   # the testbed RIC's version
 
 load() {  # docker image -> containerd k8s.io namespace
     echo "== loading $1 into containerd"

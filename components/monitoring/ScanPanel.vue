@@ -49,7 +49,7 @@
 
     <template v-if="results && results.length > 0">
       <div class="d-flex align-center mb-3 mt-4">
-        <h4 class="text-h6 font-weight-bold text-success mb-0">
+        <h4 class="text-h6 font-weight-bold success--text mb-0">
           <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>Scan
           Completed
         </h4>
@@ -66,7 +66,7 @@
             <div>
               <v-icon color="indigo">mdi-server-network</v-icon> Host:
               {{ hostResult.host }}
-              <span v-if="hostResult.hostname" class="text-caption text-grey ml-2"
+              <span v-if="hostResult.hostname" class="text-caption grey--text ml-2"
                 >({{ hostResult.hostname }})</span
               >
               <v-chip color="info" class="ml-4"
@@ -104,7 +104,7 @@
                     >{{ cve }}</v-chip
                   >
                 </div>
-                <span v-else class="text-caption text-grey font-italic"
+                <span v-else class="text-caption grey--text font-italic"
                   >No known CVEs</span
                 >
               </template>
@@ -167,14 +167,15 @@ export default {
         : { targets: this.analyzedIps, profile: this.profile };
 
       try {
-        const response = await this.$apiFetch(this.$api.url("/v1/scan/start"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await response.json();
-        if (!response.ok)
-          throw new Error(data.message || "Failed to start background scan.");
+        await this.$api.json(
+          "/v1/scan/start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          "Failed to start background scan."
+        );
         this.poll();
       } catch (error) {
         this.error = error.message;
@@ -185,8 +186,7 @@ export default {
       clearInterval(this.pollTimer);
       this.pollTimer = setInterval(async () => {
         try {
-          const res = await this.$apiFetch(this.$api.url("/v1/scan/results"));
-          const data = await res.json();
+          const data = await this.$api.json("/v1/scan/results");
           if (data.status === "completed") {
             clearInterval(this.pollTimer);
             this.results = data.results;

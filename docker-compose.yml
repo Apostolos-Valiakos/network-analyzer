@@ -45,6 +45,10 @@ services:
       SECRET_TOKEN: ${SECRET_TOKEN:-change_me_in_production}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       SENSOR_URL: ${SENSOR_URL:-http://172.18.0.1:5005}
+      # Live role snapshots from the sensor (see server/snapshot_scheduler.py)
+      SNAPSHOT_ENABLED: ${SNAPSHOT_ENABLED:-true}
+      SNAPSHOT_INTERVAL_SECONDS: ${SNAPSHOT_INTERVAL_SECONDS:-300}
+      SNAPSHOT_RETENTION_HOURS: ${SNAPSHOT_RETENTION_HOURS:-168}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       PORT: "5555"

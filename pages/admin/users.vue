@@ -240,9 +240,7 @@ export default {
     async fetchUsers() {
       this.loadingUsers = true;
       try {
-        const res = await this.$apiFetch(this.$api.url(`/auth/users`));
-        if (!res.ok) throw new Error("Failed to load users");
-        this.users = await res.json();
+        this.users = await this.$api.json(`/auth/users`, {}, "Failed to load users");
       } catch (err) {
         this.users = [];
       } finally {
@@ -255,13 +253,15 @@ export default {
       this.createError = null;
       this.createSuccess = null;
       try {
-        const res = await this.$apiFetch(this.$api.url(`/auth/register`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(this.form),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to create user");
+        const data = await this.$api.json(
+          `/auth/register`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(this.form),
+          },
+          "Failed to create user"
+        );
         this.createSuccess = `User "${data.username}" created successfully.`;
         this.resetForm();
         await this.fetchUsers();
@@ -288,14 +288,11 @@ export default {
       this.deleteDialog = false;
       this.deletingId = this.deleteTarget.id;
       try {
-        const res = await this.$apiFetch(
-          this.$api.url(`/auth/users/${this.deleteTarget.id}`),
-          { method: "DELETE" }
+        await this.$api.json(
+          `/auth/users/${this.deleteTarget.id}`,
+          { method: "DELETE" },
+          "Delete failed"
         );
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Delete failed");
-        }
         this.users = this.users.filter((u) => u.id !== this.deleteTarget.id);
       } catch (err) {
         this.createError = err.message;

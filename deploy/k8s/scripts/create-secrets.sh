@@ -23,6 +23,18 @@ fi
 kubectl -n team-5g create secret generic open5gs-hnet --from-file="$HNET_DIR" \
     --dry-run=client -o yaml | kubectl apply -f -
 
+# Open5GS WebUI admin: the WebUI runs in production mode, which has no default
+# login. The open5gs-webui Deployment's init container creates this account.
+if kubectl -n team-5g get secret open5gs-webui-admin >/dev/null 2>&1; then
+    echo "open5gs-webui-admin already exists; delete it first to regenerate"
+else
+    WEBUI_PASSWORD=$(openssl rand -hex 12)
+    kubectl -n team-5g create secret generic open5gs-webui-admin \
+        --from-literal=username=admin \
+        --from-literal=password="$WEBUI_PASSWORD"
+    echo "Open5GS WebUI login: admin / $WEBUI_PASSWORD   (store it; it is not shown again)"
+fi
+
 if kubectl -n team-penm get secret penm-secrets >/dev/null 2>&1; then
     echo "penm-secrets already exists; delete it first to regenerate"
 else

@@ -25,12 +25,14 @@ export default (context, inject) => {
 
   const url = (path) => `${baseUrl}${path}`
 
-  // JSON request that throws the backend's own error message on failure.
-  const json = async (path, options = {}) => {
+  // JSON request that throws the backend's own error message on failure,
+  // else `fallbackMessage`, else "Request failed (<status>)". File downloads
+  // use $apiFetch and res.blob() instead.
+  const json = async (path, options = {}, fallbackMessage) => {
     const res = await apiFetch(url(path), options)
     const body = await res.json().catch(() => ({}))
     if (!res.ok) {
-      throw new Error(body.error || body.message || `Request failed (${res.status})`)
+      throw new Error(body.error || body.message || fallbackMessage || `Request failed (${res.status})`)
     }
     return body
   }

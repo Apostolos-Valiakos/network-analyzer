@@ -21,7 +21,8 @@ HOST_API_URL = os.environ.get(
     "HOST_API_URL", "http://10.250.100.42:5555/v1/ingest/zeek"
 )
 
-SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "change_me_internal_token")
+# Required, no default: the backend refuses flows without the shared token.
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Batch settings to optimize network traffic
@@ -100,6 +101,8 @@ def tail_zeek_log():
 
 
 if __name__ == "__main__":
+    if not SECRET_TOKEN:
+        raise SystemExit("SECRET_TOKEN is not set (use the backend's SECRET_TOKEN)")
     try:
         tail_zeek_log()
     except KeyboardInterrupt:

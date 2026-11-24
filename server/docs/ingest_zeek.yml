@@ -88,8 +88,18 @@ responses:
           type: integer
           description: Only present for a non-empty batch — number of rows inserted (duplicates counted, even though ON CONFLICT skips writing them).
           example: 50
+  400:
+    description: The body is not a JSON object with a "flows" list.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: 'Expected a JSON object with a "flows" list'
   401:
-    description: Missing or incorrect X-Internal-Token header.
+    description: >
+      Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not
+      configured on the backend (then every request is refused).
     schema:
       type: object
       properties:
