@@ -124,10 +124,13 @@ def proxy_sensor_pcap(params, download_name):
 @swag_from(doc("ingest_zeek.yml"))
 def ingest_zeek():
     """Receives JSON flow batches from the VM Zeek Agent."""
-    if request.headers.get("X-Internal-Token") != settings.secret_token():
+    if not settings.token_matches(request.headers.get("X-Internal-Token")):
         return jsonify({"error": "Unauthorized"}), 401
 
-    flows = request.json.get("flows", [])
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("flows", []), list):
+        return jsonify({"error": 'Expected a JSON object with a "flows" list'}), 400
+    flows = body.get("flows", [])
     if not flows:
         return jsonify({"status": "empty"}), 200
 
@@ -241,15 +244,19 @@ def get_latest_roles():
     """Endpoint 2: Get Latest Role Snapshot"""
     try:
         limit = int(request.args.get("limit", 1000))
-        resp_format = request.args.get("format", "csv").lower()
+    except ValueError:
+        return jsonify({"error": "limit must be an integer between 1 and 10000"}), 400
+    resp_format = request.args.get("format", "csv").lower()
+    if not (1 <= limit <= 10000):
+        return jsonify({"error": "limit must be between 1 and 10000"}), 400
 
-        if not (1 <= limit <= 10000):
-            return jsonify({"error": "limit must be between 1 and 10000"}), 400
-
+    try:
         latest_ts = db.session.query(db.func.max(RoleSnapshot.ts)).scalar()
 
         if not latest_ts:
-            return jsonify([]), 200 if resp_format == "json" else ("No data", 200)
+            if resp_format == "json":
+                return jsonify([]), 200
+            return generate_csv_response([], "latest_roles.csv")
 
         query = RoleSnapshot.query.filter_by(ts=latest_ts).limit(limit).all()
 
@@ -353,14 +360,16 @@ def export_network_statistics():
 @jwt_required()
 @limiter.limit("5 per minute")
 def analyze_live():
-    """Auto-grabs the latest PCAP, analyzes it, and deletes it."""
-    # Auto-grab the newest PCAP file (written here by the snapshot scheduler)
+    """Analyses the latest live snapshot (latest_snapshot.pcap, refreshed by
+    the snapshot scheduler every SNAPSHOT_INTERVAL_SECONDS)."""
     list_of_files = glob.glob(os.path.join(RESULTS_OUTPUT_DIR, "*.pcap"))
     if not list_of_files:
         return (
             jsonify(
                 {
-                    "message": "No PCAP snapshots available. Wait for the scheduler to fetch one."
+                    "message": "No live snapshot yet. The backend fetches one from the "
+                    "sensor every few minutes; check that the sensor is reachable "
+                    "(SENSOR_URL) and that SNAPSHOT_ENABLED is not false."
                 }
             ),
             404,
@@ -390,10 +399,7 @@ def analyze_live():
         except Exception:
             logger.exception("WP5 notice emission failed in analyze_live")
 
-        # Delete the file after the pipeline completes
-        if os.path.exists(latest_file):
-            os.remove(latest_file)
-
+        # The snapshot stays: the scheduler replaces it on its next run.
         return jsonify(results), 200
 
     except Exception:

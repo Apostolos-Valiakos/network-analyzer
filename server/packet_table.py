@@ -44,6 +44,7 @@ FIELDS = [
     "gtp.teid",
     "ngap.procedureCode",
     "ngap.RAN_UE_NGAP_ID",
+    "ngap.AMF_UE_NGAP_ID",
     "e2ap.procedureCode",
     "pfcp.msg_type",
     "http2.headers.path",
@@ -55,6 +56,9 @@ FIELDS = [
     "nas-5gs.mm.suci.msin",
     "nas-5gs.5g_tmsi",
     "nas-5gs.pdu_session_id",
+    "nas-5gs.sm.pdu_addr_inf_ipv4",
+    "tcp.stream",
+    "http2.streamid",
 ]
 _INDEX = {name: i for i, name in enumerate(FIELDS)}
 

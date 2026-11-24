@@ -54,7 +54,7 @@
       <!-- Cluster selector (multiple) -->
       <v-select
         v-model="localSelectedCluster"
-        v-if="allIps?.length"
+        v-if="allIps && allIps.length"
         :items="allIps"
         label="Select Cluster(s) to analyze"
         multiple
@@ -223,9 +223,10 @@ export default {
     },
   },
 
-  // keep the two-way binding in sync
+  // keep the two-way binding in sync. The cluster count is reported only by
+  // the select's @change (user choices): watching it too re-ran clustering
+  // whenever the page set the suggested count, and twice per user change.
   created() {
-    this.$watch("localClusters", (v) => this.$emit("update:noOfclusters", v));
     this.$watch("localSelectedCluster", (v) =>
       this.$emit("update:selectedCluster", v)
     );
