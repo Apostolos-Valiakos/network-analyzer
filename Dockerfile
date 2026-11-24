@@ -3,9 +3,11 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy manifests first for layer-cache efficiency
-COPY package*.json ./
-RUN npm install
+# Copy manifests first for layer-cache efficiency. npm ci installs exactly the
+# committed package-lock.json, so a fresh build cannot pick up webpack 5
+# (which breaks Nuxt 2).
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Copy source (node_modules excluded via .dockerignore)
 COPY . .

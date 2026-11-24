@@ -85,6 +85,50 @@ spec:
     spec:
       nodeSelector:
         xtrust6g-node: penm
+      initContainers:
+        # Production mode has no default login: create the WebUI admin from the
+        # open5gs-webui-admin Secret (scripts/create-secrets.sh) unless an
+        # account with that name already exists. Without the Secret it does
+        # nothing. Exits non-zero until MongoDB answers, so Kubernetes retries.
+        - name: create-admin
+          image: open5gs-webui:2.7.6
+          imagePullPolicy: IfNotPresent
+          workingDir: /webui
+          env:
+            - name: DB_URI
+              value: mongodb://open5gs-mongodb.team-5g.svc.cluster.local/open5gs
+            - name: WEBUI_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef: { name: open5gs-webui-admin, key: username, optional: true }
+            - name: WEBUI_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: open5gs-webui-admin, key: password, optional: true }
+          command:
+            - node
+            - -e
+            - |
+              const { WEBUI_ADMIN_USERNAME: user, WEBUI_ADMIN_PASSWORD: password, DB_URI } = process.env;
+              if (!user || !password) {
+                console.log("open5gs-webui-admin Secret not found: no admin created");
+                process.exit(0);
+              }
+              const mongoose = require("mongoose");
+              const Account = require("./server/models/account");
+              mongoose.connect(DB_URI, { serverSelectionTimeoutMS: 10000 })
+                .then(async () => {
+                  if (await Account.findOne({ username: user })) {
+                    console.log(`WebUI account ${user} already exists`);
+                    process.exit(0);
+                  }
+                  Account.register(new Account({ username: user, roles: ["admin"] }), password, (err) => {
+                    console.log(err ? `could not create ${user}: ${err.message}` : `WebUI admin ${user} created`);
+                    process.exit(err ? 1 : 0);
+                  });
+                })
+                .catch((err) => {
+                  console.log(`MongoDB not reachable yet: ${err.message}`);
+                  process.exit(1);
+                });
       containers:
         - name: webui
           image: open5gs-webui:2.7.6

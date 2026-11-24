@@ -34,6 +34,15 @@ EOF
 sysctl --system >/dev/null
 
 echo "[4/6] containerd (SystemdCgroup = true) and Docker for image builds"
+# A VM installed from an ISO keeps the installer CD as an apt source, and
+# apt-get update then fails ("cdrom ... does not have a Release file").
+sed -i -E 's/^(deb[[:space:]]+cdrom:)/# \1/' /etc/apt/sources.list 2>/dev/null || true
+for f in /etc/apt/sources.list.d/*.list; do
+    if [ -e "$f" ]; then sed -i -E 's/^(deb[[:space:]]+cdrom:)/# \1/' "$f"; fi
+done
+for f in /etc/apt/sources.list.d/*.sources; do
+    if [ -e "$f" ] && grep -q '^URIs:.*cdrom:' "$f"; then mv "$f" "$f.disabled"; fi
+done
 apt-get update
 apt-get install -y apt-transport-https ca-certificates curl gpg containerd docker.io
 mkdir -p /etc/containerd
@@ -43,7 +52,9 @@ sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.to
 # but keep them aligned.
 sed -i -E 's#(sandbox_image = ).*#\1"registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
 systemctl restart containerd
-systemctl enable containerd docker
+# --now: the images are built on this VM right after this script, so Docker
+# must run now, not only after the next reboot.
+systemctl enable --now containerd docker
 
 echo "[5/6] Kubernetes ${K8S_MINOR} packages"
 mkdir -p /etc/apt/keyrings

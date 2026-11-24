@@ -90,7 +90,7 @@ sw.*
 
 # Vim swap files
 *.swp
-package-lock.json
+# package-lock.json is committed: it pins webpack 4, which Nuxt 2 needs.
 
 server/__pycache__
 server/generated_pcaps

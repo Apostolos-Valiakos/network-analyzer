@@ -12,7 +12,8 @@ FROM ubuntu:22.04
 
 ARG FLEXRIC_COMMIT=736508123fe4b5dc3db83fb5baf5f0a8e9b04fe8
 ARG E2AP_VERSION=E2AP_V2
-ARG KPM_VERSION=KPM_V2_03
+# KPM_V3_00 matches the testbed RIC (10.16.0.85) and its srsRAN E2 agents.
+ARG KPM_VERSION=KPM_V3_00
 ENV DEBIAN_FRONTEND=noninteractive
 
 # pkg-config: cmake uses it to find libraries. libmysqlclient-dev: the C xApp
