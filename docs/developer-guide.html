@@ -84,7 +84,7 @@ NODE_OPTIONS=--openssl-legacy-provider npm run generate                         
 </ul>
 
 <h2 id="sensor">5. Sensor</h2>
-<p><code>pcap_server.py</code> picks the ring files <code>continuous_capture_*.pcap</code> that overlap a requested window, merges and cuts them with <code>mergecap</code>/<code>editcap</code>, and serves Nmap scans. For the file dumpcap is still writing it sends, or merges, only the complete records (<code>pcap_repair.complete_length</code>), and never modifies that file. The sensor image (<code>deploy/k8s/images/sensor/</code>) copies <code>server/pcap_repair.py</code>; it has its own <code>Dockerfile.dockerignore</code> because the root one excludes <code>server/</code>.</p>
+<p><code>pcap_server.py</code> picks the ring files <code>continuous_capture_*.pcap</code> that overlap a requested window, merges and cuts them with <code>mergecap</code>/<code>editcap</code>, and serves Nmap scans. For the file dumpcap is still writing it sends, or merges, only the complete records (<code>pcap_repair.complete_length</code>), and never modifies that file. The sensor image (<code>deploy/k8s/images/sensor/</code>) copies <code>server/pcap_repair.py</code> and <code>server/role_evidence.py</code> (the role engine's evidence collector, kept free of Flask and database imports for that reason); it has its own <code>Dockerfile.dockerignore</code> because the root one excludes <code>server/</code>.</p>
 
 <h2 id="conventions">6. Conventions</h2>
 <ul>
