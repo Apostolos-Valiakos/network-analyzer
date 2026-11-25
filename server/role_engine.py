@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 # Bump on any change to the collector or rule table: cached IpRole rows
 # stamped with an older version are discarded and the pcap re-analyzed.
-ROLE_ENGINE_VERSION = "2.0.0"
+ROLE_ENGINE_VERSION = "2.2.0"
 
 
 @dataclass
@@ -122,6 +122,33 @@ def _ip_is(ip: str, check: str) -> bool:
     return getattr(addr, check)
 
 
+def _listing(values, limit: int = 3) -> str:
+    """Sorted, quoted names for reasoning text, at most `limit` of them."""
+    names = sorted(values)
+    text = ", ".join(f"'{n}'" for n in names[:limit])
+    if len(names) > limit:
+        text += f" (+{len(names) - limit} more)"
+    return text
+
+
+def _identity_note(e) -> str:
+    """Identities the IP stated about itself in setup messages, for the
+    reasoning of whichever role wins (a gNB that is also an E2 node keeps its
+    E2 Setup ID)."""
+    notes = []
+    if e.amf_names:
+        notes.append(f"NG Setup AMF name {_listing(e.amf_names)}")
+    if e.ran_node_names:
+        notes.append(f"NG Setup RAN name {_listing(e.ran_node_names)}")
+    if e.e2_node_ids:
+        notes.append(f"E2 Setup node {_listing(e.e2_node_ids)}")
+    if e.pfcp_node_ids:
+        notes.append(f"PFCP Node ID {_listing(e.pfcp_node_ids)}")
+    if e.nrf_nf_types:
+        notes.append(f"NRF profile type {_listing(e.nrf_nf_types)}")
+    return "; ".join(notes)
+
+
 def _rule_amf(e, obs):
     if e.ngap_amf_side:
         return ("AMF", 0.95, f"Terminates NGAP on SCTP {NGAP_PORT} ({e.ngap_amf_side} pkts)")
@@ -167,6 +194,15 @@ def _rule_sbi_nf(e, obs):
         role = SBI_PREFIXES[prefix]
         return (role, 0.90, f"Serves SBI API {prefix}-* ({role} service)")
 
+
+def _rule_nrf_profile(e, obs):
+    # Self-declared: an NFProfile (NRF registration or NRF reply) lists this
+    # address. Above the traffic-pattern SBI rules, below the rules where the
+    # IP terminates a protocol. Conflicting profile types decide nothing.
+    if len(e.nrf_nf_types) == 1:
+        nf_type = next(iter(e.nrf_nf_types))
+        # The type itself is in the identity note added by resolve_roles.
+        return (nf_type, 0.93, "An NFProfile in NRF signalling lists this address")
 
 
 def _rule_gnb_gtpu(e, obs):
@@ -224,6 +260,12 @@ def _rule_dn_inner_public(e, obs):
 
 def _rule_pfcp_node(e, obs):
     if e.pfcp_peer and not e.pfcp_smf_side and not e.pfcp_upf_side:
+        # Function Features name the side, but an EPC SGW-C/SGW-U announces
+        # them too, so this stays PFCP_NODE rather than SMF/UPF.
+        if e.pfcp_cp_features and not e.pfcp_up_features:
+            return ("PFCP_NODE", 0.50, f"PFCP heartbeat/association only ({e.pfcp_peer} msgs) — control-plane side (announces CP Function Features)")
+        if e.pfcp_up_features and not e.pfcp_cp_features:
+            return ("PFCP_NODE", 0.50, f"PFCP heartbeat/association only ({e.pfcp_peer} msgs) — user-plane side (announces UP Function Features)")
         return ("PFCP_NODE", 0.40, f"PFCP heartbeat/association only ({e.pfcp_peer} msgs) — CP/UP side unknown")
 
 
@@ -248,6 +290,7 @@ RULES = [
     _rule_e2node,
     _rule_scp,
     _rule_sbi_nf,
+    _rule_nrf_profile,
     _rule_gnb_gtpu,
     _rule_e2t,
     _rule_ric_client,
@@ -286,6 +329,9 @@ def resolve_roles(obs: PcapObservations) -> Dict[str, RoleAssessment]:
         # Highest confidence wins; table order breaks ties.
         best = max(matches, key=lambda m: m[1])
         role, confidence, reasoning = best
+        identities = _identity_note(e)
+        if identities:
+            reasoning += f"; {identities}"
         runner_ups = [(r, c) for r, c, _ in matches if r != role]
         if runner_ups:
             also = ", ".join(f"{r} ({c:.2f})" for r, c in runner_ups)

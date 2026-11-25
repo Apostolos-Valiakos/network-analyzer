@@ -8,12 +8,12 @@
       },
       "10.250.100.41": {
         "confidence": 0.95,
-        "reasoning": "Terminates NGAP on SCTP 38412 (2 pkts)",
+        "reasoning": "Terminates NGAP on SCTP 38412 (2 pkts); NG Setup AMF name 'open5gs-amf0'",
         "role": "AMF"
       },
       "10.250.100.42": {
         "confidence": 0.95,
-        "reasoning": "Initiates NGAP toward AMF:38412 (2 pkts); also matched: E2_NODE (0.95)",
+        "reasoning": "Initiates NGAP toward AMF:38412 (2 pkts); NG Setup RAN name 'srs-cu-01'; E2 Setup node 'gNB PLMN 00f110 gNB-ID 000004'; also matched: E2_NODE (0.95)",
         "role": "gNB"
       },
       "10.250.100.45": {
@@ -71,10 +71,5 @@
   },
   "recorded_with": {
     "tshark": "4.6"
-  },
-  "same_output_with": [
-    {
-      "tshark": "4.4"
-    }
-  ]
+  }
 }

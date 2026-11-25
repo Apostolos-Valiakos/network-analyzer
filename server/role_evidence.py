@@ -11,6 +11,8 @@ merged or serialized after stage 2: its counters would be counted twice.
 See role_engine for the direction rules behind the counters.
 """
 
+import ipaddress
+import re
 from collections import Counter
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Set
@@ -80,6 +82,14 @@ class IpEvidence:
     seen_as_outer: bool = False
     ric_client: bool = False    # stage 2: talks to both RIC Redis and E2T
     rrc_raw: int = 0            # endpoint of NR-RRC *not* encapsulated in NGAP
+    # Identities a node states about itself in setup messages
+    ran_node_names: Set[str] = field(default_factory=set)  # NG Setup Request RANNodeName
+    amf_names: Set[str] = field(default_factory=set)       # NG Setup Response AMFName
+    e2_node_ids: Set[str] = field(default_factory=set)     # E2 Setup Request GlobalE2node-ID
+    pfcp_node_ids: Set[str] = field(default_factory=set)   # Node ID IEs this IP sent
+    pfcp_cp_features: int = 0   # sent PFCP msgs with CP Function Features (association)
+    pfcp_up_features: int = 0   # sent PFCP msgs with UP Function Features (association)
+    nrf_nf_types: Set[str] = field(default_factory=set)    # nfType of NFProfiles listing this IP
     server_ports: Counter = field(default_factory=Counter)  # tcp dst-ports seen
     protocols: Set[str] = field(default_factory=set)
     peers: Set[str] = field(default_factory=set)
@@ -236,14 +246,82 @@ _TSHARK_FIELDS = [
     "e2ap.procedureCode",   # 10
     "pfcp.msg_type",        # 11
     "http2.headers.path",   # 12
+    "ngap.RANNodeName",     # 13
+    "ngap.AMFName",         # 14
+    "e2ap.GlobalE2node_ID", # 15  node type (CHOICE index)
+    "e2ap.plmn_id",         # 16
+    "e2ap.gnb_ID",          # 17
+    "pfcp.ie_type",         # 18  every IE type in the message
+    "pfcp.node_id_ipv4",    # 19
+    "pfcp.node_id_fqdn",    # 20
+    "json.path_with_value", # 21  "/nfType:AMF", "/ipv4Addresses/[]:10.0.0.5", ...
 ]
 _N_FIELDS = len(_TSHARK_FIELDS)
 
+# PFCP IE types (TS 29.244) announcing which side the sender is.
+PFCP_IE_UP_FEATURES = "43"
+PFCP_IE_CP_FEATURES = "89"
+
+# NFProfile members (TS 29.510) at the top of a registration body or an NRF
+# reply, or under "nfProfile" in a status notification. Each such body holds
+# one profile. Discovery results ("/nfInstances/[]/...") hold several, whose
+# nfType and addresses cannot be paired from field values, so they are not used.
+_NFPROFILE_PREFIXES = ("/", "/nfProfile/")
+# 3GPP NF type names are short upper-case words (AMF, SMF, UDR, SCP, NSSF ...).
+_NF_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,15}$")
+
+E2AP_SETUP = "1"  # e2ap.procedureCode of E2 Setup
+# GlobalE2node-ID CHOICE (O-RAN E2AP)
+E2_NODE_TYPES = {"0": "gNB", "1": "en-gNB", "2": "ng-eNB", "3": "eNB"}
+# NGAP limits RANNodeName and AMFName to 150 characters.
+_MAX_NAME = 150
 
 
 def _tokens(col: str) -> List[str]:
     return [t for t in col.split(",") if t] if col else []
 
+
+def _name(col: str) -> str:
+    """A free-text name column as one value. The packet table joins repeated
+    values with commas, but a setup message carries one name, and the name
+    itself may contain commas, so the column is not split."""
+    return col.strip()[:_MAX_NAME]
+
+
+def _e2_node_id(parts: List[str]) -> str:
+    node_type = _tokens(parts[15])[0]
+    plmn = _tokens(parts[16])
+    gnb = _tokens(parts[17])
+    label = E2_NODE_TYPES.get(node_type, f"type {node_type}")
+    if plmn:
+        label += f" PLMN {plmn[0]}"
+    if gnb:
+        label += f" gNB-ID {gnb[0]}"
+    return label
+
+
+def _is_ipv4(value: str) -> bool:
+    try:
+        ipaddress.IPv4Address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _nf_profile(col: str):
+    """(nfType, [IPv4 addresses]) of the single NFProfile in a JSON body, or
+    None. Bodies with no or several nfType members give None."""
+    nf_types, addresses = [], []
+    for token in _tokens(col):
+        for prefix in _NFPROFILE_PREFIXES:
+            if token.startswith(prefix + "nfType:"):
+                nf_types.append(token[len(prefix) + len("nfType:"):])
+            elif token.startswith(prefix + "ipv4Addresses/[]:"):
+                addresses.append(token[len(prefix) + len("ipv4Addresses/[]:"):])
+    if len(nf_types) != 1 or not _NF_TYPE_RE.match(nf_types[0]):
+        return None
+    addresses = [a for a in addresses if _is_ipv4(a)]
+    return (nf_types[0], addresses) if addresses else None
 
 
 def _parse_line(line: str, obs: PcapObservations) -> None:
@@ -284,6 +362,13 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
         ran_ev.ngap_ran_side += 1
         if parts[9]:  # UE-associated signalling
             ran_ev.ngap_ue_assoc += 1
+        # NG Setup names belong to the side that owns them, whichever way the
+        # frame goes. (E2 Setup embeds a copy of an NG Setup; the port check
+        # above keeps those names away from the RIC link.)
+        if parts[13].strip():
+            ran_ev.ran_node_names.add(_name(parts[13]))
+        if parts[14].strip():
+            amf_ev.amf_names.add(_name(parts[14]))
 
     # --- E2AP: the owner of SCTP 36421/36422 is the Near-RT RIC ---
     if parts[10] and (E2AP_PORTS & sctp_ports):
@@ -292,6 +377,10 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
         )
         ric_ev.e2_ric_side += 1
         node_ev.e2_node_side += 1
+        # The E2 Setup Request names the E2 node (the response names the RIC
+        # with a different IE, so this field only appears in the request).
+        if E2AP_SETUP in _tokens(parts[10]) and _tokens(parts[15]):
+            node_ev.e2_node_ids.add(_e2_node_id(parts))
 
     # --- PFCP: direction from session-level message types ---
     for mt in _tokens(parts[11]):
@@ -304,6 +393,16 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
         else:  # heartbeat / association — either side may initiate
             src_ev.pfcp_peer += 1
             dst_ev.pfcp_peer += 1
+    if parts[11]:
+        # The Node ID IE always names the sending node. Association messages
+        # also announce the sender's side through its Function Features.
+        for node_id in _tokens(parts[19]) + _tokens(parts[20]):
+            src_ev.pfcp_node_ids.add(_name(node_id))
+        ie_types = set(_tokens(parts[18]))
+        if PFCP_IE_CP_FEATURES in ie_types:
+            src_ev.pfcp_cp_features += 1
+        if PFCP_IE_UP_FEATURES in ie_types:
+            src_ev.pfcp_up_features += 1
 
     # --- SBI (HTTP/2): dst of a frame carrying :path serves that API ---
     for path in _tokens(parts[12]):
@@ -314,6 +413,17 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
                 dst_ev.sbi_prefixes_served.add(prefix)
                 src_ev.sbi_client += 1
                 break
+
+    # --- NFProfile (NRF registration, NRF replies): an NF names its own type
+    # and addresses. The addresses, not the packet's, get the evidence: SBI
+    # clients often send from another address, and registrations may pass
+    # through an SCP. Only SBI bodies count (not PENM's own HTTP/1 API).
+    if parts[21] and "http2" in protocols:
+        profile = _nf_profile(parts[21])
+        if profile:
+            nf_type, addresses = profile
+            for address in addresses:
+                obs.ev(address).nrf_nf_types.add(nf_type)
 
     # --- GTP-U: outer endpoints + inner (tunneled) addresses ---
     if "gtp" in protocols and GTPU_PORT in udp_ports:
