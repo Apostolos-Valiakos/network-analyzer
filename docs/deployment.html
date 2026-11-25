@@ -101,6 +101,7 @@ nano .env          <span class="c"># paste the two values and fill in the rest (
   <tr><td><code>SNAPSHOT_RETENTION_HOURS</code></td><td>How long snapshot history is kept (pcap and live DPI snapshots, DPI evidence)</td><td><code>168</code> (one week)</td></tr>
   <tr><td><code>LIVE_ROLE_WINDOW_MINUTES</code></td><td>Live DPI: how much recent evidence each DPI snapshot is built from</td><td><code>15</code></td></tr>
   <tr><td><code>LIVE_ROLE_IDENTITY_HOURS</code></td><td>Live DPI: how long a node's stated identity (NRF profile, setup names, PFCP Node ID) counts</td><td><code>24</code></td></tr>
+  <tr><td><code>HUBBLE_RETENTION_HOURS</code></td><td>Kubernetes testbed: how long pod/Service sightings and Hubble flow counts are kept</td><td><code>168</code></td></tr>
   <tr><td><code>DPI_FRESH_SECONDS</code></td><td><em>Latest roles</em> shows the DPI snapshot while it is no older than this, otherwise the pcap one</td><td><code>180</code></td></tr>
   <tr><td><code>SENSOR_*</code></td><td>Sensor container settings, see <a href="#sensor-settings">6.2</a></td><td></td></tr>
 </table>

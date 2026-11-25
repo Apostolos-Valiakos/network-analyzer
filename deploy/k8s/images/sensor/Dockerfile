@@ -25,6 +25,17 @@ RUN curl -fsSL https://download.opensuse.org/repositories/security:zeek/Debian_1
     && rm -rf /var/lib/apt/lists/*
 ENV PATH="/opt/zeek/bin:${PATH}"
 
+# Hubble CLI for hubble_agent.py (pod identities from Hubble Relay). Same
+# minor line as the cluster's Cilium 1.18; checked against the release's
+# own checksum file.
+ARG HUBBLE_VERSION=v1.18.6
+RUN cd /tmp \
+    && curl -fsSL --remote-name-all \
+        "https://github.com/cilium/hubble/releases/download/${HUBBLE_VERSION}/hubble-linux-amd64.tar.gz" \
+        "https://github.com/cilium/hubble/releases/download/${HUBBLE_VERSION}/hubble-linux-amd64.tar.gz.sha256sum" \
+    && sha256sum --check hubble-linux-amd64.tar.gz.sha256sum \
+    && tar xzf hubble-linux-amd64.tar.gz -C /usr/local/bin hubble \
+    && rm hubble-linux-amd64.tar.gz hubble-linux-amd64.tar.gz.sha256sum
 
 # publisher.py needs scapy, websockets and psutil, which are not in
 # Host Files/requirements.txt.

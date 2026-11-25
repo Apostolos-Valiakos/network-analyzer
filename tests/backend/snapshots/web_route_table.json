@@ -304,6 +304,17 @@
         "POST": 401
       }
     },
+    "/v1/ingest/hubble": {
+      "methods": [
+        "POST"
+      ],
+      "rate_limits": [
+        "exempt"
+      ],
+      "without_login": {
+        "POST": 401
+      }
+    },
     "/v1/ingest/zeek": {
       "methods": [
         "POST"

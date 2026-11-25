@@ -14,6 +14,7 @@ from flask import Blueprint, Response, jsonify, request
 from flask_jwt_extended import jwt_required
 from psycopg2.extras import execute_values
 
+import k8s_identity
 import live_roles
 import settings
 from extensions import limiter, socketio
@@ -208,6 +209,25 @@ def ingest_dpi():
     except Exception:
         db.session.rollback()
         logger.exception("ingest_dpi failed")
+        return jsonify({"error": "Internal server error"}), 500
+    return jsonify(result), 200
+
+
+@bp.route("/v1/ingest/hubble", methods=["POST"])
+@limiter.exempt
+@swag_from(doc("ingest_hubble.yml"))
+def ingest_hubble():
+    """Receives a batch of pod/Service sightings and flows from hubble_agent."""
+    if not settings.token_matches(request.headers.get("X-Internal-Token")):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        result = k8s_identity.ingest(request.get_json(silent=True))
+    except k8s_identity.BadBatch as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        db.session.rollback()
+        logger.exception("ingest_hubble failed")
         return jsonify({"error": "Internal server error"}), 500
     return jsonify(result), 200
 

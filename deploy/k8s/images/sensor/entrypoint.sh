@@ -21,7 +21,13 @@
 #   DPI_ENABLED         "true" starts dpi_agent.py (live DPI, POST /v1/ingest/dpi);
 #                       it reads DPI_WINDOW_SECONDS, DPI_SNAPLEN_UP and the other
 #                       DPI_* settings described in dpi_agent.py
-#   HOST_API_URL, SECRET_TOKEN  used by zeek_agent.py, dpi_agent.py and pcap_server.py
+#   HUBBLE_ENABLED      "true" starts hubble_agent.py (pod identities from Hubble
+#                       Relay, POST /v1/ingest/hubble); the Relay's address is
+#                       left out of the capture
+#   HUBBLE_SERVER       Hubble Relay host:port (default
+#                       hubble-relay.kube-system.svc.cluster.local:80)
+#   HOST_API_URL, SECRET_TOKEN  used by zeek_agent.py, dpi_agent.py,
+#                       hubble_agent.py and pcap_server.py
 
 set -u
 
@@ -37,15 +43,20 @@ RING_SECONDS="${RING_SECONDS:-3600}"
 ZEEK_RESTART_SECONDS="${ZEEK_RESTART_SECONDS:-86400}"
 ENABLE_PUBLISHER="${ENABLE_PUBLISHER:-true}"
 DPI_ENABLED="${DPI_ENABLED:-false}"
+HUBBLE_ENABLED="${HUBBLE_ENABLED:-false}"
+HUBBLE_SERVER="${HUBBLE_SERVER:-hubble-relay.kube-system.svc.cluster.local:80}"
+export HUBBLE_SERVER
 
 mkdir -p "$PCAP_DIR" "$ZEEK_DIR"
 
 log() { echo "[sensor] $*"; }
 
 excluded_ips() {
-    [ -n "$EXCLUDE_DNS" ] || return 0
-    getent ahostsv4 "$EXCLUDE_DNS" | awk '{ print $1 }' | sort -u | tr '
-' ' '
+    {
+        [ -n "$EXCLUDE_DNS" ] && getent ahostsv4 "$EXCLUDE_DNS"
+        # hubble_agent's own connection to Hubble Relay (its Service address)
+        [ "$HUBBLE_ENABLED" = "true" ] && getent ahostsv4 "${HUBBLE_SERVER%:*}"
+    } | awk '{ print $1 }' | sort -u | tr '\n' ' '
 }
 
 build_filter() {
@@ -63,7 +74,7 @@ build_filter() {
     echo "${joined//&/ and }"
 }
 
-DUMPCAP_PID="" ZEEK_PID="" AGENT_PID="" PCAP_SERVER_PID="" PUBLISHER_PID="" DPI_PID=""
+DUMPCAP_PID="" ZEEK_PID="" AGENT_PID="" PCAP_SERVER_PID="" PUBLISHER_PID="" DPI_PID="" HUBBLE_PID=""
 
 start_dumpcap() {
     # Ring files rotate by time so pcap_server can pick them by window. A new
@@ -93,6 +104,12 @@ start_dpi() {
     DPI_PID=$!
 }
 
+start_hubble() {
+    [ "$HUBBLE_ENABLED" = "true" ] || return 0
+    python3 "$SENSOR_DIR/hubble_agent.py" &
+    HUBBLE_PID=$!
+}
+
 stop() {
     for pid in "$@"; do
         [ -n "$pid" ] && kill "$pid" 2>/dev/null
@@ -110,7 +127,7 @@ alive() {
 
 shutdown() {
     log "stopping"
-    stop "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
+    stop "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
     exit 0
 }
 trap shutdown TERM INT
@@ -122,6 +139,7 @@ log "interface=$CAPTURE_INTERFACE filter: ${FILTER:-<none>}"
 start_dumpcap
 start_zeek
 start_dpi
+start_hubble
 PORT=5005 python3 "$SENSOR_DIR/pcap_server.py" &
 PCAP_SERVER_PID=$!
 if [ "$ENABLE_PUBLISHER" = "true" ]; then
@@ -133,9 +151,9 @@ while true; do
     sleep 30 &
     wait $!
 
-    if ! alive "$DUMPCAP_PID" "$ZEEK_PID" "$AGENT_PID" "$PCAP_SERVER_PID" ${PUBLISHER_PID:+"$PUBLISHER_PID"} ${DPI_PID:+"$DPI_PID"}; then
+    if ! alive "$DUMPCAP_PID" "$ZEEK_PID" "$AGENT_PID" "$PCAP_SERVER_PID" ${PUBLISHER_PID:+"$PUBLISHER_PID"} ${DPI_PID:+"$DPI_PID"} ${HUBBLE_PID:+"$HUBBLE_PID"}; then
         log "a component exited; stopping so Kubernetes restarts the pod"
-        stop "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
+        stop "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
         exit 1
     fi
 

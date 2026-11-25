@@ -27,6 +27,7 @@ ALL_TABLES = {
     "users", "pcap_files", "flow_statistics", "role_snapshots",
     "ip_roles", "ue_sessions", "cluster_results",
     "dpi_evidence_windows", "dpi_identities",
+    "pod_ip_sightings", "service_ip_sightings", "hubble_flows",
 }
 _POSTGRES_URL = os.environ.get("PENM_TEST_POSTGRES_URL")
 _BACKENDS = ["sqlite"] + (["postgresql"] if _POSTGRES_URL else [])

@@ -129,6 +129,60 @@ class DpiIdentity(db.Model):
     last_seen = db.Column(db.DateTime, nullable=False, index=True)
 
 
+class PodIpSighting(db.Model):
+    """A time span during which a Kubernetes pod owned an IP, from Hubble
+    flows (k8s_identity). A new row starts when another pod takes the IP."""
+
+    __tablename__ = "pod_ip_sightings"
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(45), nullable=False, index=True)
+    namespace = db.Column(db.String(253), nullable=False)
+    pod = db.Column(db.String(253), nullable=False)
+    workload = db.Column(db.String(253))
+    workload_kind = db.Column(db.String(64))
+    labels = db.Column(db.JSON)
+    identity = db.Column(db.Integer)
+    node = db.Column(db.String(253))
+    source = db.Column(db.String(16), nullable=False, default="hubble", server_default="hubble")
+    first_seen = db.Column(db.DateTime, nullable=False)
+    last_seen = db.Column(db.DateTime, nullable=False, index=True)
+
+
+class ServiceIpSighting(db.Model):
+    """A time span during which an IP was a Kubernetes Service address."""
+
+    __tablename__ = "service_ip_sightings"
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(45), nullable=False, index=True)
+    namespace = db.Column(db.String(253), nullable=False)
+    service = db.Column(db.String(253), nullable=False)
+    first_seen = db.Column(db.DateTime, nullable=False)
+    last_seen = db.Column(db.DateTime, nullable=False, index=True)
+
+
+class HubbleFlow(db.Model):
+    """Hubble flows counted per minute. Missing pods and ports are stored as
+    "" and 0 so the key columns can be unique."""
+
+    __tablename__ = "hubble_flows"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "minute", "src_ip", "dst_ip", "dst_port", "protocol", "verdict", "src_pod", "dst_pod",
+            name="uq_hubble_flows_key",
+        ),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    minute = db.Column(db.DateTime, nullable=False, index=True)
+    src_ip = db.Column(db.String(45), nullable=False)
+    dst_ip = db.Column(db.String(45), nullable=False)
+    dst_port = db.Column(db.Integer, nullable=False)
+    protocol = db.Column(db.String(16), nullable=False)
+    verdict = db.Column(db.String(16), nullable=False)
+    src_pod = db.Column(db.String(507), nullable=False)  # "namespace/pod" or ""
+    dst_pod = db.Column(db.String(507), nullable=False)
+    count = db.Column(db.Integer, nullable=False)
+
+
 # ==========================================
 # LEGACY: MANUAL ANALYSIS MODELS
 # ==========================================
