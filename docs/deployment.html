@@ -98,7 +98,10 @@ nano .env          <span class="c"># paste the two values and fill in the rest (
   <tr><td><code>SENSOR_URL</code></td><td>Where the backend reaches the sensor's <code>pcap_server.py</code></td><td>default <code>http://172.18.0.1:5005</code> (the Docker host); else <code>http://&lt;sensor-ip&gt;:5005</code></td></tr>
   <tr><td><code>SNAPSHOT_ENABLED</code></td><td>Live role snapshots (feed <em>Latest roles</em> and <em>Live Analysis</em>)</td><td><code>true</code></td></tr>
   <tr><td><code>SNAPSHOT_INTERVAL_SECONDS</code></td><td>How often the backend takes a snapshot of the sensor's latest traffic</td><td><code>300</code></td></tr>
-  <tr><td><code>SNAPSHOT_RETENTION_HOURS</code></td><td>How long snapshot history is kept</td><td><code>168</code> (one week)</td></tr>
+  <tr><td><code>SNAPSHOT_RETENTION_HOURS</code></td><td>How long snapshot history is kept (pcap and live DPI snapshots, DPI evidence)</td><td><code>168</code> (one week)</td></tr>
+  <tr><td><code>LIVE_ROLE_WINDOW_MINUTES</code></td><td>Live DPI: how much recent evidence each DPI snapshot is built from</td><td><code>15</code></td></tr>
+  <tr><td><code>LIVE_ROLE_IDENTITY_HOURS</code></td><td>Live DPI: how long a node's stated identity (NRF profile, setup names, PFCP Node ID) counts</td><td><code>24</code></td></tr>
+  <tr><td><code>DPI_FRESH_SECONDS</code></td><td><em>Latest roles</em> shows the DPI snapshot while it is no older than this, otherwise the pcap one</td><td><code>180</code></td></tr>
   <tr><td><code>SENSOR_*</code></td><td>Sensor container settings, see <a href="#sensor-settings">6.2</a></td><td></td></tr>
 </table>
 <div class="note"><p><code>API_BASE_URL</code> and <code>WS_URL</code> are compiled into the frontend, and nginx's security policy only lets the browser connect to those two addresses. After changing either, rebuild the frontend: <code>docker compose build frontend &amp;&amp; docker compose up -d frontend</code>.</p></div>
@@ -122,6 +125,7 @@ docker compose logs -f backend      <span class="c"># wait for "Booting worker" 
   <tr><td>Zeek + <code>zeek_agent.py</code></td><td>Flow records, posted to the backend's <code>/v1/ingest/zeek</code></td><td>—</td></tr>
   <tr><td><code>pcap_server.py</code></td><td>Pcap slices and Nmap scans for the backend (token-protected)</td><td>5005</td></tr>
   <tr><td><code>publisher.py</code></td><td>Live packet stream for the Real Time page</td><td>5002</td></tr>
+  <tr><td><code>dpi_agent.py</code> (when <code>SENSOR_DPI_ENABLED=true</code>)</td><td>Live DPI: two tshark processes decode the 5G protocols and post role evidence to the backend's <code>/v1/ingest/dpi</code> every minute</td><td>—</td></tr>
 </table>
 <p>It uses host networking, so it sees the host's real interface and opens 5005 and 5002 on the host itself. If a process stops, the container exits and Docker restarts it. Old capture files are deleted after <code>SENSOR_RETENTION_MINUTES</code>, and Zeek restarts daily so its log does not grow without limit. The sensor never sends a half-written capture: for the file being written it sends only the complete packets.</p>
 

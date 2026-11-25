@@ -3,11 +3,15 @@ tags:
 summary: Get Latest Role Snapshot
 description: >
   Retrieves the most recent role-assessment snapshot from the
-  RoleSnapshot table (all rows sharing the single latest "ts" value).
-  The backend's snapshot scheduler fills this table every
-  SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic
-  and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the
-  first snapshot, the response is an empty result rather than an error.
+  RoleSnapshot table (all rows of one source sharing its latest "ts").
+  Two sources fill it side by side: "pcap", the snapshot scheduler, every
+  SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic,
+  and "dpi", the sensor's live DPI agent, once per window (default 60 s;
+  see POST /v1/ingest/dpi). Both keep SNAPSHOT_RETENTION_HOURS (default
+  168) of history. Without "source", the DPI snapshot is returned while it
+  is fresh (no older than DPI_FRESH_SECONDS, default 180), otherwise the
+  pcap snapshot, otherwise any DPI snapshot. Until the first snapshot, the
+  response is an empty result rather than an error.
 produces:
   - application/json
   - text/csv
@@ -27,6 +31,12 @@ parameters:
     default: csv
     enum: [json, csv]
     description: Response format.
+  - name: source
+    in: query
+    type: string
+    required: false
+    enum: [pcap, dpi]
+    description: Return this source's latest snapshot instead of the default choice.
 responses:
   200:
     description: >
@@ -57,8 +67,13 @@ responses:
           reasoning:
             type: string
             example: "E2AP control-plane traffic observed as the RIC side of the association."
+          source:
+            type: string
+            enum: [pcap, dpi]
+            description: Which snapshot the row comes from.
+            example: "dpi"
   400:
-    description: The "limit" parameter is not an integer in the allowed 1-10000 range.
+    description: The "limit" parameter is not an integer in the allowed 1-10000 range, or "source" is not pcap or dpi.
     schema:
       type: object
       properties:

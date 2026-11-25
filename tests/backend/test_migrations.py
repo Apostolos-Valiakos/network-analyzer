@@ -26,6 +26,7 @@ from models import db as _db, User
 ALL_TABLES = {
     "users", "pcap_files", "flow_statistics", "role_snapshots",
     "ip_roles", "ue_sessions", "cluster_results",
+    "dpi_evidence_windows", "dpi_identities",
 }
 _POSTGRES_URL = os.environ.get("PENM_TEST_POSTGRES_URL")
 _BACKENDS = ["sqlite"] + (["postgresql"] if _POSTGRES_URL else [])

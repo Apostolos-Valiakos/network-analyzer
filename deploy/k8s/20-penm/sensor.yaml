@@ -74,6 +74,12 @@ spec:
               value: "3600"
             - name: ENABLE_PUBLISHER
               value: "true"
+            # Live DPI (dpi_agent.py): role evidence every window to
+            # /v1/ingest/dpi, derived from HOST_API_URL.
+            - name: DPI_ENABLED
+              value: "true"
+            - name: DPI_WINDOW_SECONDS
+              value: "60"
             - name: HOST_API_URL
               value: http://penm-backend.team-penm.svc.cluster.local:5555/v1/ingest/zeek
             - name: SECRET_TOKEN

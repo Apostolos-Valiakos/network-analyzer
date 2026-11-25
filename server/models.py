@@ -97,6 +97,36 @@ class RoleSnapshot(db.Model):
     role = db.Column(db.String(100))
     confidence = db.Column(db.Float, default=0.0)
     reasoning = db.Column(db.Text)
+    # "pcap": snapshot_scheduler (role engine on the sensor's last slice);
+    # "dpi": live_roles (the sensor's live DPI windows).
+    source = db.Column(db.String(10), nullable=False, default="pcap", server_default="pcap")
+
+
+class DpiEvidenceWindow(db.Model):
+    """One window of stage-1 role evidence from the sensor's dpi_agent
+    (role_evidence.PcapObservations.to_dict()), kept for the retention period."""
+
+    __tablename__ = "dpi_evidence_windows"
+    id = db.Column(db.Integer, primary_key=True)
+    # Chosen by the agent; a re-sent window is recognised and ignored.
+    window_id = db.Column(db.String(64), unique=True, nullable=False)
+    window_start = db.Column(db.DateTime, nullable=False)
+    window_end = db.Column(db.DateTime, nullable=False, index=True)
+    received_at = db.Column(db.DateTime, nullable=False)
+    payload = db.Column(db.JSON, nullable=False)
+
+
+class DpiIdentity(db.Model):
+    """An identity an IP stated about itself in live traffic (NRF profile
+    type, NG/E2 Setup name, PFCP Node ID). Setup messages are rare, so these
+    are kept longer than the rolling evidence window."""
+
+    __tablename__ = "dpi_identities"
+    ip = db.Column(db.String(45), primary_key=True)
+    kind = db.Column(db.String(20), primary_key=True)
+    value = db.Column(db.String(160), primary_key=True)
+    first_seen = db.Column(db.DateTime, nullable=False)
+    last_seen = db.Column(db.DateTime, nullable=False, index=True)
 
 
 # ==========================================

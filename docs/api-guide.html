@@ -76,7 +76,7 @@ flows = requests.get(f"{BASE}/v1/network/statistics", headers=headers, timeout=3
   <tr><th>Endpoint</th><th>Returns</th><th>Parameters</th></tr>
   <tr><td><code>GET /v1/network/statistics</code></td><td>Flow records (Zeek fields: <code>ts</code>, <code>id.orig_h</code>, <code>proto</code>, bytes, packets, connection state…), newest first</td><td><code>start_time</code> (default 0), <code>end_time</code> (default now), <code>limit</code> 1–10000 (default 1000), <code>format</code></td></tr>
   <tr><td><code>GET /v1/network/export</code></td><td>The same flows for bulk export, as a download</td><td><code>start_time</code>, <code>end_time</code>, <code>limit</code> (omit for all), <code>format</code></td></tr>
-  <tr><td><code>GET /v1/network/roles/latest</code></td><td>The latest live role snapshot: one row per IP with role, confidence and reasoning. Refreshed every few minutes (5 by default)</td><td><code>limit</code>, <code>format</code></td></tr>
+  <tr><td><code>GET /v1/network/roles/latest</code></td><td>The latest live role snapshot: one row per IP with role, confidence, reasoning and <code>source</code>. Two sources: <code>pcap</code> (the backend analyses the sensor's latest slice, every 5 minutes by default) and <code>dpi</code> (the sensor's live DPI, every minute). Without <code>source</code>, the DPI snapshot while it is no older than 3 minutes, otherwise the pcap one</td><td><code>limit</code>, <code>format</code>, <code>source</code></td></tr>
   <tr><td><code>GET /v1/network/pcap/latest/full</code></td><td>The sensor's most recent capture file, full payloads (<code>.pcap</code>), up to about an hour of traffic</td><td>—</td></tr>
   <tr><td><code>GET /v1/network/pcap/headers</code></td><td>The traffic in a time window, packet headers only</td><td><code>start_time</code>, <code>end_time</code> (required)</td></tr>
   <tr><td><code>POST /v1/analyze_live</code></td><td>Role analysis of the latest live snapshot (5 per minute)</td><td>—</td></tr>
@@ -119,6 +119,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://&lt;server-ip&gt;:5555/v1/scan/
   <tr><td><code>POST /v1/history/pcap/{id}/reanalyze</code>, <code>DELETE /v1/history/pcap/{id}</code>, <code>DELETE /v1/history/cluster/{id}</code></td><td>Re-run (5 per minute) and delete</td></tr>
   <tr><td><code>GET /auth/users</code>, <code>POST /auth/register</code>, <code>DELETE /auth/users/{id}</code></td><td>Admins only</td></tr>
   <tr><td><code>POST /v1/ingest/zeek</code></td><td>Internal: the sensor posts flows with the <code>X-Internal-Token</code> header, not a login token</td></tr>
+  <tr><td><code>POST /v1/ingest/dpi</code></td><td>Internal: the sensor's live DPI agent posts one window of role evidence (no subscriber data), with the same header</td></tr>
 </table>
 
 <h2 id="live">6. Live events (Socket.IO)</h2>

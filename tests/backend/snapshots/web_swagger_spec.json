@@ -1612,6 +1612,153 @@
           ]
         }
       },
+      "/v1/ingest/dpi": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Receives one window of role evidence from the Sensor's dpi_agent.py (internal-token auth, not JWT). The agent decodes the 5G protocols live with tshark and sends what the role engine's first stage learned in the window: per-IP counters, served SBI APIs, GTP-U flows and the identities nodes state about themselves (NRF profile type, NG/E2 Setup names, PFCP Node ID). No subscriber identifiers and no payloads.\nThe backend stores the window (a window_id it already has is ignored), keeps the stated identities for LIVE_ROLE_IDENTITY_HOURS (default 24), merges the windows of the last LIVE_ROLE_WINDOW_MINUTES (default 15), and stores the resulting roles as a role snapshot with source \"dpi\" and ts = window_end, served by GET /v1/network/roles/latest. Windows, identities and snapshots are deleted after SNAPSHOT_RETENTION_HOURS (default 168).\nExempt from the global rate limiter (continuous ingest traffic).\n",
+          "parameters": [
+            {
+              "description": "Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.",
+              "in": "header",
+              "name": "X-Internal-Token",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "example": {
+                  "observations": {
+                    "e2t_clients": [],
+                    "evidence": {
+                      "10.0.0.5": {
+                        "amf_names": [
+                          "open5gs-amf0"
+                        ],
+                        "ngap_amf_side": 12,
+                        "peers": [
+                          "10.0.0.2"
+                        ],
+                        "protocols": [
+                          "ngap",
+                          "sctp"
+                        ],
+                        "seen_as_outer": true,
+                        "total_pkts": 12
+                      }
+                    },
+                    "format": 1,
+                    "gtpu_flows": [],
+                    "redis_clients": [],
+                    "warnings": []
+                  },
+                  "window_end": 1789111200,
+                  "window_id": "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596",
+                  "window_start": 1789111140
+                },
+                "properties": {
+                  "observations": {
+                    "description": "role_evidence.PcapObservations.to_dict() output: \"format\" (1), \"evidence\" (per-IP counters and sets), \"gtpu_flows\", \"redis_clients\", \"e2t_clients\" and \"warnings\".\n",
+                    "type": "object"
+                  },
+                  "window_end": {
+                    "description": "Window end (Unix epoch seconds), after window_start by at most 3600 s.",
+                    "example": 1789111200,
+                    "type": "number"
+                  },
+                  "window_id": {
+                    "description": "Unique per window (1-64 characters), chosen by the agent so a re-sent window is recognised.",
+                    "example": "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596",
+                    "type": "string"
+                  },
+                  "window_start": {
+                    "description": "Window start (Unix epoch seconds).",
+                    "example": 1789111140,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "window_id",
+                  "window_start",
+                  "window_end",
+                  "observations"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Window stored and a snapshot written, or the window was already stored.",
+              "schema": {
+                "properties": {
+                  "roles": {
+                    "description": "Only for \"success\" — number of IPs in the snapshot.",
+                    "example": 14,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "enum": [
+                      "success",
+                      "duplicate"
+                    ],
+                    "example": "success",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "The body is not a usable window (missing or wrong fields, an evidence format this backend cannot read).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "window_end must be after window_start, by at most 3600 s",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not configured on the backend (then every request is refused).\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Unauthorized",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Database error. Nothing from the request is stored.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "summary": "Ingest a Live DPI Window",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
       "/v1/ingest/zeek": {
         "post": {
           "consumes": [
@@ -2030,7 +2177,7 @@
       },
       "/v1/network/roles/latest": {
         "get": {
-          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows sharing the single latest \"ts\" value). The backend's snapshot scheduler fills this table every SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the first snapshot, the response is an empty result rather than an error.\n",
+          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows of one source sharing its latest \"ts\"). Two sources fill it side by side: \"pcap\", the snapshot scheduler, every SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic, and \"dpi\", the sensor's live DPI agent, once per window (default 60 s; see POST /v1/ingest/dpi). Both keep SNAPSHOT_RETENTION_HOURS (default 168) of history. Without \"source\", the DPI snapshot is returned while it is fresh (no older than DPI_FRESH_SECONDS, default 180), otherwise the pcap snapshot, otherwise any DPI snapshot. Until the first snapshot, the response is an empty result rather than an error.\n",
           "parameters": [
             {
               "default": 1000,
@@ -2049,6 +2196,17 @@
               ],
               "in": "query",
               "name": "format",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "description": "Return this source's latest snapshot instead of the default choice.",
+              "enum": [
+                "pcap",
+                "dpi"
+              ],
+              "in": "query",
+              "name": "source",
               "required": false,
               "type": "string"
             }
@@ -2080,6 +2238,15 @@
                       "example": "NEAR_RT_RIC",
                       "type": "string"
                     },
+                    "source": {
+                      "description": "Which snapshot the row comes from.",
+                      "enum": [
+                        "pcap",
+                        "dpi"
+                      ],
+                      "example": "dpi",
+                      "type": "string"
+                    },
                     "ts": {
                       "description": "Snapshot timestamp (Unix epoch).",
                       "example": 1789111200,
@@ -2092,7 +2259,7 @@
               }
             },
             "400": {
-              "description": "The \"limit\" parameter is not an integer in the allowed 1-10000 range.",
+              "description": "The \"limit\" parameter is not an integer in the allowed 1-10000 range, or \"source\" is not pcap or dpi.",
               "schema": {
                 "properties": {
                   "error": {

@@ -197,8 +197,9 @@ def test_real_child_process_runs_pipeline_without_database_setup(tmp_path, captu
                 os.remove(summary)
     output = result.stdout + result.stderr
     assert "status success roles 3" in result.stdout, output[-1500:]
-    # Alembic logs this once per upgrade; a second line would mean the child ran it too.
-    assert output.count("Running upgrade") <= 1
+    # Alembic logs each step once per upgrade; the first step logged twice
+    # would mean the child ran the migrations too.
+    assert output.count("Running upgrade  -> 0001") <= 1
     assert "Traceback" not in output
     assert "Loading roles" in output
 

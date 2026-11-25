@@ -1,0 +1,113 @@
+tags:
+  - Continuous Monitoring
+summary: Ingest a Live DPI Window
+description: >
+  Receives one window of role evidence from the Sensor's dpi_agent.py
+  (internal-token auth, not JWT). The agent decodes the 5G protocols live
+  with tshark and sends what the role engine's first stage learned in the
+  window: per-IP counters, served SBI APIs, GTP-U flows and the identities
+  nodes state about themselves (NRF profile type, NG/E2 Setup names, PFCP
+  Node ID). No subscriber identifiers and no payloads.
+
+  The backend stores the window (a window_id it already has is ignored),
+  keeps the stated identities for LIVE_ROLE_IDENTITY_HOURS (default 24),
+  merges the windows of the last LIVE_ROLE_WINDOW_MINUTES (default 15),
+  and stores the resulting roles as a role snapshot with source "dpi" and
+  ts = window_end, served by GET /v1/network/roles/latest. Windows,
+  identities and snapshots are deleted after SNAPSHOT_RETENTION_HOURS
+  (default 168).
+
+  Exempt from the global rate limiter (continuous ingest traffic).
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: X-Internal-Token
+    in: header
+    type: string
+    required: true
+    description: Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required: [window_id, window_start, window_end, observations]
+      properties:
+        window_id:
+          type: string
+          description: Unique per window (1-64 characters), chosen by the agent so a re-sent window is recognised.
+          example: "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596"
+        window_start:
+          type: number
+          description: Window start (Unix epoch seconds).
+          example: 1789111140
+        window_end:
+          type: number
+          description: Window end (Unix epoch seconds), after window_start by at most 3600 s.
+          example: 1789111200
+        observations:
+          type: object
+          description: >
+            role_evidence.PcapObservations.to_dict() output: "format" (1),
+            "evidence" (per-IP counters and sets), "gtpu_flows",
+            "redis_clients", "e2t_clients" and "warnings".
+      example:
+        window_id: "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596"
+        window_start: 1789111140
+        window_end: 1789111200
+        observations:
+          format: 1
+          evidence:
+            "10.0.0.5":
+              ngap_amf_side: 12
+              amf_names: ["open5gs-amf0"]
+              peers: ["10.0.0.2"]
+              protocols: ["ngap", "sctp"]
+              seen_as_outer: true
+              total_pkts: 12
+          gtpu_flows: []
+          redis_clients: []
+          e2t_clients: []
+          warnings: []
+responses:
+  200:
+    description: Window stored and a snapshot written, or the window was already stored.
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success, duplicate]
+          example: "success"
+        roles:
+          type: integer
+          description: Only for "success" — number of IPs in the snapshot.
+          example: 14
+  400:
+    description: The body is not a usable window (missing or wrong fields, an evidence format this backend cannot read).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "window_end must be after window_start, by at most 3600 s"
+  401:
+    description: >
+      Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not
+      configured on the backend (then every request is refused).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Unauthorized"
+  500:
+    description: Database error. Nothing from the request is stored.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Internal server error"
