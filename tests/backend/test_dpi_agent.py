@@ -151,3 +151,19 @@ class TestSending:
         assert len(agent.pending) == 2
         assert first not in agent.pending
         assert agent.dropped == 1
+
+
+class TestStats:
+    def test_stats_of_this_process_on_linux(self, mod):
+        stats = mod.process_stats(os.getpid())
+        if not os.path.exists("/proc/self/status"):
+            assert stats is None
+        else:
+            assert stats["rss_mb"] > 0 and stats["cpu_seconds"] >= 0
+
+    def test_missing_process(self, mod):
+        assert mod.process_stats(2 ** 30) is None
+
+    def test_log_stats_skips_runners_without_a_process(self, mod):
+        runner = MagicMock(process=None, label="user-plane")
+        mod.log_stats([runner])  # no error

@@ -33,6 +33,9 @@ Environment:
                         loses HTTP/2 header state, so SBI paths on connections
                         open at that moment cannot be read afterwards.
   TSHARK_PATH           tshark binary (default: "tshark" on PATH)
+  DPI_STATS_WINDOWS     log each tshark's memory (RSS) and CPU time every this
+                        many windows (default 5; Linux only), for sizing the
+                        sensor and the 24 h memory test
 """
 import logging
 import os
@@ -105,6 +108,30 @@ def tshark_command(
     for name in role_evidence._TSHARK_FIELDS:
         cmd += ["-e", name]
     return cmd
+
+
+def process_stats(pid: int) -> Optional[dict]:
+    """Resident memory (MB) and CPU time used so far (s) of a process, from
+    /proc. None where /proc is not available."""
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            rss_kb = next(int(line.split()[1]) for line in f if line.startswith("VmRSS:"))
+        with open(f"/proc/{pid}/stat") as f:
+            fields = f.read().rsplit(")", 1)[1].split()
+        ticks = os.sysconf("SC_CLK_TCK")
+        cpu = (int(fields[11]) + int(fields[12])) / ticks  # utime + stime
+    except (OSError, ValueError, StopIteration, IndexError, AttributeError):
+        return None
+    return {"rss_mb": round(rss_kb / 1024, 1), "cpu_seconds": round(cpu, 1)}
+
+
+def log_stats(runners) -> None:
+    for runner in runners:
+        process = runner.process
+        stats = process_stats(process.pid) if process and process.poll() is None else None
+        if stats:
+            logger.info("tshark %s: rss %.1f MB, cpu %.1f s since start",
+                        runner.label, stats["rss_mb"], stats["cpu_seconds"])
 
 
 class DpiAgent:
@@ -289,12 +316,17 @@ def main() -> None:
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, _terminate)
 
+    stats_every = max(1, int(os.environ.get("DPI_STATS_WINDOWS", "5")))
+    windows = 0
     try:
         next_rotation = time.time() + window
         while True:
             stop.wait(max(0.0, next_rotation - time.time()))
             agent.rotate()
             agent.flush()
+            windows += 1
+            if windows % stats_every == 0:
+                log_stats(runners)
             # After a slow send, start a full window from now rather than
             # closing several short windows back to back.
             next_rotation += window
