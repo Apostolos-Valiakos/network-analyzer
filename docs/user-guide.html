@@ -123,7 +123,7 @@
 
 <h2 id="roles">8. What the roles mean</h2>
 <p>Roles come from evidence in the traffic, for example which side listens on a protocol's well-known port. Each role has a confidence and a short reasoning.</p>
-<p>On a Kubernetes testbed, the <em>Roles per IP</em> table under the role summary also shows the pod behind each address, and what the pod's name says it is. The traffic still decides the role: when the pod agrees, the confidence is a little higher and the table says <em>pod agrees</em>; when it disagrees, a warning chip <em>pod suggests …</em> appears; for an address with no traffic evidence, <em>suggested …</em> shows the pod's role. <em>Namespace</em> filters the table.</p>
+<p>On a Kubernetes testbed, the <em>Roles per IP</em> table under the role summary also shows the pod behind each address, and what the pod's name says it is. The traffic still decides the role: when the pod agrees, the confidence is a little higher and the table says <em>pod agrees</em>; when it disagrees, a warning chip <em>pod suggests …</em> appears; for an address with no traffic evidence, <em>suggested …</em> shows the pod's role. <em>Namespace</em> filters the table. The same table appears in <a href="#history">History</a> (<em>View Results</em>) for captures taken while the pods were known.</p>
 <table>
   <tr><th>Role</th><th>Typical evidence</th></tr>
   <tr><td><code>AMF</code></td><td>Listens for NGAP (SCTP 38412); serves the <code>namf</code> SBI API</td></tr>
