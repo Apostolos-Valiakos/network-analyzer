@@ -94,8 +94,10 @@ def parse_time(value: Any) -> Optional[float]:
         return None
     text = value.replace("Z", "+00:00")
     if "." in text:
+        # Python 3.10's fromisoformat takes 3 or 6 fraction digits only;
+        # Hubble prints nanoseconds (9).
         head, rest = text.split(".", 1)
-        digits = "".join(c for c in rest if c.isdigit())
+        digits = rest[: len(rest) - len(rest.lstrip("0123456789"))]
         zone = rest[len(digits):]
         text = f"{head}.{digits[:6].ljust(6, '0')}{zone}"
     try:
