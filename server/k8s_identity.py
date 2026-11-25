@@ -246,6 +246,15 @@ def _best(model, ip, t0: float, t1: float):
     return max(rows, key=lambda r: (_overlap(r, start, end), r.last_seen))
 
 
+def has_data() -> bool:
+    """True once any pod or Service sighting is stored. Without Hubble the
+    role results are left exactly as they were."""
+    return (
+        db.session.query(PodIpSighting.id).first() is not None
+        or db.session.query(ServiceIpSighting.id).first() is not None
+    )
+
+
 def during(ip: str, t0: float, t1: float) -> Optional[Dict[str, Any]]:
     """What Kubernetes knew about `ip` between t0 and t1 (epoch seconds): the
     pod that owned it for most of the span, and/or the Service it was the

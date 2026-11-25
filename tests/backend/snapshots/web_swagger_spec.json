@@ -922,6 +922,10 @@
                           "example": 0.95,
                           "type": "number"
                         },
+                        "k8s": {
+                          "description": "Only when Hubble data covers the capture's time span: the pod or Service behind the IP (namespace, pod, workload, workload_kind, service, node), and its hint — \"hint_role\", \"suggested_role\" for an Unidentified IP, \"k8s_mismatch\" when the pod suggests another role. An agreeing pod raises confidence by 0.10 (at most 0.99). Same object as in GET /v1/network/roles/latest.\n",
+                          "type": "object"
+                        },
                         "reasoning": {
                           "example": "E2AP control-plane traffic observed as the RIC side of the association (SCTP dst 36422).",
                           "type": "string"
@@ -2466,6 +2470,45 @@
                       "description": "IP address (field name matches Zeek dot notation).",
                       "example": "10.244.0.77",
                       "type": "string"
+                    },
+                    "k8s": {
+                      "description": "Only when Hubble data is available for this IP over the snapshot's evidence period: the pod (or Service) behind it. The traffic decides the role; the pod is a hint. When its hint (\"hint_role\") agrees, confidence is raised by 0.10 (at most 0.99); when it disagrees, \"k8s_mismatch\" is true; when the role is Unidentified, \"suggested_role\" carries the hint. In CSV these become k8s_* columns.\n",
+                      "properties": {
+                        "hint_role": {
+                          "example": "NEAR_RT_RIC",
+                          "type": "string"
+                        },
+                        "k8s_mismatch": {
+                          "type": "boolean"
+                        },
+                        "namespace": {
+                          "example": "team-5g",
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "pod": {
+                          "example": "flexric-ric-0",
+                          "type": "string"
+                        },
+                        "service": {
+                          "description": "\"namespace/name\" when the IP is a Service address",
+                          "type": "string"
+                        },
+                        "suggested_role": {
+                          "type": "string"
+                        },
+                        "workload": {
+                          "example": "flexric-ric",
+                          "type": "string"
+                        },
+                        "workload_kind": {
+                          "example": "StatefulSet",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
                     },
                     "reasoning": {
                       "example": "E2AP control-plane traffic observed as the RIC side of the association.",

@@ -7,6 +7,7 @@ from flasgger import swag_from
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 
+import role_fusion
 import settings
 from access import check_pcap_ownership, current_user_id, owned_pcap
 from connectToWebsocket import startWebSocketClient
@@ -36,11 +37,16 @@ def run_pipeline_endpoint():
         report = run_ip_role_pipeline(str(full_path), model, data.get("selected_ips"))
         if report.get("status") == "success" and "ip_roles" in report:
             details = report.get("ip_role_details", {})
+            warnings = []
+            role_fusion.annotate_capture(details, str(full_path), warnings)
+            if warnings:
+                report.setdefault("warnings", []).extend(warnings)
             report["ip_roles"] = {
                 ip: {
                     "role": role,
                     "confidence": details.get(ip, {}).get("confidence", 0.0),
                     "reasoning": details.get(ip, {}).get("reasoning", ""),
+                    **({"k8s": details[ip]["k8s"]} if "k8s" in details.get(ip, {}) else {}),
                 }
                 for ip, role in report["ip_roles"].items()
             }

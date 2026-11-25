@@ -94,6 +94,16 @@ responses:
               reasoning:
                 type: string
                 example: "E2AP control-plane traffic observed as the RIC side of the association (SCTP dst 36422)."
+              k8s:
+                type: object
+                description: >
+                  Only when Hubble data covers the capture's time span: the
+                  pod or Service behind the IP (namespace, pod, workload,
+                  workload_kind, service, node), and its hint — "hint_role",
+                  "suggested_role" for an Unidentified IP, "k8s_mismatch"
+                  when the pod suggests another role. An agreeing pod raises
+                  confidence by 0.10 (at most 0.99). Same object as in GET
+                  /v1/network/roles/latest.
           example:
             "10.244.0.77":
               role: "NEAR_RT_RIC"

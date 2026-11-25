@@ -16,6 +16,7 @@ from psycopg2.extras import execute_values
 
 import k8s_identity
 import live_roles
+import role_fusion
 import settings
 from extensions import limiter, socketio
 from models import db, FlowStatistic, RoleSnapshot, utc_from_timestamp, utc_now
@@ -318,14 +319,46 @@ def get_latest_roles():
                 }
             )
 
+        # Pods behind the IPs over the snapshot's evidence period.
+        span = (
+            live_roles.role_window_seconds() if source == live_roles.SOURCE_DPI
+            else float(os.getenv("SNAPSHOT_INTERVAL_SECONDS", "300"))
+        )
+        warnings = []
+        role_fusion.annotate(
+            {r["id.orig_h"]: r for r in results}, latest_ts - span, latest_ts, warnings
+        )
+        for message in warnings:
+            logger.warning("Latest roles: %s", message)
 
         if resp_format == "json":
             return jsonify(results), 200
-        return generate_csv_response(results, "latest_roles.csv")
+        return generate_csv_response(_flatten_k8s(results), "latest_roles.csv")
 
     except Exception as e:
         logger.exception("get_latest_roles failed")
         return jsonify({"error": "Internal server error"}), 500
+
+
+_K8S_CSV_COLUMNS = (
+    "namespace", "pod", "workload", "service", "hint_role", "suggested_role", "k8s_mismatch",
+)
+
+
+def _flatten_k8s(rows):
+    """CSV rows: the "k8s" object as k8s_* columns, present on every row once
+    any row has one (CSV needs one header)."""
+    if not any("k8s" in r for r in rows):
+        return rows
+    flat = []
+    for row in rows:
+        k8s = row.get("k8s", {})
+        out = {k: v for k, v in row.items() if k != "k8s"}
+        for key in _K8S_CSV_COLUMNS:
+            column = key if key.startswith("k8s_") else f"k8s_{key}"
+            out[column] = k8s.get(key, "")
+        flat.append(out)
+    return flat
 
 
 @bp.route("/v1/network/pcap/headers", methods=["GET"])
@@ -429,6 +462,11 @@ def analyze_live():
         model_name = os.path.splitext(os.path.basename(latest_file))[0]
 
         results = run_ip_role_pipeline(latest_file, model_name, selected_ips=None)
+        if results.get("ip_role_details"):
+            warnings = []
+            role_fusion.annotate_capture(results["ip_role_details"], latest_file, warnings)
+            if warnings:
+                results.setdefault("warnings", []).extend(warnings)
 
         # WP5: unidentified devices on the live network are worth an alert
         try:

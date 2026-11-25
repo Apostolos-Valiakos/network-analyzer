@@ -115,6 +115,12 @@
           </template>
         </v-data-table>
 
+        <RoleDetailsTable
+          v-if="cnnResults.ip_role_details"
+          :details="cnnResults.ip_role_details"
+          class="mt-6"
+        />
+
         <v-divider class="my-4"></v-divider>
 
         <!-- Pie chart -->
@@ -152,9 +158,10 @@
 
 <script>
 import PieChart from "@/components/PieChart.vue";
+import RoleDetailsTable from "@/components/RoleDetailsTable.vue";
 
 export default {
-  components: { PieChart },
+  components: { PieChart, RoleDetailsTable },
 
   props: {
     filename: String,
