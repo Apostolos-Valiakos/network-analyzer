@@ -1768,7 +1768,7 @@
           "consumes": [
             "application/json"
           ],
-          "description": "Receives a batch from the Sensor's hubble_agent.py (internal-token auth, not JWT). The agent reads flows from Cilium's Hubble Relay and sends, every HUBBLE_INTERVAL_SECONDS (default 60), which pod owned which IP (\"sightings\"), which IPs were Service addresses (\"services\"), and the flows counted per minute. PENM's own pods are left out.\nThe backend keeps time spans: a sighting of the same pod within SIGHTING_GAP_SECONDS (default 600) of the previous one extends it, and another pod on the same IP (after a pod restart) starts a new span. Role results use these spans to show the pod behind each IP at the time of the traffic. Everything older than HUBBLE_RETENTION_HOURS (default 168) is deleted.\nExempt from the global rate limiter (continuous ingest traffic).\n",
+          "description": "Receives a batch from the Sensor's hubble_agent.py, or from k8s_api_agent.py where Hubble Relay cannot be reached (internal-token auth, not JWT). The agent reads flows from Cilium's Hubble Relay and sends, every HUBBLE_INTERVAL_SECONDS (default 60), which pod owned which IP (\"sightings\"), which IPs were Service addresses (\"services\"), and the flows counted per minute. PENM's own pods are left out.\nThe backend keeps time spans: a sighting of the same pod within SIGHTING_GAP_SECONDS (default 600) of the previous one extends it, and another pod on the same IP (after a pod restart) starts a new span. Role results use these spans to show the pod behind each IP at the time of the traffic. Everything older than HUBBLE_RETENTION_HOURS (default 168) is deleted.\nExempt from the global rate limiter (continuous ingest traffic).\n",
           "parameters": [
             {
               "description": "Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.",
@@ -1926,6 +1926,15 @@
                       "type": "object"
                     },
                     "type": "array"
+                  },
+                  "source": {
+                    "default": "hubble",
+                    "description": "\"k8s-api\" for batches built from the Kubernetes API's pod and Service lists (no flows). Stored with each pod sighting.\n",
+                    "enum": [
+                      "hubble",
+                      "k8s-api"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"

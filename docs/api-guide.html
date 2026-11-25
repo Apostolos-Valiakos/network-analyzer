@@ -120,7 +120,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://&lt;server-ip&gt;:5555/v1/scan/
   <tr><td><code>GET /auth/users</code>, <code>POST /auth/register</code>, <code>DELETE /auth/users/{id}</code></td><td>Admins only</td></tr>
   <tr><td><code>POST /v1/ingest/zeek</code></td><td>Internal: the sensor posts flows with the <code>X-Internal-Token</code> header, not a login token</td></tr>
   <tr><td><code>POST /v1/ingest/dpi</code></td><td>Internal: the sensor's live DPI agent posts one window of role evidence (no subscriber data), with the same header</td></tr>
-  <tr><td><code>POST /v1/ingest/hubble</code></td><td>Internal: the sensor's Hubble agent posts which pod or Service owned which IP, and flows per minute, with the same header</td></tr>
+  <tr><td><code>POST /v1/ingest/hubble</code></td><td>Internal: the sensor's Hubble agent (or, without Hubble, its Kubernetes API agent with <code>"source": "k8s-api"</code>) posts which pod or Service owned which IP, and flows per minute, with the same header</td></tr>
 </table>
 
 <h2 id="live">6. Live events (Socket.IO)</h2>

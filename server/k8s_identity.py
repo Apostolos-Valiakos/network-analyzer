@@ -4,7 +4,8 @@ Which Kubernetes pod or Service owned an IP, and when.
 The sensor's hubble_agent (Host Files/hubble_agent.py) reads flows from
 Hubble Relay and sends a batch every HUBBLE_INTERVAL_SECONDS (default 60) to
 POST /v1/ingest/hubble. This module stores them:
-  - pod_ip_sightings: time spans during which one pod owned an IP. A sighting
+  - pod_ip_sightings: time spans during which one pod owned an IP (source
+    "hubble", or "k8s-api" from k8s_api_agent's pod lists). A sighting
     of the same pod within SIGHTING_GAP_SECONDS (default 600) of the last one
     extends it; another pod on the IP (an IP reused after a restart) starts a
     new row.
@@ -30,6 +31,8 @@ from models import (
 logger = logging.getLogger(__name__)
 
 _MAX_TEXT = 253
+# Where a batch comes from: hubble_agent (flows) or k8s_api_agent (pod lists).
+SOURCES = ("hubble", "k8s-api")
 _MAX_ITEMS = 50000
 
 
@@ -86,7 +89,10 @@ def ingest(body: Any) -> Dict[str, Any]:
     everything was stored."""
     if not isinstance(body, dict):
         raise BadBatch("Expected a JSON object")
-    pods = _parse_pods(_list(body, "sightings"))
+    source = body.get("source", "hubble")
+    if source not in SOURCES:
+        raise BadBatch(f"source must be one of {', '.join(SOURCES)}")
+    pods = _parse_pods(_list(body, "sightings"), source)
     services = _parse_services(_list(body, "services"))
     flows = _parse_flows(_list(body, "flows"))
 
@@ -109,7 +115,7 @@ def _span(item):
     return utc_from_timestamp(first), utc_from_timestamp(last)
 
 
-def _parse_pods(items):
+def _parse_pods(items, source):
     out = []
     for item in items:
         first, last = _span(item)
@@ -128,6 +134,7 @@ def _parse_pods(items):
             "labels": {str(k)[:_MAX_TEXT]: str(v)[:_MAX_TEXT] for k, v in labels.items()},
             "identity": identity,
             "node": _text(item, "node", required=False),
+            "source": source,
             "first_seen": first,
             "last_seen": last,
         })

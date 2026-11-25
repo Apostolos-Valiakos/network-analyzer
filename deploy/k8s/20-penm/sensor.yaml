@@ -51,6 +51,8 @@ spec:
         xtrust6g-node: penm
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet   # resolve Service names despite hostNetwork
+      # sensor-rbac.yaml: read-only pod/Service lists for k8s_api_agent.py
+      serviceAccountName: penm-sensor
       containers:
         - name: sensor
           image: penm-sensor:local
@@ -87,6 +89,13 @@ spec:
               value: "true"
             - name: HUBBLE_SERVER
               value: hubble-relay.kube-system.svc.cluster.local:80
+            # Pod identities from the Kubernetes API (k8s_api_agent.py), the
+            # fallback for clusters without a reachable Hubble Relay. Runs
+            # alongside Hubble here; needs sensor-rbac.yaml in each namespace.
+            - name: K8S_API_ENABLED
+              value: "true"
+            - name: K8S_NAMESPACES
+              value: team-5g
             - name: HOST_API_URL
               value: http://penm-backend.team-penm.svc.cluster.local:5555/v1/ingest/zeek
             - name: SECRET_TOKEN

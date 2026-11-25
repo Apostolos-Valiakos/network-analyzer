@@ -26,8 +26,12 @@
 #                       left out of the capture
 #   HUBBLE_SERVER       Hubble Relay host:port (default
 #                       hubble-relay.kube-system.svc.cluster.local:80)
+#   K8S_API_ENABLED     "true" starts k8s_api_agent.py (pod and Service lists from
+#                       the Kubernetes API, for clusters without a reachable
+#                       Hubble Relay); reads K8S_NAMESPACES; the API server's
+#                       Service address is left out of the capture
 #   HOST_API_URL, SECRET_TOKEN  used by zeek_agent.py, dpi_agent.py,
-#                       hubble_agent.py and pcap_server.py
+#                       hubble_agent.py, k8s_api_agent.py and pcap_server.py
 
 set -u
 
@@ -46,6 +50,7 @@ DPI_ENABLED="${DPI_ENABLED:-false}"
 HUBBLE_ENABLED="${HUBBLE_ENABLED:-false}"
 HUBBLE_SERVER="${HUBBLE_SERVER:-hubble-relay.kube-system.svc.cluster.local:80}"
 export HUBBLE_SERVER
+K8S_API_ENABLED="${K8S_API_ENABLED:-false}"
 
 mkdir -p "$PCAP_DIR" "$ZEEK_DIR"
 
@@ -56,6 +61,8 @@ excluded_ips() {
         [ -n "$EXCLUDE_DNS" ] && getent ahostsv4 "$EXCLUDE_DNS"
         # hubble_agent's own connection to Hubble Relay (its Service address)
         [ "$HUBBLE_ENABLED" = "true" ] && getent ahostsv4 "${HUBBLE_SERVER%:*}"
+        # k8s_api_agent's connection to the API server (the kubernetes Service)
+        [ "$K8S_API_ENABLED" = "true" ] && echo "${KUBERNETES_SERVICE_HOST:-}"
     } | awk '{ print $1 }' | sort -u | tr '\n' ' '
 }
 
@@ -74,7 +81,7 @@ build_filter() {
     echo "${joined//&/ and }"
 }
 
-DUMPCAP_PID="" ZEEK_PID="" AGENT_PID="" PCAP_SERVER_PID="" PUBLISHER_PID="" DPI_PID="" HUBBLE_PID=""
+DUMPCAP_PID="" ZEEK_PID="" AGENT_PID="" PCAP_SERVER_PID="" PUBLISHER_PID="" DPI_PID="" HUBBLE_PID="" K8S_API_PID=""
 
 start_dumpcap() {
     # Ring files rotate by time so pcap_server can pick them by window. A new
@@ -110,6 +117,12 @@ start_hubble() {
     HUBBLE_PID=$!
 }
 
+start_k8s_api() {
+    [ "$K8S_API_ENABLED" = "true" ] || return 0
+    python3 "$SENSOR_DIR/k8s_api_agent.py" &
+    K8S_API_PID=$!
+}
+
 stop() {
     for pid in "$@"; do
         [ -n "$pid" ] && kill "$pid" 2>/dev/null
@@ -127,7 +140,7 @@ alive() {
 
 shutdown() {
     log "stopping"
-    stop "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
+    stop "$K8S_API_PID" "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
     exit 0
 }
 trap shutdown TERM INT
@@ -140,6 +153,7 @@ start_dumpcap
 start_zeek
 start_dpi
 start_hubble
+start_k8s_api
 PORT=5005 python3 "$SENSOR_DIR/pcap_server.py" &
 PCAP_SERVER_PID=$!
 if [ "$ENABLE_PUBLISHER" = "true" ]; then
@@ -151,9 +165,9 @@ while true; do
     sleep 30 &
     wait $!
 
-    if ! alive "$DUMPCAP_PID" "$ZEEK_PID" "$AGENT_PID" "$PCAP_SERVER_PID" ${PUBLISHER_PID:+"$PUBLISHER_PID"} ${DPI_PID:+"$DPI_PID"} ${HUBBLE_PID:+"$HUBBLE_PID"}; then
+    if ! alive "$DUMPCAP_PID" "$ZEEK_PID" "$AGENT_PID" "$PCAP_SERVER_PID" ${PUBLISHER_PID:+"$PUBLISHER_PID"} ${DPI_PID:+"$DPI_PID"} ${HUBBLE_PID:+"$HUBBLE_PID"} ${K8S_API_PID:+"$K8S_API_PID"}; then
         log "a component exited; stopping so Kubernetes restarts the pod"
-        stop "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
+        stop "$K8S_API_PID" "$HUBBLE_PID" "$DPI_PID" "$PUBLISHER_PID" "$PCAP_SERVER_PID" "$AGENT_PID" "$ZEEK_PID" "$DUMPCAP_PID"
         exit 1
     fi
 

@@ -2,8 +2,9 @@ tags:
   - Continuous Monitoring
 summary: Ingest Kubernetes Identities from Hubble
 description: >
-  Receives a batch from the Sensor's hubble_agent.py (internal-token auth,
-  not JWT). The agent reads flows from Cilium's Hubble Relay and sends,
+  Receives a batch from the Sensor's hubble_agent.py, or from
+  k8s_api_agent.py where Hubble Relay cannot be reached (internal-token
+  auth, not JWT). The agent reads flows from Cilium's Hubble Relay and sends,
   every HUBBLE_INTERVAL_SECONDS (default 60), which pod owned which IP
   ("sightings"), which IPs were Service addresses ("services"), and the
   flows counted per minute. PENM's own pods are left out.
@@ -32,6 +33,13 @@ parameters:
     schema:
       type: object
       properties:
+        source:
+          type: string
+          enum: [hubble, k8s-api]
+          default: hubble
+          description: >
+            "k8s-api" for batches built from the Kubernetes API's pod and
+            Service lists (no flows). Stored with each pod sighting.
         sightings:
           type: array
           items:
