@@ -3,7 +3,8 @@
 # Run as your normal user right after `sudo kubeadm init` succeeds:
 #   ./post-init.sh
 # Sets up kubectl, installs Cilium 1.18.1 (as on the XTRUST-6G cluster, with
-# SCTP enabled for NGAP, F1 and E2), lets pods run on this single node,
+# SCTP enabled for NGAP, F1 and E2, and Hubble with Hubble Relay so PENM can
+# map pod IPs to pods), installs the Hubble CLI, lets pods run on this node,
 # installs a default StorageClass, and labels the node like SMTEC does.
 set -euo pipefail
 
@@ -16,7 +17,7 @@ mkdir -p "$HOME/.kube"
 sudo cp /etc/kubernetes/admin.conf "$HOME/.kube/config"
 sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
 
-echo "[2/6] Cilium CLI"
+echo "[2/6] Cilium and Hubble CLIs"
 if ! command -v cilium >/dev/null; then
     CLI_VERSION=$(curl -fsSL https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
     curl -fsSL --remote-name-all \
@@ -25,13 +26,28 @@ if ! command -v cilium >/dev/null; then
     sudo tar xzf cilium-linux-amd64.tar.gz -C /usr/local/bin
     rm cilium-linux-amd64.tar.gz{,.sha256sum}
 fi
+# Hubble CLI, for checking flows by hand (`cilium hubble port-forward &`,
+# then `hubble observe`). PENM's sensor image will bring its own copy.
+if ! command -v hubble >/dev/null; then
+    HUBBLE_VERSION=$(curl -fsSL https://raw.githubusercontent.com/cilium/hubble/main/stable.txt)
+    curl -fsSL --remote-name-all \
+        "https://github.com/cilium/hubble/releases/download/${HUBBLE_VERSION}/hubble-linux-amd64.tar.gz"{,.sha256sum}
+    sha256sum --check hubble-linux-amd64.tar.gz.sha256sum
+    sudo tar xzf hubble-linux-amd64.tar.gz -C /usr/local/bin
+    rm hubble-linux-amd64.tar.gz{,.sha256sum}
+fi
 
 echo "[3/6] Cilium ${CILIUM_VERSION}"
 # ipam.mode=kubernetes uses kubeadm's podSubnet (10.244.0.0/16).
 # kube-proxy stays, as on the XTRUST-6G cluster.
+# Hubble + Relay: PENM's sensor will read flows from hubble-relay to learn
+# which pod owns each IP. L7 visibility stays off: it would route SBI traffic
+# through Envoy and change what PENM analyses.
 cilium install --version "${CILIUM_VERSION}" \
     --set ipam.mode=kubernetes \
-    --set sctp.enabled=true
+    --set sctp.enabled=true \
+    --set hubble.enabled=true \
+    --set hubble.relay.enabled=true
 cilium status --wait
 
 echo "[4/6] Single node: allow ordinary pods on the control-plane node"
