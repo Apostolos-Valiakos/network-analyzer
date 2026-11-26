@@ -185,12 +185,7 @@ export default {
     best_modularity: Number,
   },
 
-  emits: [
-    "next",
-    "update:noOfclusters",
-    "update:selectedCluster",
-    "save-results",
-  ],
+  // Events: next, update:noOfclusters, update:selectedCluster, save-results. (No emits option: Vue 2 ignores it.)
 
   data() {
     return {

@@ -113,3 +113,36 @@ describe('scanResultsToCsv', () => {
     expect(csv.split('\r\n')[1]).toBe('"a,b",,,,,,,"say ""hi""",')
   })
 })
+
+// ── utils/download.js ────────────────────────────────────────────────────────
+
+describe('saveResponse', () => {
+  const { saveResponse } = require('~/utils/download')
+
+  beforeEach(() => {
+    global.URL.createObjectURL = jest.fn(() => 'blob:x')
+    global.URL.revokeObjectURL = jest.fn()
+  })
+
+  test('a good response is saved under the given name', async () => {
+    const clicked = []
+    const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      clicked.push(this.download)
+    })
+    await saveResponse({ ok: true, blob: async () => new Blob(['x']) }, 'a.pcap')
+    expect(clicked).toEqual(['a.pcap'])
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    click.mockRestore()
+  })
+
+  test("a failed response throws the server's error message", async () => {
+    const res = { ok: false, json: async () => ({ error: 'Access denied' }) }
+    await expect(saveResponse(res, 'a.pcap')).rejects.toThrow('Access denied')
+  })
+
+  test('a failed response without a JSON error uses the fallback', async () => {
+    const res = { ok: false, json: async () => { throw new SyntaxError('html') } }
+    await expect(saveResponse(res, 'a.pcap', 'Save failed')).rejects.toThrow('Save failed')
+    await expect(saveResponse({ ok: false, json: async () => ({}) }, 'a.pcap')).rejects.toThrow('Download failed')
+  })
+})

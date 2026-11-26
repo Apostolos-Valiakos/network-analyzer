@@ -21,6 +21,18 @@
       </p>
     </v-card>
 
+    <v-alert
+      v-if="error"
+      type="error"
+      dense
+      border="left"
+      dismissible
+      class="mb-4"
+      @input="error = null"
+    >
+      {{ error }}
+    </v-alert>
+
     <warnings-alert :warnings="warnings" />
 
     <v-stepper v-model="e1" class="mt-4 rounded-xl" style="border: 1px solid var(--border)">
@@ -88,6 +100,7 @@ import StepClustering from "@/components/stepper/StepClustering.vue";
 import StepProfiling from "@/components/stepper/StepProfiling.vue";
 import StepResults from "@/components/stepper/StepResults.vue";
 import WarningsAlert from "@/components/WarningsAlert.vue";
+import { saveResponse } from "@/utils/download";
 
 export default {
   components: {
@@ -100,6 +113,7 @@ export default {
   data() {
     return {
       e1: 1,
+      error: null,
       filename: "",
       networkGraphKey: 0,
       loading: true,
@@ -270,17 +284,7 @@ export default {
     async downloadPcap() {
       const url = this.$api.url(`/generated_pcaps/${this.filename}`);
       try {
-        const res = await this.$apiFetch(url);
-        if (!res.ok) throw new Error("Download failed");
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = this.filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
+        await saveResponse(await this.$apiFetch(url), this.filename);
       } catch (err) {
         this.error = err.message;
       }
@@ -373,17 +377,7 @@ export default {
       const file = this.filename.substring(0, this.filename.lastIndexOf("."));
       const url = this.$api.url(`/save_roles?file=${file}&type=${this.fileType}`);
       try {
-        const res = await this.$apiFetch(url);
-        if (!res.ok) throw new Error("Download failed");
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = `${file}.${this.fileType}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
+        await saveResponse(await this.$apiFetch(url), `${file}.${this.fileType}`);
       } catch (err) {
         this.error = err.message;
       }

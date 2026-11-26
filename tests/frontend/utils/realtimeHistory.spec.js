@@ -45,8 +45,10 @@ describe('utils/history', () => {
   test('formats sizes, confidences and empty values', () => {
     expect(formatSize(0)).toBe('—')
     expect(formatSize(512)).toBe('512 B')
-    expect(formatSize(2048)).toBe('2.0 KB')
-    expect(formatSize(3 * 1048576)).toBe('3.0 MB')
+    expect(formatSize(2048)).toBe('2 KB')
+    expect(formatSize(1536)).toBe('1.5 KB')
+    expect(formatSize(3 * 1048576)).toBe('3 MB')
+    expect(formatSize(5 * 1073741824)).toBe('5 GB')
     expect(formatConfidence(0.873)).toBe('87%')
     expect(formatConfidence(null)).toBe('—')
     expect(formatDate(null)).toBe('—')

@@ -116,6 +116,14 @@ export default {
       isSendingPcap: false,
     };
   },
+  beforeDestroy() {
+    // Leaving the page ends this page's capture session: stop receiving
+    // packets and save what is queued, as a regular (non-final) chunk, so the
+    // packets received so far are kept. The capture on the sensor is left
+    // alone, since other Real Time pages may be watching it.
+    this.closeSocket();
+    if (this.uploadQueue.length) this.flushUploadQueue(false);
+  },
   methods: {
     generateUniqueId() {
       return generateSessionId();
@@ -123,7 +131,7 @@ export default {
 
     // --- WebSocket Logic ---
     connect() {
-      if (this.client) this.client.close();
+      this.closeSocket();
       this.client = new WebSocket(this.wsUrl);
 
       this.client.onopen = () => {
@@ -153,6 +161,24 @@ export default {
           this.processPacket(msg.packet);
         }
       };
+
+      this.client.onclose = () => {
+        this.isConnected = false;
+        this.isCapturing = false;
+      };
+    },
+
+    // Detaches the handlers first, so a socket being replaced or left behind
+    // never delivers another packet (and never triggers another upload).
+    closeSocket() {
+      const client = this.client;
+      if (!client) return;
+      client.onopen = null;
+      client.onmessage = null;
+      client.onclose = null;
+      client.close();
+      this.client = null;
+      this.isConnected = false;
     },
 
     processPacket(base64Packet) {

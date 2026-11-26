@@ -173,7 +173,7 @@ export default {
     selectedIps: Array,
   },
 
-  emits: ["prev", "next", "start-analysis"],
+  // Events: prev, next, start-analysis. (No emits option: Vue 2 ignores it.)
 
   computed: {
     overview() {

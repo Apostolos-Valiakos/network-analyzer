@@ -125,6 +125,8 @@ import { saveBlob } from "@/utils/download";
 import { scanResultsToCsv } from "@/utils/scanResults";
 
 const POLL_MS = 30000;
+// Consecutive failed polls before giving up on the scan's results.
+const MAX_POLL_FAILURES = 3;
 
 export default {
   name: "ScanPanel",
@@ -184,9 +186,14 @@ export default {
     },
     poll() {
       clearInterval(this.pollTimer);
+      let failures = 0;
       this.pollTimer = setInterval(async () => {
         try {
           const data = await this.$api.json("/v1/scan/results");
+          if (failures) {
+            failures = 0;
+            this.error = null; // the "(retrying)" message
+          }
           if (data.status === "completed") {
             clearInterval(this.pollTimer);
             this.results = data.results;
@@ -199,7 +206,15 @@ export default {
             this.status = "failed";
           }
         } catch (error) {
-          console.error("Polling error:", error);
+          // Shown, not only logged; a passing network error is retried.
+          failures += 1;
+          if (failures >= MAX_POLL_FAILURES) {
+            clearInterval(this.pollTimer);
+            this.status = "failed";
+            this.error = `Could not get the scan results: ${error.message}`;
+          } else {
+            this.error = `Could not get the scan results (retrying): ${error.message}`;
+          }
         }
       }, POLL_MS);
     },

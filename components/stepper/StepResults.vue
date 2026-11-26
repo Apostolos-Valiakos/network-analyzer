@@ -68,7 +68,7 @@ export default {
     fileType: String,
   },
 
-  emits: ["prev", "restart", "download-pcap", "save-roles"],
+  // Events: prev, restart, download-pcap, save-roles. (No emits option: Vue 2 ignores it.)
 
   data() {
     return { localFileType: this.fileType };
