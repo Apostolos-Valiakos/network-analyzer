@@ -38,15 +38,24 @@ def save_pcap_stream():
     packets = data.get("packets", [])
     is_final = data.get("is_final_chunk", False)
 
-    if not session_id or not isinstance(packets, list):
+    if not session_id or not isinstance(session_id, str) or not isinstance(packets, list):
         return jsonify({"error": "Missing session_id or packets"}), 400
 
-    success, filename, error = handle_pcap_chunk(session_id, packets, is_final)
+    # The session's file is <session_id>.pcap: appending to it is only allowed
+    # for the user whose capture it is, including a file stored under that
+    # name by another route.
+    uid = current_user_id()
+    target_name = f"{os.path.basename(session_id)}.pcap"
+    pcap_record = PcapFile.query.filter_by(original_filename=session_id).first()
+    name_owner = PcapFile.query.filter_by(filename=target_name).first()
+    if any(r is not None and r.user_id != uid for r in (pcap_record, name_owner)):
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    success, filename, error = handle_pcap_chunk(session_id, packets)
     if not success:
         return jsonify({"success": False, "error": error}), 500
 
     try:
-        pcap_record = PcapFile.query.filter_by(original_filename=session_id).first()
         if not pcap_record:
             file_path = os.path.join(PCAP_GEN_OUTPUT_DIR, filename)
             pcap_record = PcapFile(
@@ -55,7 +64,7 @@ def save_pcap_stream():
                 file_path=file_path,
                 status="PROCESSING",
                 source="generated",
-                user_id=current_user_id(),
+                user_id=uid,
             )
             db.session.add(pcap_record)
 
@@ -78,7 +87,7 @@ def save_pcap_stream():
             200,
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception("save_pcap_stream failed")
         db.session.rollback()
         return jsonify({"success": False, "error": "Internal server error"}), 500

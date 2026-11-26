@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PENM API Guide</title>
+<link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="home" href="index.html">&larr; Documentation home</a>
+  <a href="#basics">1. Basics</a>
+  <a href="#auth">2. Logging in</a>
+  <a href="#swagger">3. Interactive docs (/apidocs)</a>
+  <a href="#scripts">4. From scripts</a>
+  <a href="#endpoints">5. Endpoints</a>
+  <a class="sub" href="#ep-monitoring">Monitoring</a>
+  <a class="sub" href="#ep-scan">Nmap scans</a>
+  <a class="sub" href="#ep-analysis">Captures and analysis</a>
+  <a class="sub" href="#ep-other">History, users, internal</a>
+  <a href="#live">6. Live events (Socket.IO)</a>
+  <a href="#conventions">7. Formats, warnings, limits</a>
+  <a href="#errors">8. Errors</a>
+</nav>
+<main>
+<header class="doc-head">
+  <p class="eyebrow">API Guide</p>
+  <h1>Using the PENM API</h1>
+  <p class="lede">For partners and developers who call PENM from scripts or tools. The interactive documentation at <code>/apidocs</code> on your server has every parameter and response schema; this guide explains how to use it.</p>
+</header>
+
+<h2 id="basics">1. Basics</h2>
+<table>
+  <tr><td>Base URL</td><td><code>http://&lt;server-ip&gt;:5555</code> (your administrator gives you the address and, if needed, VPN access)</td></tr>
+  <tr><td>Interactive docs</td><td><code>http://&lt;server-ip&gt;:5555/apidocs</code>, open without login</td></tr>
+  <tr><td>Authentication</td><td>A login token in the <code>Authorization: Bearer &lt;token&gt;</code> header. Tokens last 8 hours</td></tr>
+  <tr><td>Accounts</td><td>Created by a PENM administrator. Keep your password and tokens out of shared scripts and repositories</td></tr>
+</table>
+
+<h2 id="auth">2. Logging in</h2>
+<pre><code>curl -s -X POST http://&lt;server-ip&gt;:5555/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username": "YOUR_USERNAME", "password": "YOUR_PASSWORD"}'
+<span class="c"># → {"access_token": "eyJhbGciOi...", "is_admin": false}</span></code></pre>
+<p>At most 10 login attempts per minute. A token can also be copied from the web application: after logging in, the browser's developer tools (F12) show it under <em>Application → Local Storage → auth_token</em>.</p>
+
+<h2 id="swagger">3. Interactive docs (/apidocs)</h2>
+<ol class="steps">
+  <li>Open <code>/apidocs</code> and click <em>Authorize</em>.</li>
+  <li>In <em>Value</em>, enter the word <code>Bearer</code>, one space, then the token: <code>Bearer eyJhbGciOi…</code>. The word is required.</li>
+  <li>Click <em>Authorize</em> inside the dialog, then <em>Close</em>. The padlocks close.</li>
+  <li>Expand an endpoint, <em>Try it out</em>, fill in the parameters, <em>Execute</em>. The curl command shown must contain <code>-H "Authorization: Bearer …"</code>.</li>
+</ol>
+<p>Reloading the page forgets the authorization; authorize again.</p>
+
+<h2 id="scripts">4. From scripts</h2>
+<pre><code>TOKEN=eyJhbGciOi...
+curl -s -H "Authorization: Bearer $TOKEN" "http://&lt;server-ip&gt;:5555/v1/network/statistics?format=json&amp;limit=100"</code></pre>
+<pre><code>import getpass, requests
+
+BASE = "http://&lt;server-ip&gt;:5555"
+login = requests.post(f"{BASE}/auth/login", timeout=10, json={
+    "username": "YOUR_USERNAME", "password": getpass.getpass("PENM password: ")})
+login.raise_for_status()
+headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+flows = requests.get(f"{BASE}/v1/network/statistics", headers=headers, timeout=30,
+                     params={"format": "json", "limit": 100}).json()</code></pre>
+
+<h2 id="endpoints">5. Endpoints</h2>
+<p>All need a login token unless stated otherwise. Times are Unix timestamps in seconds (UTC); <code>format</code> is <code>json</code> or <code>csv</code> (default <code>csv</code>).</p>
+
+<h3 id="ep-monitoring">Continuous monitoring</h3>
+<table>
+  <tr><th>Endpoint</th><th>Returns</th><th>Parameters</th></tr>
+  <tr><td><code>GET /v1/network/statistics</code></td><td>Flow records (Zeek fields: <code>ts</code>, <code>id.orig_h</code>, <code>proto</code>, bytes, packets, connection state…), newest first</td><td><code>start_time</code> (default 0), <code>end_time</code> (default now), <code>limit</code> 1–10000 (default 1000), <code>format</code></td></tr>
+  <tr><td><code>GET /v1/network/export</code></td><td>The same flows for bulk export, as a download</td><td><code>start_time</code>, <code>end_time</code>, <code>limit</code> (omit for all), <code>format</code></td></tr>
+  <tr><td><code>GET /v1/network/roles/latest</code></td><td>The latest live role snapshot: one row per IP with role, confidence, reasoning and <code>source</code>. Two sources: <code>pcap</code> (the backend analyses the sensor's latest slice, every 5 minutes by default) and <code>dpi</code> (the sensor's live DPI, every minute). Without <code>source</code>, the DPI snapshot while it is no older than 3 minutes, otherwise the pcap one</td><td><code>limit</code>, <code>format</code>, <code>source</code></td></tr>
+  <tr><td><code>GET /v1/network/pcap/latest/full</code></td><td>The sensor's most recent capture file, full payloads (<code>.pcap</code>), up to about an hour of traffic</td><td>—</td></tr>
+  <tr><td><code>GET /v1/network/pcap/headers</code></td><td>The traffic in a time window, packet headers only</td><td><code>start_time</code>, <code>end_time</code> (required)</td></tr>
+  <tr><td><code>POST /v1/analyze_live</code></td><td>Role analysis of the latest live snapshot (5 per minute)</td><td>—</td></tr>
+</table>
+<p>Captures are only kept for a limited time on the sensor (typically 6–24 hours). Example, the last 10 minutes:</p>
+<pre><code>END=$(date +%s); START=$((END - 600))
+curl -s -H "Authorization: Bearer $TOKEN" -o last10min.pcap \
+     "http://&lt;server-ip&gt;:5555/v1/network/pcap/headers?start_time=$START&amp;end_time=$END"</code></pre>
+
+<h3 id="ep-scan">Nmap scans</h3>
+<table>
+  <tr><th>Endpoint</th><th>Notes</th></tr>
+  <tr><td><code>POST /v1/scan/start</code></td><td>Body: exactly one of <code>"target"</code> (address, range or host name) or <code>"targets"</code> (list of addresses), and <code>"profile"</code>: <code>fast</code> (100 common ports), <code>deep</code> (service versions) or <code>vuln</code> (versions + known vulnerabilities, slowest). 202 when accepted; 5 per minute</td></tr>
+  <tr><td><code>GET /v1/scan/results</code></td><td><code>status</code>: <code>running</code> (poll again in ~5 s), <code>completed</code> (<code>results</code> included), <code>error</code> (see <code>message</code>), <code>idle</code></td></tr>
+</table>
+<pre><code>curl -s -X POST http://&lt;server-ip&gt;:5555/v1/scan/start -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" -d '{"target": "&lt;address&gt;", "profile": "fast"}'
+curl -s -H "Authorization: Bearer $TOKEN" http://&lt;server-ip&gt;:5555/v1/scan/results</code></pre>
+<div class="warn"><p>Only scan networks you are authorised to test. There is one scan slot for all users: a new scan replaces the previous results.</p></div>
+
+<h3 id="ep-analysis">Captures and analysis</h3>
+<table>
+  <tr><th>Endpoint</th><th>Notes</th></tr>
+  <tr><td><code>POST /automated-analysis</code></td><td>Upload a <code>.pcap</code> (multipart field <code>file</code>): stores it and returns packet count, graph, roles and privacy records. 5 per minute</td></tr>
+  <tr><td><code>GET /analyze-saved-pcap/{filename}</code></td><td>Packet count, conversation graph and per-IP protocol stacks (e.g. <code>sctp:ngap:nas-5gs</code>) of a stored capture</td></tr>
+  <tr><td><code>POST /run_pipeline</code></td><td>Role assessment of a stored capture, with confidence and reasoning; optional <code>selected_ips</code>. 10 per minute</td></tr>
+  <tr><td><code>GET /save_roles?file=&amp;type=json|csv</code></td><td>Role summary download</td></tr>
+  <tr><td><code>GET /suggested_clusters?file=</code>, <code>POST /clustering</code></td><td>Suggested cluster count; agglomerative clustering with anomaly flags (10 per minute)</td></tr>
+  <tr><td><code>POST /save-results</code>, <code>GET /clustering-output/{filename}</code></td><td>Save and download clustering results</td></tr>
+  <tr><td><code>GET /privacy-records/{filename}</code>, <code>POST /privacy-metrics</code></td><td>Per-host privacy records; privacy metrics with optional anonymisation</td></tr>
+  <tr><td><code>POST /save-pcap</code>, <code>GET /generated_pcaps/{filename}</code></td><td>Upload base64 packets in chunks to build a capture (30 per minute); download a capture</td></tr>
+  <tr><td><code>POST /start-analysis-from-websocket</code></td><td>The server captures from a sensor's packet stream for <code>seconds</code> (1–3600), saves the capture for you and analyses it. 202 at once; the outcome arrives on that WebSocket and in History</td></tr>
+</table>
+<p>You can only access your own files; admins can access all.</p>
+
+<h3 id="ep-other">History, users, internal</h3>
+<table>
+  <tr><td><code>GET /v1/history/pcaps</code>, <code>/generated</code>, <code>/clusters</code></td><td>Your uploads, generated captures, clustering results</td></tr>
+  <tr><td><code>GET /v1/history/pcap/{id}/result</code>, <code>/cluster/{id}/result</code></td><td>Stored result</td></tr>
+  <tr><td><code>POST /v1/history/pcap/{id}/reanalyze</code>, <code>DELETE /v1/history/pcap/{id}</code>, <code>DELETE /v1/history/cluster/{id}</code></td><td>Re-run (5 per minute) and delete</td></tr>
+  <tr><td><code>GET /auth/users</code>, <code>POST /auth/register</code>, <code>DELETE /auth/users/{id}</code></td><td>Admins only</td></tr>
+  <tr><td><code>POST /v1/ingest/zeek</code></td><td>Internal: the sensor posts flows with the <code>X-Internal-Token</code> header, not a login token</td></tr>
+  <tr><td><code>POST /v1/ingest/dpi</code></td><td>Internal: the sensor's live DPI agent posts one window of role evidence (no subscriber data), with the same header</td></tr>
+  <tr><td><code>POST /v1/ingest/hubble</code></td><td>Internal: the sensor's Hubble agent (or, without Hubble, its Kubernetes API agent with <code>"source": "k8s-api"</code>) posts which pod or Service owned which IP, and flows per minute, with the same header</td></tr>
+</table>
+
+<h2 id="live">6. Live events (Socket.IO)</h2>
+<p>The backend pushes events over Socket.IO at the base URL:</p>
+<table>
+  <tr><th>Event</th><th>Payload</th></tr>
+  <tr><td><code>new_network_data</code></td><td>Each batch of new flow records, as soon as the sensor sends it</td></tr>
+  <tr><td><code>network_alert</code></td><td><code>{level, title, message}</code> for a single flow over 5 MB ("Massive Data Transfer"), over 5,000 packets ("Packet Flood Detected") or rejected ("Connection Rejected")</td></tr>
+</table>
+
+<h2 id="conventions">7. Formats, warnings, limits</h2>
+<ul>
+  <li><strong>Timestamps:</strong> Unix seconds, UTC.</li>
+  <li><strong>Partial results:</strong> when part of a request fails but the rest succeeds, the response is still 200 and carries <code>"warnings": [ … ]</code> with readable messages. The key is absent when nothing went wrong.</li>
+  <li><strong>Rate limits:</strong> per client address, as listed above; over the limit you get 429.</li>
+  <li><strong>Unused parameters:</strong> <code>model_name</code> is accepted and ignored; roles always come from the rule engine.</li>
+</ul>
+
+<h2 id="errors">8. Errors</h2>
+<table>
+  <tr><th>Response</th><th>Meaning</th></tr>
+  <tr><td>401 "Missing Authorization Header"</td><td>No token sent (in <code>/apidocs</code>: not authorized, or the page was reloaded)</td></tr>
+  <tr><td>401 "Missing 'Bearer' type …"</td><td>The word <code>Bearer </code> is missing before the token</td></tr>
+  <tr><td>401 "Token has expired"</td><td>Log in again (tokens last 8 hours)</td></tr>
+  <tr><td>403 / 404</td><td>Not your file, or no such file</td></tr>
+  <tr><td>400</td><td>A parameter is missing or invalid; the message says which</td></tr>
+  <tr><td>429</td><td>Rate limit reached; wait a minute</td></tr>
+  <tr><td>500</td><td>Server error; details are in the server log</td></tr>
+  <tr><td>502 / 503 / 504</td><td>The capture sensor did not answer, cannot be reached, or timed out</td></tr>
+</table>
+
+<footer class="doc-foot">Part of the PENM documentation. Supersedes the API deliverable (in <code>docs/archive/</code>) and the README's endpoint table. Updated 24 November 2026.</footer>
+</main>
+</div>
+</body>
+</html>

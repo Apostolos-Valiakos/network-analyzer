@@ -25,7 +25,9 @@ parameters:
       properties:
         filename:
           type: string
-          description: Base filename to save the results under (extension is added automatically).
+          description: >
+            Base filename to save the results under (an extension is replaced by .csv / .json).
+            Must be a plain file name: a path, "..", or a name starting with "." is rejected with 400.
           example: "cluster_42"
         results:
           type: array
@@ -55,13 +57,21 @@ responses:
           description: Relative URL — GET this to retrieve the file via /clustering-output/{filename}.
           example: "/clustering-output/cluster_42.json"
   400:
-    description: Missing "filename" in the request body.
+    description: Missing "filename" in the request body, or a filename that is not a plain file name ("Invalid filename").
     schema:
       type: object
       properties:
         error:
           type: string
           example: "Missing filename"
+  409:
+    description: A saved result with this name belongs to another user; nothing is written.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "A result with this name belongs to another user"
   500:
     description: Server error while writing the files or updating the database.
     schema:

@@ -29,15 +29,28 @@ export default {
       deep: true,
     },
   },
+  data() {
+    return { chart: null };
+  },
   mounted() {
     this.renderChart();
+    window.addEventListener("resize", this.resizeChart);
+  },
+  beforeDestroy() {
+    window.removeEventListener("resize", this.resizeChart);
+    if (this.chart) this.chart.dispose();
+    this.chart = null;
   },
   methods: {
+    resizeChart() {
+      if (this.chart) this.chart.resize();
+    },
     renderChart() {
       if (!this.chartData || !this.chartData.length) return;
 
-      const chartDom = this.$refs.chartContainer;
-      const chart = echarts.init(chartDom);
+      // One chart per component: re-renders reuse it.
+      if (!this.chart) this.chart = echarts.init(this.$refs.chartContainer);
+      const chart = this.chart;
 
       const option = {
         title: {
@@ -73,11 +86,6 @@ export default {
       };
 
       chart.setOption(option);
-
-      // Resize chart when window resizes
-      window.addEventListener("resize", () => {
-        chart.resize();
-      });
     },
   },
 };

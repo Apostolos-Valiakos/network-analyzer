@@ -4,6 +4,8 @@ summary: Privacy metrics with optional anonymisation transforms
 description: Applies pseudonymisation, generalisation and suppression to the records, then returns k-anonymity, l-diversity, t-closeness, re-identification risk, PPI and utility loss.
 consumes:
   - application/json
+security:
+  - Bearer: []
 parameters:
   - name: body
     in: body

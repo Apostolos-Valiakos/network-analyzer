@@ -51,6 +51,8 @@ spec:
         xtrust6g-node: penm
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet   # resolve Service names despite hostNetwork
+      # sensor-rbac.yaml: read-only pod/Service lists for k8s_api_agent.py
+      serviceAccountName: penm-sensor
       containers:
         - name: sensor
           image: penm-sensor:local
@@ -64,16 +66,36 @@ spec:
             - name: EXCLUDE_DNS
               value: penm-capture-exclude.team-penm.svc.cluster.local
             # Kubernetes control plane (6443, 2379-2380, 10250, 10257, 10259),
-            # Cilium health/Hubble (4240, 4244), SSH (22) and PENM's own
+            # Cilium health/Hubble (4240, 4244, Relay 4245), SSH (22) and PENM's own
             # NodePorts and sensor ports.
             - name: EXCLUDE_PORTS
-              value: "6443 2379 2380 10250 10257 10259 4240 4244 22 30080 30555 5005 5002"
+              value: "6443 2379 2380 10250 10257 10259 4240 4244 4245 22 30080 30555 5005 5002"
             - name: RETENTION_MINUTES
               value: "1440"
             - name: RING_SECONDS
               value: "3600"
             - name: ENABLE_PUBLISHER
               value: "true"
+            # Live DPI (dpi_agent.py): role evidence every window to
+            # /v1/ingest/dpi, derived from HOST_API_URL.
+            - name: DPI_ENABLED
+              value: "true"
+            - name: DPI_WINDOW_SECONDS
+              value: "60"
+            # Pod identities from Hubble Relay (hubble_agent.py) to
+            # /v1/ingest/hubble. The Relay's Service address is excluded
+            # from the capture automatically.
+            - name: HUBBLE_ENABLED
+              value: "true"
+            - name: HUBBLE_SERVER
+              value: hubble-relay.kube-system.svc.cluster.local:80
+            # Pod identities from the Kubernetes API (k8s_api_agent.py), the
+            # fallback for clusters without a reachable Hubble Relay. Runs
+            # alongside Hubble here; needs sensor-rbac.yaml in each namespace.
+            - name: K8S_API_ENABLED
+              value: "true"
+            - name: K8S_NAMESPACES
+              value: team-5g
             - name: HOST_API_URL
               value: http://penm-backend.team-penm.svc.cluster.local:5555/v1/ingest/zeek
             - name: SECRET_TOKEN

@@ -103,6 +103,7 @@ import DeleteDialog from "@/components/history/DeleteDialog.vue";
 import HistoryTable from "@/components/history/HistoryTable.vue";
 import ResultDialog from "@/components/history/ResultDialog.vue";
 import { clusterHeaders, pcapHeaders } from "@/utils/history";
+import { saveResponse } from '@/utils/download'
 
 export default {
   components: { DeleteDialog, HistoryTable, ResultDialog },
@@ -297,19 +298,9 @@ export default {
 
     async downloadPcap(filename) {
       try {
-        const r = await this.$apiFetch(this.$api.url(`/generated_pcaps/${filename}`))
-        if (!r.ok) throw new Error('Download failed')
-        const blob = await r.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      } catch {
-        this.toast('Download failed', 'error')
+        await saveResponse(await this.$apiFetch(this.$api.url(`/generated_pcaps/${filename}`)), filename)
+      } catch (e) {
+        this.toast(e.message, 'error')
       }
     },
 

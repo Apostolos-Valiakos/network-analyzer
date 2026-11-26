@@ -3,7 +3,7 @@ import logging
 import os
 import struct
 import time
-from typing import List, Union
+from typing import List
 
 import settings
 
@@ -33,9 +33,10 @@ def _pcap_packet_header(pkt_len: int) -> bytes:
     return struct.pack("<IIII", ts_sec, ts_usec, pkt_len, pkt_len)
 
 
-def handle_pcap_chunk(
-    session_id: str, packets: List[str], is_final_chunk: bool = False
-):
+def handle_pcap_chunk(session_id: str, packets: List[str]):
+    """Appends `packets` (base64 frames) to <session_id>.pcap, creating it with
+    a pcap header first. Whether this is the last chunk only matters to the
+    caller, which marks the record complete."""
     if not session_id:
         return False, None, "Missing session_id"
 
@@ -61,23 +62,6 @@ def handle_pcap_chunk(
                 f.write(pkt_bytes)
         return True, safe_filename, None
     except Exception as e:
+        logger.exception("Writing chunk to %s failed", file_path)
         return False, None, str(e)
 
-
-##
-# Legacy function - Kept for backward compatibility if needed,
-# but rewritten to be safer.
-def save_pcap_data(raw_binary_data):
-    try:
-        # Use a simpler naming convention
-        import uuid
-
-        filename = f"capture_{uuid.uuid4().hex[:8]}.pcap"
-        file_path = os.path.join(PCAP_OUTPUT_DIR, filename)
-
-        with open(file_path, "wb") as f:
-            f.write(raw_binary_data)
-
-        return True, "File saved successfully", filename
-    except Exception as e:
-        return False, str(e), None

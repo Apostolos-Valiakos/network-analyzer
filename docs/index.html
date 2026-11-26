@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PENM Documentation</title>
+<link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="home" href="#top">PENM documentation</a>
+  <a href="#guides">Guides</a>
+  <a href="#find">Find a topic</a>
+  <a href="#local">Site-specific (local)</a>
+  <a href="#archive">Older documents</a>
+</nav>
+<main id="top">
+<header class="doc-head">
+  <p class="eyebrow">Privacy Enhanced Network Monitor · University of Thessaly · XTRUST-6G</p>
+  <h1>PENM documentation</h1>
+  <p class="lede">Start here. Pick the guide for what you want to do; each one is complete on its own and links to the others where they meet.</p>
+</header>
+
+<h2 id="guides">Guides</h2>
+<div class="cards">
+  <a class="card" href="deployment.html"><span class="who">Administrators</span><h3>Deployment Guide</h3><p>Install with Docker, configure, run the capture sensor, update and roll back, back up, troubleshoot.</p></a>
+  <a class="card" href="user-guide.html"><span class="who">Analysts, operators</span><h3>User Guide</h3><p>Every page of the web application: analysis, history, clustering, real-time capture, monitoring, scans, users.</p></a>
+  <a class="card" href="api-guide.html"><span class="who">Partners, integrators</span><h3>API Guide</h3><p>Logging in, the interactive docs at <code>/apidocs</code>, every endpoint, live events, errors and limits.</p></a>
+  <a class="card" href="developer-guide.html"><span class="who">Developers</span><h3>Developer Guide</h3><p>Code layout, local setup, architecture, conventions, tests, database changes, building images.</p></a>
+</div>
+
+<h2 id="find">Find a topic</h2>
+<table>
+  <tr><th>Topic</th><th>Where</th></tr>
+  <tr><td>Install PENM on a server</td><td><a href="deployment.html#configure">Deployment Guide §4–5</a></td></tr>
+  <tr><td>All <code>.env</code> settings</td><td><a href="deployment.html#env">Deployment Guide, settings reference</a></td></tr>
+  <tr><td>Set up the capture sensor</td><td><a href="deployment.html#sensor">Deployment Guide §6</a></td></tr>
+  <tr><td>Update a running server, roll back</td><td><a href="deployment.html#update">Deployment Guide §8</a></td></tr>
+  <tr><td>Kubernetes testbed</td><td><a href="deployment.html#kubernetes">Deployment Guide §10</a> and the local testbed guide</td></tr>
+  <tr><td>Something does not work</td><td><a href="deployment.html#trouble">Deployment</a> or <a href="user-guide.html#problems">User</a> troubleshooting, <a href="api-guide.html#errors">API errors</a></td></tr>
+  <tr><td>Analyse a capture, read the roles</td><td><a href="user-guide.html#analyze">User Guide §2</a>, <a href="user-guide.html#roles">§8</a></td></tr>
+  <tr><td>Live monitoring, pcap downloads, Nmap scans</td><td><a href="user-guide.html#monitoring">User Guide §6</a>, <a href="api-guide.html#ep-monitoring">API Guide §5</a></td></tr>
+  <tr><td>Use the API from a script; "Missing Authorization Header"</td><td><a href="api-guide.html#scripts">API Guide §4</a>, <a href="api-guide.html#swagger">§3</a></td></tr>
+  <tr><td>Run tests, record snapshots</td><td><a href="developer-guide.html#tests">Developer Guide §7</a></td></tr>
+  <tr><td>Change the database schema</td><td><a href="developer-guide.html#schema">Developer Guide §8</a></td></tr>
+  <tr><td>Connect to R13 / XTRUST-6G</td><td>Local R13 Integration guide (below)</td></tr>
+</table>
+<p>Every endpoint's parameters and response formats are also on the running server at <code>http://&lt;server-ip&gt;:5555/apidocs</code>. Contributors' rules in short: <code>CLAUDE.md</code> in the repository root.</p>
+
+<h2 id="local">Site-specific (local)</h2>
+<p>These contain real addresses, partner details or internal notes, so they are kept in <code>docs/local/</code> and are <strong>not in git</strong> (the repository is public). They open only on a machine that has them:</p>
+<div class="cards">
+  <a class="card" href="local/site-notes.html"><span class="who">Our team</span><h3>Site notes</h3><p>Our servers, addresses, folders and release files; the values behind the guides' placeholders.</p></a>
+  <a class="card" href="local/kubernetes-testbed.html"><span class="who">Testbed</span><h3>Kubernetes testbed guide</h3><p>Step by step: node, cluster, Cilium, Open5GS, srsRAN, FlexRIC, PENM, the TRB500.</p></a>
+  <a class="card" href="local/r13-integration.html"><span class="who">XTRUST-6G</span><h3>R13 Integration</h3><p>Registering a PENM node with the C-XDR Cluster Manager: PKI, TLS/OCSP, alerts, control over SSH.</p></a>
+  <a class="card" href="local/architecture-review.html"><span class="who">Developers</span><h3>Architecture review</h3><p>The 2026 refactoring: findings, phases, measurements and what changed.</p></a>
+</div>
+
+<h2 id="archive">Older documents</h2>
+<p>Replaced documents are in <code>docs/archive/</code> (local, not in git), each marked "Superseded":</p>
+<table>
+  <tr><th>Old document</th><th>Replaced by</th></tr>
+  <tr><td>Installation Guide (EN, EL, bilingual), <code>DOCKER_SETUP.md</code>, Sensor IP Setup Guide</td><td><a href="deployment.html">Deployment Guide</a></td></tr>
+  <tr><td>User Manual (EN, EL, bilingual)</td><td><a href="user-guide.html">User Guide</a></td></tr>
+  <tr><td>Operator Guide (setup, usage, R13)</td><td>Deployment Guide, User Guide, local R13 Integration</td></tr>
+  <tr><td>API deliverable (<code>api_profiling_probing.html</code>), README endpoint table</td><td><a href="api-guide.html">API Guide</a></td></tr>
+  <tr><td>Unit test report (June)</td><td><a href="developer-guide.html#tests">Developer Guide §7</a></td></tr>
+</table>
+
+<footer class="doc-foot">PENM documentation hub. Updated 24 November 2026.</footer>
+</main>
+</div>
+</body>
+</html>

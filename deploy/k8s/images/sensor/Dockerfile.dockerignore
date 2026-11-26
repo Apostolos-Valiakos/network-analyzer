@@ -5,6 +5,7 @@
 !Host Files/
 !deploy/k8s/images/sensor/entrypoint.sh
 !server/pcap_repair.py
+!server/role_evidence.py
 
 # Captures, logs and caches from local sensor runs never go into the image.
 Host Files/generated_pcaps

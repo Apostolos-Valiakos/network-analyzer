@@ -95,16 +95,23 @@
           </div>
         </template>
       </v-data-table>
+
+      <RoleDetailsTable
+        v-if="results.ip_role_details"
+        :details="results.ip_role_details"
+        class="mt-6"
+      />
     </template>
   </v-card>
 </template>
 
 <script>
 import PieChart from "@/components/PieChart.vue";
+import RoleDetailsTable from "@/components/RoleDetailsTable.vue";
 
 export default {
   name: "LiveAnalysisPanel",
-  components: { PieChart },
+  components: { PieChart, RoleDetailsTable },
   data() {
     return {
       loading: false,

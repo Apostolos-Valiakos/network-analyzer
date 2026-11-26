@@ -85,9 +85,19 @@ echo -e "\n[*] Starting Zeek Agent..."
 python3 zeek_agent.py &
 AGENT_PID=$!
 
+# Live DPI (role evidence to /v1/ingest/dpi): DPI_ENABLED=true ./start_sensor.sh eth0
+# Needs tshark and permission to capture (like dumpcap above).
+DPI_PID=""
+if [ "${DPI_ENABLED:-false}" = "true" ]; then
+    echo -e "\n[*] Starting DPI Agent... (log: dpi_agent.log)"
+    CAPTURE_INTERFACE="$INTERFACE" CAPTURE_EXCLUDE="$FILTER" \
+        python3 dpi_agent.py > dpi_agent.log 2>&1 &
+    DPI_PID=$!
+fi
+
 echo -e "\n------------------------------------------------"
 echo -e "\nSensor is active! Press [CTRL+C] to stop."
 echo -e "\n------------------------------------------------"
 
-trap "echo -e '\n🛑 Shutting down sensor...'; sudo kill $DUMPCAP_PID $ZEEK_PID $PCAP_PID $AGENT_PID; exit" SIGINT SIGTERM
+trap "echo -e '\n🛑 Shutting down sensor...'; sudo kill $DUMPCAP_PID $ZEEK_PID $PCAP_PID $AGENT_PID $DPI_PID; exit" SIGINT SIGTERM
 wait

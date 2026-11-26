@@ -181,6 +181,57 @@ class TestGetPcapResult:
         assert res.status_code == 403
 
 
+class TestPcapResultWithPods:
+    """With Hubble data, the stored result gains role_details: the role
+    cache's roles with the pods behind them over the capture's time span."""
+
+    def _setup(self, app, pcap_in_db, pod_start_offset=0.0):
+        import role_fusion
+        from models import IpRole, PodIpSighting, utc_from_timestamp
+
+        span = role_fusion.capture_span(pcap_in_db["path"])
+        with app.app_context():
+            rec = _db.session.get(PcapFile, pcap_in_db["id"])
+            rec.analysis_result = {"total_packets": 58, "graph": {}, "roles": {"192.168.100.21": "AMF"}}
+            _db.session.add(IpRole(pcap_id=rec.id, ip_address="192.168.100.21", role="AMF",
+                                  confidence=0.95, reasoning="NGAP", engine_version="x"))
+            _db.session.add(PodIpSighting(
+                ip="192.168.100.21", namespace="team-5g", pod="open5gs-amf-0",
+                labels={"app": "open5gs-amf"},
+                first_seen=utc_from_timestamp(span[0] + pod_start_offset),
+                last_seen=utc_from_timestamp(span[1] + pod_start_offset)))
+            _db.session.commit()
+
+    @pytest.mark.integration
+    def test_role_details_carry_the_pod(self, client, app, pcap_in_db, admin_headers):
+        self._setup(app, pcap_in_db)
+        data = client.get(f"/v1/history/pcap/{pcap_in_db['id']}/result", headers=admin_headers).get_json()
+        amf = data["role_details"]["192.168.100.21"]
+        assert amf["k8s"]["pod"] == "open5gs-amf-0"
+        assert amf["confidence"] == 0.99
+        assert data["roles"] == {"192.168.100.21": "AMF"}  # stored result unchanged
+
+    @pytest.mark.integration
+    def test_no_pod_in_the_capture_time_leaves_the_result_unchanged(
+        self, client, app, pcap_in_db, admin_headers
+    ):
+        self._setup(app, pcap_in_db, pod_start_offset=10 * 86400)
+        data = client.get(f"/v1/history/pcap/{pcap_in_db['id']}/result", headers=admin_headers).get_json()
+        assert "role_details" not in data and "warnings" not in data
+
+    def test_a_failure_is_a_warning(self, client, app, pcap_in_db, admin_headers, monkeypatch):
+        import blueprints.history as history
+
+        self._setup(app, pcap_in_db)
+
+        def boom(record, warnings):
+            raise RuntimeError("db down")
+        monkeypatch.setattr(history, "_role_details_with_pods", boom)
+        data = client.get(f"/v1/history/pcap/{pcap_in_db['id']}/result", headers=admin_headers).get_json()
+        assert "role_details" not in data
+        assert data["warnings"] == ["Kubernetes pod information could not be added to this result."]
+
+
 # ── GET /v1/history/cluster/<id>/result ──────────────────────────────────────
 
 

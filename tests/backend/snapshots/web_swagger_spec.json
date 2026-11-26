@@ -606,7 +606,7 @@
       },
       "/clustering-output/{filename}": {
         "get": {
-          "description": "Downloads a clustering output file (CSV or JSON, as saved by POST /save-results) by its exact stored filename. Ownership is checked against the caller's JWT identity via the ClusterResult row.\n",
+          "description": "Downloads a clustering output file (CSV or JSON, as saved by POST /save-results) by its exact stored filename. Ownership is checked against the caller's JWT identity via the ClusterResult row; admins can download any user's result.\n",
           "parameters": [
             {
               "description": "The name of the file to retrieve, exactly as returned in \"download_url\" by POST /save-results.",
@@ -626,7 +626,7 @@
               "description": "The requested file's raw content (JSON or CSV, per its extension)."
             },
             "403": {
-              "description": "The file exists but was saved by a different user.",
+              "description": "The file exists but was saved by a different user (and the caller is not an admin).",
               "schema": {
                 "properties": {
                   "error": {
@@ -812,6 +812,11 @@
               "description": "Invalid input."
             }
           },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
           "summary": "Privacy metrics with optional anonymisation transforms",
           "tags": [
             "Privacy"
@@ -848,6 +853,11 @@
               "description": "tshark failed."
             }
           },
+          "security": [
+            {
+              "Bearer": []
+            }
+          ],
           "summary": "Per-host privacy records",
           "tags": [
             "Privacy"
@@ -911,6 +921,10 @@
                         "confidence": {
                           "example": 0.95,
                           "type": "number"
+                        },
+                        "k8s": {
+                          "description": "Only when Hubble data covers the capture's time span: the pod or Service behind the IP (namespace, pod, workload, workload_kind, service, node), and its hint — \"hint_role\", \"suggested_role\" for an Unidentified IP, \"k8s_mismatch\" when the pod suggests another role. An agreeing pod raises confidence by 0.10 (at most 0.99). Same object as in GET /v1/network/roles/latest.\n",
+                          "type": "object"
                         },
                         "reasoning": {
                           "example": "E2AP control-plane traffic observed as the RIC side of the association (SCTP dst 36422).",
@@ -1135,6 +1149,22 @@
                 "type": "object"
               }
             },
+            "403": {
+              "description": "The session (or a stored capture named \"<session_id>.pcap\") belongs to another user; nothing is written.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  },
+                  "success": {
+                    "example": false,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
             "500": {
               "description": "Failed to write the chunk to disk, or a database error while updating the PcapFile record.",
               "schema": {
@@ -1177,7 +1207,7 @@
               "schema": {
                 "properties": {
                   "filename": {
-                    "description": "Base filename to save the results under (extension is added automatically).",
+                    "description": "Base filename to save the results under (an extension is replaced by .csv / .json). Must be a plain file name: a path, \"..\", or a name starting with \".\" is rejected with 400.\n",
                     "example": "cluster_42",
                     "type": "string"
                   },
@@ -1233,11 +1263,23 @@
               }
             },
             "400": {
-              "description": "Missing \"filename\" in the request body.",
+              "description": "Missing \"filename\" in the request body, or a filename that is not a plain file name (\"Invalid filename\").",
               "schema": {
                 "properties": {
                   "error": {
                     "example": "Missing filename",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "409": {
+              "description": "A saved result with this name belongs to another user; nothing is written.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "A result with this name belongs to another user",
                     "type": "string"
                   }
                 },
@@ -1599,6 +1641,399 @@
           "summary": "Get Suggested Clustering Parameters",
           "tags": [
             "Clustering"
+          ]
+        }
+      },
+      "/v1/ingest/dpi": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Receives one window of role evidence from the Sensor's dpi_agent.py (internal-token auth, not JWT). The agent decodes the 5G protocols live with tshark and sends what the role engine's first stage learned in the window: per-IP counters, served SBI APIs, GTP-U flows and the identities nodes state about themselves (NRF profile type, NG/E2 Setup names, PFCP Node ID). No subscriber identifiers and no payloads.\nThe backend stores the window (a window_id it already has is ignored), keeps the stated identities for LIVE_ROLE_IDENTITY_HOURS (default 24), merges the windows of the last LIVE_ROLE_WINDOW_MINUTES (default 15), and stores the resulting roles as a role snapshot with source \"dpi\" and ts = window_end, served by GET /v1/network/roles/latest. Windows, identities and snapshots are deleted after SNAPSHOT_RETENTION_HOURS (default 168).\nExempt from the global rate limiter (continuous ingest traffic).\n",
+          "parameters": [
+            {
+              "description": "Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.",
+              "in": "header",
+              "name": "X-Internal-Token",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "example": {
+                  "observations": {
+                    "e2t_clients": [],
+                    "evidence": {
+                      "10.0.0.5": {
+                        "amf_names": [
+                          "open5gs-amf0"
+                        ],
+                        "ngap_amf_side": 12,
+                        "peers": [
+                          "10.0.0.2"
+                        ],
+                        "protocols": [
+                          "ngap",
+                          "sctp"
+                        ],
+                        "seen_as_outer": true,
+                        "total_pkts": 12
+                      }
+                    },
+                    "format": 1,
+                    "gtpu_flows": [],
+                    "redis_clients": [],
+                    "warnings": []
+                  },
+                  "window_end": 1789111200,
+                  "window_id": "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596",
+                  "window_start": 1789111140
+                },
+                "properties": {
+                  "observations": {
+                    "description": "role_evidence.PcapObservations.to_dict() output: \"format\" (1), \"evidence\" (per-IP counters and sets), \"gtpu_flows\", \"redis_clients\", \"e2t_clients\" and \"warnings\".\n",
+                    "type": "object"
+                  },
+                  "window_end": {
+                    "description": "Window end (Unix epoch seconds), after window_start by at most 3600 s.",
+                    "example": 1789111200,
+                    "type": "number"
+                  },
+                  "window_id": {
+                    "description": "Unique per window (1-64 characters), chosen by the agent so a re-sent window is recognised.",
+                    "example": "5f0c8d3e9b1a4c27a1f0e6d2c3b4a596",
+                    "type": "string"
+                  },
+                  "window_start": {
+                    "description": "Window start (Unix epoch seconds).",
+                    "example": 1789111140,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "window_id",
+                  "window_start",
+                  "window_end",
+                  "observations"
+                ],
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Window stored and a snapshot written, or the window was already stored.",
+              "schema": {
+                "properties": {
+                  "roles": {
+                    "description": "Only for \"success\" — number of IPs in the snapshot.",
+                    "example": 14,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "enum": [
+                      "success",
+                      "duplicate"
+                    ],
+                    "example": "success",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "The body is not a usable window (missing or wrong fields, an evidence format this backend cannot read).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "window_end must be after window_start, by at most 3600 s",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not configured on the backend (then every request is refused).\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Unauthorized",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Database error. Nothing from the request is stored.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "summary": "Ingest a Live DPI Window",
+          "tags": [
+            "Continuous Monitoring"
+          ]
+        }
+      },
+      "/v1/ingest/hubble": {
+        "post": {
+          "consumes": [
+            "application/json"
+          ],
+          "description": "Receives a batch from the Sensor's hubble_agent.py, or from k8s_api_agent.py where Hubble Relay cannot be reached (internal-token auth, not JWT). The agent reads flows from Cilium's Hubble Relay and sends, every HUBBLE_INTERVAL_SECONDS (default 60), which pod owned which IP (\"sightings\"), which IPs were Service addresses (\"services\"), and the flows counted per minute. PENM's own pods are left out.\nThe backend keeps time spans: a sighting of the same pod within SIGHTING_GAP_SECONDS (default 600) of the previous one extends it, and another pod on the same IP (after a pod restart) starts a new span. Role results use these spans to show the pod behind each IP at the time of the traffic. Everything older than HUBBLE_RETENTION_HOURS (default 168) is deleted.\nExempt from the global rate limiter (continuous ingest traffic).\n",
+          "parameters": [
+            {
+              "description": "Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.",
+              "in": "header",
+              "name": "X-Internal-Token",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "in": "body",
+              "name": "body",
+              "required": true,
+              "schema": {
+                "properties": {
+                  "flows": {
+                    "items": {
+                      "properties": {
+                        "count": {
+                          "example": 42,
+                          "type": "integer"
+                        },
+                        "dst_ip": {
+                          "type": "string"
+                        },
+                        "dst_pod": {
+                          "example": "team-5g/open5gs-amf-6d9c7b5f4-xk2lp",
+                          "type": "string"
+                        },
+                        "dst_port": {
+                          "description": "0 when the protocol has no ports",
+                          "type": "integer"
+                        },
+                        "minute": {
+                          "description": "Start of the minute (Unix epoch seconds)",
+                          "example": 1789111140,
+                          "type": "number"
+                        },
+                        "protocol": {
+                          "example": "SCTP",
+                          "type": "string"
+                        },
+                        "src_ip": {
+                          "type": "string"
+                        },
+                        "src_pod": {
+                          "description": "\"namespace/pod\", or empty",
+                          "example": "team-5g/srsran-gnb-0",
+                          "type": "string"
+                        },
+                        "verdict": {
+                          "example": "FORWARDED",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "minute",
+                        "src_ip",
+                        "dst_ip",
+                        "count"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "services": {
+                    "items": {
+                      "properties": {
+                        "first_seen": {
+                          "type": "number"
+                        },
+                        "ip": {
+                          "example": "10.96.12.7",
+                          "type": "string"
+                        },
+                        "last_seen": {
+                          "type": "number"
+                        },
+                        "namespace": {
+                          "example": "team-5g",
+                          "type": "string"
+                        },
+                        "service": {
+                          "example": "open5gs-nrf",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "ip",
+                        "namespace",
+                        "service",
+                        "first_seen",
+                        "last_seen"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "sightings": {
+                    "items": {
+                      "properties": {
+                        "first_seen": {
+                          "description": "Unix epoch seconds",
+                          "example": 1789111140,
+                          "type": "number"
+                        },
+                        "identity": {
+                          "description": "Cilium security identity",
+                          "example": 31337,
+                          "type": "integer"
+                        },
+                        "ip": {
+                          "example": "10.244.0.31",
+                          "type": "string"
+                        },
+                        "labels": {
+                          "description": "Pod labels whose key starts with \"app\" (Hubble's \"k8s:\" prefix removed).",
+                          "example": {
+                            "app": "open5gs-amf"
+                          },
+                          "type": "object"
+                        },
+                        "last_seen": {
+                          "description": "Unix epoch seconds",
+                          "example": 1789111200,
+                          "type": "number"
+                        },
+                        "namespace": {
+                          "example": "team-5g",
+                          "type": "string"
+                        },
+                        "node": {
+                          "example": "xtrust6g-testbed",
+                          "type": "string"
+                        },
+                        "pod": {
+                          "example": "open5gs-amf-6d9c7b5f4-xk2lp",
+                          "type": "string"
+                        },
+                        "workload": {
+                          "example": "open5gs-amf",
+                          "type": "string"
+                        },
+                        "workload_kind": {
+                          "example": "Deployment",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "ip",
+                        "namespace",
+                        "pod",
+                        "first_seen",
+                        "last_seen"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "source": {
+                    "default": "hubble",
+                    "description": "\"k8s-api\" for batches built from the Kubernetes API's pod and Service lists (no flows). Stored with each pod sighting.\n",
+                    "enum": [
+                      "hubble",
+                      "k8s-api"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          ],
+          "produces": [
+            "application/json"
+          ],
+          "responses": {
+            "200": {
+              "description": "Batch stored.",
+              "schema": {
+                "properties": {
+                  "flows": {
+                    "type": "integer"
+                  },
+                  "services": {
+                    "type": "integer"
+                  },
+                  "sightings": {
+                    "type": "integer"
+                  },
+                  "status": {
+                    "example": "success",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "The body is not a usable batch (wrong types, missing fields, last_seen before first_seen).",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "namespace is required",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "401": {
+              "description": "Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not configured on the backend (then every request is refused).\n",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Unauthorized",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "500": {
+              "description": "Database error. Nothing from the request is stored.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Internal server error",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "summary": "Ingest Kubernetes Identities from Hubble",
+          "tags": [
+            "Continuous Monitoring"
           ]
         }
       },
@@ -2020,7 +2455,7 @@
       },
       "/v1/network/roles/latest": {
         "get": {
-          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows sharing the single latest \"ts\" value). The backend's snapshot scheduler fills this table every SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the first snapshot, the response is an empty result rather than an error.\n",
+          "description": "Retrieves the most recent role-assessment snapshot from the RoleSnapshot table (all rows of one source sharing its latest \"ts\"). Two sources fill it side by side: \"pcap\", the snapshot scheduler, every SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic, and \"dpi\", the sensor's live DPI agent, once per window (default 60 s; see POST /v1/ingest/dpi). Both keep SNAPSHOT_RETENTION_HOURS (default 168) of history. Without \"source\", the DPI snapshot is returned while it is fresh (no older than DPI_FRESH_SECONDS, default 180), otherwise the pcap snapshot, otherwise any DPI snapshot. Until the first snapshot, the response is an empty result rather than an error.\n",
           "parameters": [
             {
               "default": 1000,
@@ -2039,6 +2474,17 @@
               ],
               "in": "query",
               "name": "format",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "description": "Return this source's latest snapshot instead of the default choice.",
+              "enum": [
+                "pcap",
+                "dpi"
+              ],
+              "in": "query",
+              "name": "source",
               "required": false,
               "type": "string"
             }
@@ -2062,12 +2508,60 @@
                       "example": "10.244.0.77",
                       "type": "string"
                     },
+                    "k8s": {
+                      "description": "Only when Hubble data is available for this IP over the snapshot's evidence period: the pod (or Service) behind it. The traffic decides the role; the pod is a hint. When its hint (\"hint_role\") agrees, confidence is raised by 0.10 (at most 0.99); when it disagrees, \"k8s_mismatch\" is true; when the role is Unidentified, \"suggested_role\" carries the hint. In CSV these become k8s_* columns.\n",
+                      "properties": {
+                        "hint_role": {
+                          "example": "NEAR_RT_RIC",
+                          "type": "string"
+                        },
+                        "k8s_mismatch": {
+                          "type": "boolean"
+                        },
+                        "namespace": {
+                          "example": "team-5g",
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "pod": {
+                          "example": "flexric-ric-0",
+                          "type": "string"
+                        },
+                        "service": {
+                          "description": "\"namespace/name\" when the IP is a Service address",
+                          "type": "string"
+                        },
+                        "suggested_role": {
+                          "type": "string"
+                        },
+                        "workload": {
+                          "example": "flexric-ric",
+                          "type": "string"
+                        },
+                        "workload_kind": {
+                          "example": "StatefulSet",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "reasoning": {
                       "example": "E2AP control-plane traffic observed as the RIC side of the association.",
                       "type": "string"
                     },
                     "role": {
                       "example": "NEAR_RT_RIC",
+                      "type": "string"
+                    },
+                    "source": {
+                      "description": "Which snapshot the row comes from.",
+                      "enum": [
+                        "pcap",
+                        "dpi"
+                      ],
+                      "example": "dpi",
                       "type": "string"
                     },
                     "ts": {
@@ -2082,7 +2576,7 @@
               }
             },
             "400": {
-              "description": "The \"limit\" parameter is not an integer in the allowed 1-10000 range.",
+              "description": "The \"limit\" parameter is not an integer in the allowed 1-10000 range, or \"source\" is not pcap or dpi.",
               "schema": {
                 "properties": {
                   "error": {

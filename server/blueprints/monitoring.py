@@ -14,6 +14,9 @@ from flask import Blueprint, Response, jsonify, request
 from flask_jwt_extended import jwt_required
 from psycopg2.extras import execute_values
 
+import k8s_identity
+import live_roles
+import role_fusion
 import settings
 from extensions import limiter, socketio
 from models import db, FlowStatistic, RoleSnapshot, utc_from_timestamp, utc_now
@@ -182,7 +185,7 @@ def ingest_zeek():
         socketio.emit("new_network_data", flows)
 
         return jsonify({"status": "success", "inserted": len(batch)}), 200
-    except Exception as e:
+    except Exception:
         logger.exception("ingest_zeek failed")
         if conn:
             conn.rollback()
@@ -190,6 +193,44 @@ def ingest_zeek():
     finally:
         if conn:
             conn.close()
+
+
+@bp.route("/v1/ingest/dpi", methods=["POST"])
+@limiter.exempt
+@swag_from(doc("ingest_dpi.yml"))
+def ingest_dpi():
+    """Receives one window of role evidence from the sensor's dpi_agent."""
+    if not settings.token_matches(request.headers.get("X-Internal-Token")):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        result = live_roles.ingest(request.get_json(silent=True))
+    except live_roles.BadWindow as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        db.session.rollback()
+        logger.exception("ingest_dpi failed")
+        return jsonify({"error": "Internal server error"}), 500
+    return jsonify(result), 200
+
+
+@bp.route("/v1/ingest/hubble", methods=["POST"])
+@limiter.exempt
+@swag_from(doc("ingest_hubble.yml"))
+def ingest_hubble():
+    """Receives a batch of pod/Service sightings and flows from hubble_agent."""
+    if not settings.token_matches(request.headers.get("X-Internal-Token")):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        result = k8s_identity.ingest(request.get_json(silent=True))
+    except k8s_identity.BadBatch as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        db.session.rollback()
+        logger.exception("ingest_hubble failed")
+        return jsonify({"error": "Internal server error"}), 500
+    return jsonify(result), 200
 
 
 _BAD_TIME_PARAMS = (
@@ -249,16 +290,21 @@ def get_latest_roles():
     resp_format = request.args.get("format", "csv").lower()
     if not (1 <= limit <= 10000):
         return jsonify({"error": "limit must be between 1 and 10000"}), 400
+    source = request.args.get("source") or None
+    if source is not None and source not in live_roles.SOURCES:
+        return jsonify({"error": "source must be pcap or dpi"}), 400
 
     try:
-        latest_ts = db.session.query(db.func.max(RoleSnapshot.ts)).scalar()
+        latest_ts, source = live_roles.latest_snapshot(source)
 
-        if not latest_ts:
+        if latest_ts is None:
             if resp_format == "json":
                 return jsonify([]), 200
             return generate_csv_response([], "latest_roles.csv")
 
-        query = RoleSnapshot.query.filter_by(ts=latest_ts).limit(limit).all()
+        query = (
+            RoleSnapshot.query.filter_by(ts=latest_ts, source=source).limit(limit).all()
+        )
 
         results = []
         for row in query:
@@ -269,16 +315,50 @@ def get_latest_roles():
                     "role": row.role,
                     "confidence": row.confidence,
                     "reasoning": row.reasoning,
+                    "source": row.source,
                 }
             )
 
+        # Pods behind the IPs over the snapshot's evidence period.
+        span = (
+            live_roles.role_window_seconds() if source == live_roles.SOURCE_DPI
+            else float(os.getenv("SNAPSHOT_INTERVAL_SECONDS", "300"))
+        )
+        warnings = []
+        role_fusion.annotate(
+            {r["id.orig_h"]: r for r in results}, latest_ts - span, latest_ts, warnings
+        )
+        for message in warnings:
+            logger.warning("Latest roles: %s", message)
+
         if resp_format == "json":
             return jsonify(results), 200
-        return generate_csv_response(results, "latest_roles.csv")
+        return generate_csv_response(_flatten_k8s(results), "latest_roles.csv")
 
-    except Exception as e:
+    except Exception:
         logger.exception("get_latest_roles failed")
         return jsonify({"error": "Internal server error"}), 500
+
+
+_K8S_CSV_COLUMNS = (
+    "namespace", "pod", "workload", "service", "hint_role", "suggested_role", "k8s_mismatch",
+)
+
+
+def _flatten_k8s(rows):
+    """CSV rows: the "k8s" object as k8s_* columns, present on every row once
+    any row has one (CSV needs one header)."""
+    if not any("k8s" in r for r in rows):
+        return rows
+    flat = []
+    for row in rows:
+        k8s = row.get("k8s", {})
+        out = {k: v for k, v in row.items() if k != "k8s"}
+        for key in _K8S_CSV_COLUMNS:
+            column = key if key.startswith("k8s_") else f"k8s_{key}"
+            out[column] = k8s.get(key, "")
+        flat.append(out)
+    return flat
 
 
 @bp.route("/v1/network/pcap/headers", methods=["GET"])
@@ -382,6 +462,11 @@ def analyze_live():
         model_name = os.path.splitext(os.path.basename(latest_file))[0]
 
         results = run_ip_role_pipeline(latest_file, model_name, selected_ips=None)
+        if results.get("ip_role_details"):
+            warnings = []
+            role_fusion.annotate_capture(results["ip_role_details"], latest_file, warnings)
+            if warnings:
+                results.setdefault("warnings", []).extend(warnings)
 
         # WP5: unidentified devices on the live network are worth an alert
         try:

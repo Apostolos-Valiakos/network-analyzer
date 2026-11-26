@@ -27,8 +27,17 @@ export default {
       required: true,
     },
   },
+  data() {
+    return { chart: null };
+  },
   mounted() {
     this.renderChart();
+    window.addEventListener("resize", this.resizeChart);
+  },
+  beforeDestroy() {
+    window.removeEventListener("resize", this.resizeChart);
+    if (this.chart) this.chart.dispose();
+    this.chart = null;
   },
   watch: {
     modularityData() {
@@ -36,8 +45,13 @@ export default {
     },
   },
   methods: {
+    resizeChart() {
+      if (this.chart) this.chart.resize();
+    },
     renderChart() {
-      const chart = echarts.init(this.$refs.chart);
+      // One chart per component: re-renders reuse it.
+      if (!this.chart) this.chart = echarts.init(this.$refs.chart);
+      const chart = this.chart;
 
       const ks = this.modularityData.map((d) => d.k);
       const scores = this.modularityData.map((d) => d.modularity);
@@ -64,7 +78,6 @@ export default {
       };
 
       chart.setOption(option);
-      window.addEventListener("resize", () => chart.resize());
     },
   },
 };

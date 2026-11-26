@@ -93,6 +93,7 @@ def store_roles(pcap_path: str, taken_at: float) -> int:
             role=a.role,
             confidence=a.confidence,
             reasoning=a.reasoning,
+            source="pcap",
         )
         for ip, a in assessments.items()
     ])

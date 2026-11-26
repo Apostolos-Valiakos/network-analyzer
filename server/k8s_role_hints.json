@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Pod name tokens -> the 5G role that pod should have (role_fusion.py).",
+    "A pod's labels (app.kubernetes.io/component, app.kubernetes.io/name, app),",
+    "then its workload and pod name, are split into lower-case words at every",
+    "non-letter/digit and trailing digits are dropped (open5gs-amf-0 -> open5gs, amf).",
+    "The first candidate with a matching token decides; hints are tried in order.",
+    "'also' lists further engine roles that agree with the hint (a CU is also",
+    "an E2 node; an SMF seen only through PFCP association is a PFCP_NODE).",
+    "A hint only raises confidence, flags a mismatch or suggests a role: the",
+    "traffic decides the role."
+  ],
+  "hints": [
+    {"token": "amf", "role": "AMF"},
+    {"token": "smf", "role": "SMF", "also": ["PFCP_NODE"]},
+    {"token": "upf", "role": "UPF", "also": ["PFCP_NODE"]},
+    {"token": "nrf", "role": "NRF"},
+    {"token": "ausf", "role": "AUSF"},
+    {"token": "udm", "role": "UDM"},
+    {"token": "udr", "role": "UDR"},
+    {"token": "pcf", "role": "PCF"},
+    {"token": "nssf", "role": "NSSF"},
+    {"token": "bsf", "role": "BSF"},
+    {"token": "scp", "role": "SCP"},
+    {"token": "nef", "role": "NEF"},
+    {"token": "gnb", "role": "gNB", "also": ["E2_NODE"]},
+    {"token": "cu", "role": "gNB", "also": ["E2_NODE"]},
+    {"token": "du", "role": "gNB", "also": ["E2_NODE"]},
+    {"token": "ric", "role": "NEAR_RT_RIC", "also": ["E2T", "REDIS"]},
+    {"token": "flexric", "role": "NEAR_RT_RIC", "also": ["E2T", "REDIS"]},
+    {"token": "mongodb", "role": "OPEN5GS_INFRA"},
+    {"token": "webui", "role": "OPEN5GS_INFRA"}
+  ]
+}

@@ -13,7 +13,6 @@ and the field list, so a replaced capture or a changed field list re-extracts.
 """
 import logging
 import os
-import subprocess
 from typing import Dict, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
 import pcap_repair
@@ -48,6 +47,15 @@ FIELDS = [
     "e2ap.procedureCode",
     "pfcp.msg_type",
     "http2.headers.path",
+    "ngap.RANNodeName",
+    "ngap.AMFName",
+    "e2ap.GlobalE2node_ID",
+    "e2ap.plmn_id",
+    "e2ap.gnb_ID",
+    "pfcp.ie_type",
+    "pfcp.node_id_ipv4",
+    "pfcp.node_id_fqdn",
+    "json.path_with_value",
     "e212.imsi",
     "e212.mcc",
     "e212.mnc",

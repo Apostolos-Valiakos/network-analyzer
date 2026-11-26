@@ -109,6 +109,15 @@
       </v-card-title>
 
       <v-card-text class="pa-0">
+        <v-alert
+          v-if="loadError"
+          type="error"
+          dense
+          border="left"
+          class="mx-5 mb-4"
+        >
+          {{ loadError }}
+        </v-alert>
         <v-data-table
           :headers="headers"
           :items="users"
@@ -198,6 +207,7 @@ export default {
 
       users: [],
       loadingUsers: false,
+      loadError: null,
 
       deletingId: null,
       deleteDialog: false,
@@ -239,10 +249,14 @@ export default {
   methods: {
     async fetchUsers() {
       this.loadingUsers = true;
+      this.loadError = null;
       try {
         this.users = await this.$api.json(`/auth/users`, {}, "Failed to load users");
       } catch (err) {
+        // Shown above the table, so a server failure is not mistaken for
+        // "No users found".
         this.users = [];
+        this.loadError = err.message;
       } finally {
         this.loadingUsers = false;
       }

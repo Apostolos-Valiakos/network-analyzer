@@ -4,7 +4,8 @@ summary: Download clustering result
 description: >
   Downloads a clustering output file (CSV or JSON, as saved by
   POST /save-results) by its exact stored filename. Ownership is checked
-  against the caller's JWT identity via the ClusterResult row.
+  against the caller's JWT identity via the ClusterResult row; admins can
+  download any user's result.
 produces:
   - application/json
   - text/csv
@@ -21,7 +22,7 @@ responses:
   200:
     description: The requested file's raw content (JSON or CSV, per its extension).
   403:
-    description: The file exists but was saved by a different user.
+    description: The file exists but was saved by a different user (and the caller is not an admin).
     schema:
       type: object
       properties:

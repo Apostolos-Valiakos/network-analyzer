@@ -3,7 +3,7 @@
 # Runs dumpcap (ring buffer), Zeek, pcap_server.py (port 5005: pcap slices and
 # Nmap for the backend), zeek_agent.py (flow statistics to the backend) and
 # publisher.py (port 5002: Real Time page), using the same image as the
-# Kubernetes testbed (deploy/k8s/images/sensor). See docs/DOCKER_SETUP.md §10.
+# Kubernetes testbed (deploy/k8s/images/sensor). See docs/deployment.html §6.
 #
 # Settings come from .env next to this file (the app's .env when the sensor
 # runs on the same host, so SECRET_TOKEN is shared automatically):
@@ -14,6 +14,7 @@
 #   SENSOR_RETENTION_MINUTES how long capture files are kept (default 1440 = 24 h)
 #   SENSOR_RING_SECONDS      length of one capture file (default 3600)
 #   SENSOR_ENABLE_PUBLISHER  "false" to skip publisher.py (Real Time page)
+#   SENSOR_DPI_ENABLED       "true" starts dpi_agent.py (live DPI roles, default false)
 #
 #   docker compose -f docker-compose.sensor.yml up -d
 name: penm-sensor
@@ -40,6 +41,7 @@ services:
       RETENTION_MINUTES: "${SENSOR_RETENTION_MINUTES:-1440}"
       RING_SECONDS: "${SENSOR_RING_SECONDS:-3600}"
       ENABLE_PUBLISHER: "${SENSOR_ENABLE_PUBLISHER:-true}"
+      DPI_ENABLED: "${SENSOR_DPI_ENABLED:-false}"
     volumes:
       - sensor_pcaps:/app/sensor/generated_pcaps
       - sensor_zeek:/var/lib/penm-sensor/zeek

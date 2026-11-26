@@ -3,12 +3,12 @@
     "ip_role_details": {
       "192.168.100.21": {
         "confidence": 0.95,
-        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts)",
+        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts); NG Setup AMF name 'open5gs-amf0'",
         "role": "AMF"
       },
       "192.168.100.5": {
         "confidence": 0.95,
-        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs)",
+        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs); NG Setup RAN name 'UERANSIM-gnb-999-70-1'",
         "role": "gNB"
       },
       "195.251.124.68": {
@@ -20,12 +20,12 @@
     "ip_roles": {
       "192.168.100.21": {
         "confidence": 0.95,
-        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts)",
+        "reasoning": "Terminates NGAP on SCTP 38412 (13 pkts); NG Setup AMF name 'open5gs-amf0'",
         "role": "AMF"
       },
       "192.168.100.5": {
         "confidence": 0.95,
-        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs)",
+        "reasoning": "Initiates NGAP toward AMF:38412 (13 pkts, incl. 11 UE-associated msgs); NG Setup RAN name 'UERANSIM-gnb-999-70-1'",
         "role": "gNB"
       },
       "195.251.124.68": {

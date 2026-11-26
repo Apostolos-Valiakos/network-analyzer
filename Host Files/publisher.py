@@ -5,6 +5,7 @@ import base64
 import threading
 import os
 import sys
+import traceback
 
 # Network monitoring imports
 from scapy.all import sniff
@@ -35,6 +36,11 @@ CONNECTED_CLIENTS = set()
 
 # Lock for managing concurrent access to capture state
 state_lock = threading.Lock()
+
+# Set after a failed packet send has been reported, cleared by the next
+# successful one: a broken loop fails on every packet, so only the first
+# failure of a run is printed.
+_send_failure_reported = threading.Event()
 
 
 # ----------------------------------------------------
@@ -72,7 +78,6 @@ def get_network_interfaces_psutil():
 # ----------------------------------------------------
 def broadcast_status(status_message):
     """Sends a status message to all connected clients."""
-    global ASYNCIO_LOOP
     if not ASYNCIO_LOOP:
         print("Error: Asyncio loop not initialized for broadcast.", file=sys.stderr)
         return
@@ -83,15 +88,15 @@ def broadcast_status(status_message):
     for client in clients_to_notify:
         try:
             asyncio.run_coroutine_threadsafe(client.send(status_payload), ASYNCIO_LOOP)
-        except Exception as e:
-            pass
+        except Exception:
+            print(f"Error: could not send status to {getattr(client, 'remote_address', '?')}:", file=sys.stderr)
+            traceback.print_exc()
 
     print(f"Broadcast: {status_message}")
 
 
 def packet_callback(pkt: Packet):
     """Called by Scapy's sniff function to process and send a packet."""
-    global ASYNCIO_LOOP
     if not CAPTURE_ACTIVE.is_set() or not ASYNCIO_LOOP:
         return
 
@@ -105,9 +110,13 @@ def packet_callback(pkt: Packet):
 
         for client in clients_to_notify:
             asyncio.run_coroutine_threadsafe(client.send(packet_payload), ASYNCIO_LOOP)
+        _send_failure_reported.clear()
 
-    except Exception as e:
-        pass
+    except Exception:
+        if not _send_failure_reported.is_set():
+            _send_failure_reported.set()
+            print("Error: sending a packet to the clients failed (further failures not shown):", file=sys.stderr)
+            traceback.print_exc()
 
 
 # ----------------------------------------------------
@@ -230,7 +239,7 @@ async def handle_client(websocket):
 
     except websockets.exceptions.ConnectionClosedOK:
         print(f"Client disconnected gracefully: {websocket.remote_address}")
-    except websockets.exceptions.ConnectionClosedError as e:
+    except websockets.exceptions.ConnectionClosedError:
         pass
     finally:
         print(f"Client handler cleanup for {websocket.remote_address}")

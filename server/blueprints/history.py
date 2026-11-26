@@ -6,10 +6,12 @@ from pathlib import Path
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 
+import k8s_identity
+import role_fusion
 from access import current_user_id, is_admin, record_for_user
 from analysis_service import LEGACY_CACHE_SUFFIXES, analysis_error_response, run_core_analysis
 from extensions import limiter
-from models import db, ClusterResult, PcapFile
+from models import db, ClusterResult, IpRole, PcapFile
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 from settings import CLUSTERING_OUTPUT_DIR
 
@@ -84,7 +86,37 @@ def get_pcap_history_result(pcap_id):
         return err
     if not record.analysis_result:
         return jsonify({"error": "No results stored"}), 404
-    return jsonify(record.analysis_result)
+    result = dict(record.analysis_result)
+    warnings = []
+    try:
+        details = _role_details_with_pods(record, warnings)
+    except Exception:
+        logger.exception("Could not add Kubernetes pods to the stored result")
+        warnings.append("Kubernetes pod information could not be added to this result.")
+        details = None
+    if details:
+        result["role_details"] = details
+    if warnings:
+        result["warnings"] = list(result.get("warnings", [])) + warnings
+    return jsonify(result)
+
+
+def _role_details_with_pods(record, warnings):
+    """Per-IP role, confidence and reasoning (from the role cache) with the
+    Kubernetes pods behind them, or None when no pod is known for the
+    capture's time span (then the stored result is returned unchanged)."""
+    if not k8s_identity.has_data():
+        return None
+    rows = IpRole.query.filter_by(pcap_id=record.id).all()
+    details = {
+        r.ip_address: {"role": r.role, "confidence": r.confidence or 0.0,
+                       "reasoning": r.reasoning or ""}
+        for r in rows
+    }
+    if not details:
+        return None
+    role_fusion.annotate_capture(details, record.file_path, warnings)
+    return details if any("k8s" in d for d in details.values()) else None
 
 
 @bp.route("/v1/history/cluster/<int:cluster_id>/result", methods=["GET"])

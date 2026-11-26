@@ -1,5 +1,6 @@
 """Traffic clustering and its saved results."""
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from flasgger import swag_from
 from flask import Blueprint, jsonify, request, send_from_directory
 from flask_jwt_extended import jwt_required
 
-from access import current_user_id, owned_pcap
+from access import current_user_id, is_admin, owned_pcap
 from agglomerative_clustering import (
     analyze_pcap_for_clustering,
     save_results as save_clustering_results,
@@ -114,26 +115,48 @@ def suggested_clusters():
     )
 
 
+def _result_base_name(filename):
+    """The name to save results under (extension removed), or None when it is
+    not a plain file name: a path, "..", or a hidden/empty name would let the
+    files land outside CLUSTERING_OUTPUT_DIR."""
+    if not isinstance(filename, str) or "/" in filename or "\\" in filename or "\0" in filename:
+        return None
+    base = os.path.splitext(filename)[0].strip()
+    if not base or base.startswith("."):
+        return None
+    root = os.path.realpath(CLUSTERING_OUTPUT_DIR)
+    if os.path.dirname(os.path.realpath(os.path.join(root, base + ".json"))) != root:
+        return None
+    return base
+
+
 @bp.route("/save-results", methods=["POST"])
 @jwt_required()
 @swag_from(doc("save_results.yml"))
 def save_results_endpoint():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data or not data.get("filename"):
         return jsonify({"error": "Missing filename"}), 400
 
+    base = _result_base_name(data["filename"])
+    if base is None:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    uid = current_user_id()
+    names = [f"{base}.csv", f"{base}.json"]
+    existing = ClusterResult.query.filter(ClusterResult.filename.in_(names)).all()
+    if any(r.user_id != uid for r in existing):
+        return jsonify({"error": "A result with this name belongs to another user"}), 409
+
     try:
         df = pd.DataFrame(data["results"])
-        csv_path, json_path = save_clustering_results(
-            df, data["filename"], CLUSTERING_OUTPUT_DIR
-        )
+        csv_path, json_path = save_clustering_results(df, base, CLUSTERING_OUTPUT_DIR)
         target = csv_path if data.get("type", "json") == "csv" else json_path
         name = Path(target).name
 
-        uid = current_user_id()
-        for path in [csv_path, json_path]:
-            fname = Path(path).name
-            if not ClusterResult.query.filter_by(filename=fname).first():
+        known = {r.filename for r in existing}
+        for fname in names:
+            if fname not in known:
                 db.session.add(ClusterResult(user_id=uid, filename=fname))
         db.session.commit()
 
@@ -147,7 +170,7 @@ def save_results_endpoint():
             ),
             200,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("save_results_endpoint failed")
         db.session.rollback()
         return jsonify({"error": "Internal server error"}), 500
@@ -161,6 +184,7 @@ def get_clustering_result(filename):
     result = ClusterResult.query.filter_by(filename=safe_name).first()
     if not result:
         return jsonify({"error": "File not found"}), 404
-    if result.user_id != current_user_id():
+    uid = current_user_id()
+    if result.user_id != uid and not is_admin(uid):
         return jsonify({"error": "Access denied"}), 403
     return send_from_directory(CLUSTERING_OUTPUT_DIR, safe_name)

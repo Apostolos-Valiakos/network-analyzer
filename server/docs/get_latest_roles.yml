@@ -3,11 +3,15 @@ tags:
 summary: Get Latest Role Snapshot
 description: >
   Retrieves the most recent role-assessment snapshot from the
-  RoleSnapshot table (all rows sharing the single latest "ts" value).
-  The backend's snapshot scheduler fills this table every
-  SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic
-  and keeps SNAPSHOT_RETENTION_HOURS (default 168) of history. Until the
-  first snapshot, the response is an empty result rather than an error.
+  RoleSnapshot table (all rows of one source sharing its latest "ts").
+  Two sources fill it side by side: "pcap", the snapshot scheduler, every
+  SNAPSHOT_INTERVAL_SECONDS (default 300) from the sensor's latest traffic,
+  and "dpi", the sensor's live DPI agent, once per window (default 60 s;
+  see POST /v1/ingest/dpi). Both keep SNAPSHOT_RETENTION_HOURS (default
+  168) of history. Without "source", the DPI snapshot is returned while it
+  is fresh (no older than DPI_FRESH_SECONDS, default 180), otherwise the
+  pcap snapshot, otherwise any DPI snapshot. Until the first snapshot, the
+  response is an empty result rather than an error.
 produces:
   - application/json
   - text/csv
@@ -27,6 +31,12 @@ parameters:
     default: csv
     enum: [json, csv]
     description: Response format.
+  - name: source
+    in: query
+    type: string
+    required: false
+    enum: [pcap, dpi]
+    description: Return this source's latest snapshot instead of the default choice.
 responses:
   200:
     description: >
@@ -57,8 +67,33 @@ responses:
           reasoning:
             type: string
             example: "E2AP control-plane traffic observed as the RIC side of the association."
+          source:
+            type: string
+            enum: [pcap, dpi]
+            description: Which snapshot the row comes from.
+            example: "dpi"
+          k8s:
+            type: object
+            description: >
+              Only when Hubble data is available for this IP over the
+              snapshot's evidence period: the pod (or Service) behind it.
+              The traffic decides the role; the pod is a hint. When its
+              hint ("hint_role") agrees, confidence is raised by 0.10 (at
+              most 0.99); when it disagrees, "k8s_mismatch" is true; when
+              the role is Unidentified, "suggested_role" carries the hint.
+              In CSV these become k8s_* columns.
+            properties:
+              namespace: {type: string, example: "team-5g"}
+              pod: {type: string, example: "flexric-ric-0"}
+              workload: {type: string, example: "flexric-ric"}
+              workload_kind: {type: string, example: "StatefulSet"}
+              service: {type: string, description: '"namespace/name" when the IP is a Service address'}
+              node: {type: string}
+              hint_role: {type: string, example: "NEAR_RT_RIC"}
+              suggested_role: {type: string}
+              k8s_mismatch: {type: boolean}
   400:
-    description: The "limit" parameter is not an integer in the allowed 1-10000 range.
+    description: The "limit" parameter is not an integer in the allowed 1-10000 range, or "source" is not pcap or dpi.
     schema:
       type: object
       properties:

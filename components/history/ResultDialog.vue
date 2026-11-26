@@ -47,7 +47,8 @@
               </v-col>
             </v-row>
 
-            <div v-if="data.roles && Object.keys(data.roles).length">
+            <RoleDetailsTable v-if="data.role_details" :details="data.role_details" />
+            <div v-else-if="data.roles && Object.keys(data.roles).length">
               <div class="text-subtitle-2 font-weight-bold mb-2">IP Role Assignments</div>
               <v-simple-table dense class="rounded-lg" style="border: 1px solid var(--border)">
                 <thead>
@@ -124,13 +125,14 @@
 </template>
 
 <script>
+import RoleDetailsTable from "@/components/RoleDetailsTable.vue";
 import WarningsAlert from "@/components/WarningsAlert.vue";
 import { formatConfidence } from "@/utils/history";
 
 // A stored analysis ('pcap') or clustering ('cluster') result. v-model opens it.
 export default {
   name: "ResultDialog",
-  components: { WarningsAlert },
+  components: { RoleDetailsTable, WarningsAlert },
   props: {
     value: { type: Boolean, default: false },
     type: { type: String, default: null },

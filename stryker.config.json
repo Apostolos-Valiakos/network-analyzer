@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "jest",
+  "jest": {
+    "configFile": "tests/frontend/stryker.jest.config.js",
+    "enableFindRelatedTests": false
+  },
+  "mutate": [
+    "pages/realTime.vue",
+    "pages/admin/users.vue",
+    "components/NetworkGraph.vue",
+    "components/ModularityChart.vue",
+    "components/PieChart.vue",
+    "components/monitoring/ScanPanel.vue",
+    "utils/download.js",
+    "utils/history.js"
+  ],
+  "coverageAnalysis": "perTest",
+  "reporters": [
+    "clear-text",
+    "progress",
+    "html"
+  ],
+  "htmlReporter": {
+    "fileName": "reports/mutation/frontend.html"
+  },
+  "tempDirName": ".stryker-tmp",
+  "concurrency": 2
+}

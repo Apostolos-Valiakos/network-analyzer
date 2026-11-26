@@ -1,15 +1,15 @@
 // Formatting for the History page's tables and result dialog.
+import { formatBytes } from "./format";
 
 export function formatDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
 }
 
+// Same units as the rest of the UI (utils/format); a missing size is "—".
 export function formatSize(bytes) {
   if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+  return formatBytes(bytes);
 }
 
 export function statusColor(status) {

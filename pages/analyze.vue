@@ -34,6 +34,18 @@
       </v-btn>
     </v-card>
 
+    <v-alert
+      v-if="error"
+      type="error"
+      dense
+      border="left"
+      dismissible
+      class="mb-4"
+      @input="error = null"
+    >
+      {{ error }}
+    </v-alert>
+
     <div v-if="analysis">
       <v-alert
         v-if="loadedFromCache"
@@ -83,19 +95,19 @@
 </template>
 
 <script>
-import Assessments from "@/components/Assessments.vue";
-import NetworkGraph from "@/components/NetworkGraph.vue";
 import PrivacyPanel from "@/components/PrivacyPanel.vue";
 import WarningsAlert from "@/components/WarningsAlert.vue";
+import { saveResponse } from "@/utils/download";
 
 export default {
-  components: { Assessments, NetworkGraph, PrivacyPanel, WarningsAlert },
+  components: { PrivacyPanel, WarningsAlert },
 
   data() {
     return {
       cacheKey: "analyze:latest",
       file: null,
       loading: false,
+      error: null,
       savingJson: false,
       savingCsv: false,
       filename: null,
@@ -161,6 +173,7 @@ export default {
     async runFullAnalysis() {
       if (!this.file) return;
       this.loading = true;
+      this.error = null;
 
       const form = new FormData();
       form.append("file", this.file);
@@ -183,7 +196,7 @@ export default {
         this.response = data;
         this.cacheResults(data);
       } catch (err) {
-        alert(`Analysis failed: ${err.message}`);
+        this.error = `Analysis failed: ${err.message}`;
       } finally {
         this.loading = false;
       }
@@ -197,24 +210,12 @@ export default {
 
       const url = this.$api.url(`/save_roles?file=${this.filename}&type=${type}`);
 
+      this.error = null;
       try {
         const resp = await this.$apiFetch(url);
-        if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.error || "Save failed");
-        }
-
-        const blob = await resp.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = `roles_${this.filename.split("_").pop()}.${type}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(downloadUrl);
+        await saveResponse(resp, `roles_${this.filename.split("_").pop()}.${type}`, "Save failed");
       } catch (err) {
-        alert(`Save ${type.toUpperCase()} failed: ${err.message}`);
+        this.error = `Save ${type.toUpperCase()} failed: ${err.message}`;
       } finally {
         this.savingJson = false;
         this.savingCsv = false;

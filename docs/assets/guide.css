@@ -1,0 +1,101 @@
+/* Shared style for the PENM documentation (docs/*.html). */
+:root {
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --text: #1f2328;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --accent: #0b6bcb;
+  --accent-soft: #e7f1fb;
+  --warn: #9a6700;
+  --warn-soft: #fff8c5;
+  --ok: #1a7f37;
+  --ok-soft: #dafbe1;
+  --code-bg: #f1f3f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141a;
+    --surface: #161c24;
+    --text: #e6edf3;
+    --muted: #9198a1;
+    --border: #2f3842;
+    --accent: #58a6ff;
+    --accent-soft: #12263d;
+    --warn: #d29922;
+    --warn-soft: #2b2311;
+    --ok: #3fb950;
+    --ok-soft: #12261a;
+    --code-bg: #1c232c;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+nav.toc {
+  position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
+  padding: 24px 16px; border-right: 1px solid var(--border); font-size: 14px;
+}
+nav.toc a { display: block; padding: 3px 8px; color: var(--muted); text-decoration: none; border-radius: 6px; }
+nav.toc a:hover { background: var(--surface); color: var(--text); }
+nav.toc .home { font-weight: 600; color: var(--accent); margin-bottom: 12px; }
+nav.toc .sub { padding-left: 20px; font-size: 13px; }
+main { padding: 32px 40px 80px; min-width: 0; }
+header.doc-head { border-bottom: 1px solid var(--border); margin-bottom: 24px; padding-bottom: 12px; }
+header.doc-head .eyebrow { color: var(--accent); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; margin: 0; }
+h1 { font-size: 2rem; margin: 4px 0 8px; line-height: 1.25; }
+h2 { font-size: 1.45rem; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+h3 { font-size: 1.12rem; margin: 28px 0 8px; }
+h4 { font-size: 1rem; margin: 20px 0 6px; }
+p.lede { color: var(--muted); font-size: 1.06rem; margin: 0; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .9em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; line-height: 1.45; border: 1px solid var(--border); }
+pre code { background: none; padding: 0; }
+pre .c { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 18px; font-size: .94em; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: var(--surface); }
+.note, .warn, .tip {
+  border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px;
+  padding: 10px 14px; margin: 14px 0; background: var(--surface);
+}
+.note { border-left-color: var(--accent); background: var(--accent-soft); }
+.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.tip { border-left-color: var(--ok); background: var(--ok-soft); }
+.note > :first-child, .warn > :first-child, .tip > :first-child { margin-top: 0; }
+.note > :last-child, .warn > :last-child, .tip > :last-child { margin-bottom: 0; }
+ol.steps > li { margin-bottom: 10px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin: 16px 0; }
+.card { display: block; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface); color: var(--text); text-decoration: none; }
+a.card:hover { border-color: var(--accent); }
+.card h3 { margin: 0 0 4px; font-size: 1.05rem; color: var(--accent); }
+.card p { margin: 0; color: var(--muted); font-size: .93em; }
+.card .who { display: inline-block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); }
+pre.diagram { line-height: 1.25; }
+footer.doc-foot { margin-top: 56px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); }
+  main { padding: 20px 16px 60px; }
+}
+@media print {
+  nav.toc { display: none; }
+  .layout { display: block; }
+  h2 { break-after: avoid; }
+  pre, table { break-inside: avoid; }
+}
+/* Blocks used by the R13 guide (from the former Operator Guide). */
+.diagram-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--surface); }
+.diagram-title { font-weight: 600; font-size: .9em; text-align: center; margin-bottom: 6px; color: var(--muted); }
+.step { margin: 12px 0; }
+.step-num { font-weight: 600; color: var(--accent); }
+header.doc-head + h2 { border-top: 0; margin-top: 24px; }

@@ -64,6 +64,17 @@ responses:
         error:
           type: string
           example: "Missing session_id or packets"
+  403:
+    description: The session (or a stored capture named "<session_id>.pcap") belongs to another user; nothing is written.
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Access denied"
   500:
     description: Failed to write the chunk to disk, or a database error while updating the PcapFile record.
     schema:

@@ -1,0 +1,117 @@
+tags:
+  - Continuous Monitoring
+summary: Ingest Kubernetes Identities from Hubble
+description: >
+  Receives a batch from the Sensor's hubble_agent.py, or from
+  k8s_api_agent.py where Hubble Relay cannot be reached (internal-token
+  auth, not JWT). The agent reads flows from Cilium's Hubble Relay and sends,
+  every HUBBLE_INTERVAL_SECONDS (default 60), which pod owned which IP
+  ("sightings"), which IPs were Service addresses ("services"), and the
+  flows counted per minute. PENM's own pods are left out.
+
+  The backend keeps time spans: a sighting of the same pod within
+  SIGHTING_GAP_SECONDS (default 600) of the previous one extends it, and
+  another pod on the same IP (after a pod restart) starts a new span. Role
+  results use these spans to show the pod behind each IP at the time of
+  the traffic. Everything older than HUBBLE_RETENTION_HOURS (default 168)
+  is deleted.
+
+  Exempt from the global rate limiter (continuous ingest traffic).
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: X-Internal-Token
+    in: header
+    type: string
+    required: true
+    description: Must equal the backend's SECRET_TOKEN env var — not a JWT, this is sensor-to-backend auth.
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [hubble, k8s-api]
+          default: hubble
+          description: >
+            "k8s-api" for batches built from the Kubernetes API's pod and
+            Service lists (no flows). Stored with each pod sighting.
+        sightings:
+          type: array
+          items:
+            type: object
+            required: [ip, namespace, pod, first_seen, last_seen]
+            properties:
+              ip: {type: string, example: "10.244.0.31"}
+              namespace: {type: string, example: "team-5g"}
+              pod: {type: string, example: "open5gs-amf-6d9c7b5f4-xk2lp"}
+              workload: {type: string, example: "open5gs-amf"}
+              workload_kind: {type: string, example: "Deployment"}
+              labels:
+                type: object
+                description: Pod labels whose key starts with "app" (Hubble's "k8s:" prefix removed).
+                example: {"app": "open5gs-amf"}
+              identity: {type: integer, description: Cilium security identity, example: 31337}
+              node: {type: string, example: "xtrust6g-testbed"}
+              first_seen: {type: number, description: Unix epoch seconds, example: 1789111140}
+              last_seen: {type: number, description: Unix epoch seconds, example: 1789111200}
+        services:
+          type: array
+          items:
+            type: object
+            required: [ip, namespace, service, first_seen, last_seen]
+            properties:
+              ip: {type: string, example: "10.96.12.7"}
+              namespace: {type: string, example: "team-5g"}
+              service: {type: string, example: "open5gs-nrf"}
+              first_seen: {type: number}
+              last_seen: {type: number}
+        flows:
+          type: array
+          items:
+            type: object
+            required: [minute, src_ip, dst_ip, count]
+            properties:
+              minute: {type: number, description: Start of the minute (Unix epoch seconds), example: 1789111140}
+              src_ip: {type: string}
+              dst_ip: {type: string}
+              dst_port: {type: integer, description: 0 when the protocol has no ports}
+              protocol: {type: string, example: "SCTP"}
+              verdict: {type: string, example: "FORWARDED"}
+              src_pod: {type: string, description: '"namespace/pod", or empty', example: "team-5g/srsran-gnb-0"}
+              dst_pod: {type: string, example: "team-5g/open5gs-amf-6d9c7b5f4-xk2lp"}
+              count: {type: integer, example: 42}
+responses:
+  200:
+    description: Batch stored.
+    schema:
+      type: object
+      properties:
+        status: {type: string, example: "success"}
+        sightings: {type: integer}
+        services: {type: integer}
+        flows: {type: integer}
+  400:
+    description: The body is not a usable batch (wrong types, missing fields, last_seen before first_seen).
+    schema:
+      type: object
+      properties:
+        error: {type: string, example: "namespace is required"}
+  401:
+    description: >
+      Missing or incorrect X-Internal-Token header, or SECRET_TOKEN is not
+      configured on the backend (then every request is refused).
+    schema:
+      type: object
+      properties:
+        error: {type: string, example: "Unauthorized"}
+  500:
+    description: Database error. Nothing from the request is stored.
+    schema:
+      type: object
+      properties:
+        error: {type: string, example: "Internal server error"}

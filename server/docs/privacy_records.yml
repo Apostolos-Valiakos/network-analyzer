@@ -2,6 +2,8 @@ tags:
   - Privacy
 summary: Per-host privacy records
 description: Builds one record per host from an uploaded PCAP (one tshark pass). GTP-U inner UE addresses get their own record; cut-off captures are accepted.
+security:
+  - Bearer: []
 parameters:
   - name: filename
     in: path
