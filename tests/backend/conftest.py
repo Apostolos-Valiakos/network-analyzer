@@ -13,16 +13,24 @@ behaviour, the diff shows what changed. Re-record only for intended changes,
 and review the snapshot diff before committing.
 """
 
+import atexit
 import os
 import sys
 import shutil
 from unittest.mock import MagicMock
 
 # ── 1. Environment variables (must be set before app is imported) ─────────────
+import tempfile as _tempfile
+
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-for-testing-only")
+# One SQLite file per test run, in its own temp folder: two runs at once (a
+# terminal and the IDE, say) used to share tests/backend/test_penm.db and drop
+# each other's tables mid-test. Pipeline child processes inherit the variable,
+# so they open the same file as the run that started them.
+_TEST_DB_DIR = _tempfile.mkdtemp(prefix="penm_tests_")
 os.environ.setdefault(
     "DATABASE_URL",
-    "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_penm.db"),
+    "sqlite:///" + os.path.join(_TEST_DB_DIR, "test_penm.db").replace("\\", "/"),
 )
 os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "admin123")
@@ -30,7 +38,6 @@ os.environ.setdefault("SECRET_TOKEN", "test-secret-token")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost")
 # Forced, not setdefault: the real log is forwarded to R13's syslog collector,
 # so test runs must never append to it.
-import tempfile as _tempfile
 os.environ["WP5_NOTICE_LOG"] = os.path.join(
     _tempfile.gettempdir(), "penm_tests_wp5_notices.log"
 )
@@ -58,6 +65,22 @@ from models import db as _db, User, PcapFile, ClusterResult, FlowStatistic, Role
 from packet_table import CACHE_SUFFIX as PACKET_CACHE_SUFFIX
 
 flask_app = create_app(init_database=False)
+
+
+def _remove_test_db():
+    """Deletes this run's database folder at exit, once nothing holds the file
+    open (Windows refuses to delete an open SQLite file). Only the folder this
+    run created; a DATABASE_URL from the environment is never touched."""
+    import gc
+
+    with flask_app.app_context():
+        _db.session.remove()
+        _db.engine.dispose()
+    gc.collect()
+    shutil.rmtree(_TEST_DB_DIR, ignore_errors=True)
+
+
+atexit.register(_remove_test_db)
 
 # Disable rate limiting so tests can call endpoints freely. Flask-Limiter reads
 # RATELIMIT_ENABLED only at init, so setting the config here has no effect;
@@ -105,16 +128,7 @@ def capture_copy(tmp_path):
 def app():
     flask_app.config["TESTING"] = True
     yield flask_app
-    # Release all DB connections before deleting the file (required on Windows).
-    # db.engine resolves through the app, so it needs an app context.
-    with flask_app.app_context():
-        _db.engine.dispose()
-    db_path = flask_app.config["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", "")
-    if os.path.exists(db_path):
-        try:
-            os.remove(db_path)
-        except PermissionError:
-            pass  # SQLite file briefly locked on Windows — harmless to leave it
+    # The database folder is removed at exit (_remove_test_db).
 
 
 @pytest.fixture()

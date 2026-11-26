@@ -110,6 +110,11 @@ npx jest --config tests/frontend/jest.config.js</code></pre>
   -c 'pip install -q -r tests/requirements.txt &amp;&amp; python -m pytest --update-snapshots'</code></pre></li>
   <li>Patch where a name is used (<code>blueprints.&lt;area&gt;.X</code>). <code>conftest.py</code> sends WP5 notices to a temporary file, disables rate limits, and stubs <code>snapshot_scheduler</code> (its own tests load the real file).</li>
   <li><code>PENM_TEST_POSTGRES_URL</code> also runs the PostgreSQL-only migration tests against a throwaway database whose name contains "test".</li>
+  <li>Each pytest run uses its own SQLite file in a temporary folder (deleted at exit), so two runs at once (terminal and IDE) do not interfere.</li>
+  <li><strong>Mutation testing</strong> (optional, to check that tests catch changes): StrykerJS for the frontend, <code>npx stryker run</code> (scope in <code>stryker.config.json</code>, report in <code>reports/mutation/</code>). mutmut needs Linux, so it runs in the backend image:
+<pre><code>docker run --rm -v "&lt;repo&gt;:/repo:ro" --entrypoint sh network-analyzer-backend:latest \
+  /repo/tests/mutation/mutmut_docker.sh</code></pre>
+  Edit the file and test lists at the top of the script to change its scope.</li>
 </ul>
 
 <h2 id="schema">8. Database changes</h2>

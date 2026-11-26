@@ -132,3 +132,9 @@ docs/archive/
 # Cut from a testbed capture; kept locally, test_role_engine.py skips without it
 tests/backend/fixtures/open5gs_nrf_pfcp.pcap
 *.features.tsv
+
+# Mutation testing (StrykerJS, mutmut)
+.stryker-tmp/
+reports/mutation/
+mutants/
+.mutmut-cache
