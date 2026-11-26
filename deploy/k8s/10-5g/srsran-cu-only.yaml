@@ -1,0 +1,69 @@
+# srsRAN gNB without the radio: the CU container only.
+#
+# For testing PENM when the B210 (and so the UE) is not attached. Without the
+# B210 the DU cannot start, but the CU does not need it: at start-up it still
+# runs NG Setup with the AMF and E2 Setup with FlexRIC (CU-CP and CU-UP
+# agents). The core keeps its own SBI (NRF registrations and heartbeats via
+# the SCP) and PFCP association traffic, MongoDB and the WebUI.
+#
+# Same Deployment name, labels and ConfigMap as srsran-gnb.yaml, so the pod is
+# still srsran-gnb (PENM's role hints and the guide's tables stay valid) and
+# switching is one apply either way:
+#
+#   kubectl apply -f 10-5g/srsran-cu-only.yaml   # CU only (this file)
+#   kubectl apply -f 10-5g/srsran-gnb.yaml       # back to CU + DU with the B210
+#
+# Apply srsran-gnb.yaml once first: it holds the srsran-config ConfigMap and
+# the srsran-gnb Service that this file reuses.
+#
+# Not available this way: the DU, F1 Setup, the cell, UEs, GTP-U and PDU
+# sessions. The CU logs that no DU is connected; that is expected.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: srsran-gnb
+  namespace: team-5g
+  annotations:
+    penm.testbed/variant: cu-only
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: srsran-gnb
+  template:
+    metadata:
+      labels:
+        app: srsran-gnb
+        app.kubernetes.io/part-of: ran
+    spec:
+      nodeSelector:
+        xtrust6g-node: penm
+      containers:
+        - name: cu
+          image: srsran-cu:25.10
+          imagePullPolicy: IfNotPresent
+          command: ["render.sh", "/config/cu.yaml", "/etc/srsran/cu.yaml", "--",
+                    "srscu", "-c", "/etc/srsran/cu.yaml"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RESOLVE
+              value: "AMF_IP=open5gs-amf.team-5g.svc.cluster.local RIC_IP=flexric-ric.team-5g.svc.cluster.local"
+          securityContext:
+            capabilities:
+              add: ["SYS_NICE", "IPC_LOCK"]
+          resources:
+            requests: { cpu: "2", memory: 2Gi }
+            limits: { cpu: "2", memory: 2Gi }
+          volumeMounts:
+            - name: config
+              mountPath: /config/cu.yaml
+              subPath: cu.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: srsran-config
