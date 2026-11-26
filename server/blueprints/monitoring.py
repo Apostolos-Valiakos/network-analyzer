@@ -185,7 +185,7 @@ def ingest_zeek():
         socketio.emit("new_network_data", flows)
 
         return jsonify({"status": "success", "inserted": len(batch)}), 200
-    except Exception as e:
+    except Exception:
         logger.exception("ingest_zeek failed")
         if conn:
             conn.rollback()
@@ -335,7 +335,7 @@ def get_latest_roles():
             return jsonify(results), 200
         return generate_csv_response(_flatten_k8s(results), "latest_roles.csv")
 
-    except Exception as e:
+    except Exception:
         logger.exception("get_latest_roles failed")
         return jsonify({"error": "Internal server error"}), 500
 

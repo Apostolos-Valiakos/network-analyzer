@@ -3,6 +3,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import packet_table
+from role_evidence import tokens as _tokens
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +100,6 @@ _ADDRESS_FIELDS = [
 # SBI URLs that name the subscriber, e.g. the AMF's N1N2 message transfer
 # /namf-comm/v1/ue-contexts/imsi-001010123456780/n1-n2-messages
 _SBI_IMSI = re.compile(r"/ue-contexts/imsi-(\d{5,15})(?:/|$)")
-
-
-def _tokens(value: str) -> List[str]:
-    return [t for t in value.split(",") if t] if value else []
 
 
 def ue_addresses(rows) -> Dict[str, Dict[str, str]]:

@@ -152,7 +152,7 @@ def _pct(value) -> str:
 
 
 def markdown(results: Dict[str, dict], t0: float, t1: float) -> str:
-    out = [f"# Role evaluation against Kubernetes",
+    out = ["# Role evaluation against Kubernetes",
            "",
            f"Period: {time.strftime('%Y-%m-%d %H:%M', time.gmtime(t0))} to "
            f"{time.strftime('%Y-%m-%d %H:%M', time.gmtime(t1))} UTC", ""]

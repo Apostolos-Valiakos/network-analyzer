@@ -71,6 +71,31 @@ class TestRoleEngineWarnings:
             assert len(warnings) == 1
             assert IpRole.query.filter_by(pcap_id=pcap_in_db["id"]).count() == 0
 
+    def test_without_an_app_context_roles_are_computed_quietly(self, monkeypatch):
+        import role_engine
+
+        roles = {"10.0.0.1": role_engine.RoleAssessment("10.0.0.1", "AMF", 0.9, "x")}
+        monkeypatch.setattr(role_engine, "assess_pcap", lambda path, warnings=None: roles)
+        warnings = []
+        assert role_engine.get_or_compute_roles("x.pcap", warnings=warnings) == roles
+        assert warnings == []
+
+    def test_a_database_error_is_logged_and_reported(self, app, fresh_db, monkeypatch, caplog):
+        import role_engine
+
+        roles = {"10.0.0.1": role_engine.RoleAssessment("10.0.0.1", "AMF", 0.9, "x")}
+        monkeypatch.setattr(role_engine, "assess_pcap", lambda path, warnings=None: roles)
+        broken = MagicMock()
+        broken.filter_by.side_effect = RuntimeError("database is gone")
+        monkeypatch.setattr(role_engine.PcapFile, "query", broken)
+
+        with app.app_context(), caplog.at_level(logging.ERROR, logger="role_engine"):
+            warnings = []
+            assert role_engine.get_or_compute_roles("x.pcap", warnings=warnings) == roles
+
+        assert warnings == ["Saved roles could not be read from the database; they were recomputed."]
+        assert any(r.exc_info for r in caplog.records)
+
 
 # ── Pipeline report and core analysis ────────────────────────────────────────
 

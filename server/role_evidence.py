@@ -73,6 +73,9 @@ class IpEvidence:
     pfcp_upf_side: int = 0
     pfcp_peer: int = 0          # heartbeat/association only — side unknown
     sbi_prefixes_served: Set[str] = field(default_factory=set)
+    # sbi_client, gtpu_outer and total_pkts are not read by any rule yet. They
+    # stay in the evidence (and the DPI payload sent to /v1/ingest/dpi) for
+    # future rules and for evaluate_roles; removing them changes that format.
     sbi_client: int = 0
     gtpu_outer: int = 0         # outer endpoint of GTP-U tunnels
     gtpu_ran_side: int = 0      # stage 2: GTP-U peer of a PFCP-confirmed UPF
@@ -277,7 +280,9 @@ E2_NODE_TYPES = {"0": "gNB", "1": "en-gNB", "2": "ng-eNB", "3": "eNB"}
 _MAX_NAME = 150
 
 
-def _tokens(col: str) -> List[str]:
+def tokens(col: str) -> List[str]:
+    """The non-empty occurrences of a comma-joined tshark field (also used by
+    ueAnalysis)."""
     return [t for t in col.split(",") if t] if col else []
 
 
@@ -289,9 +294,9 @@ def _name(col: str) -> str:
 
 
 def _e2_node_id(parts: List[str]) -> str:
-    node_type = _tokens(parts[15])[0]
-    plmn = _tokens(parts[16])
-    gnb = _tokens(parts[17])
+    node_type = tokens(parts[15])[0]
+    plmn = tokens(parts[16])
+    gnb = tokens(parts[17])
     label = E2_NODE_TYPES.get(node_type, f"type {node_type}")
     if plmn:
         label += f" PLMN {plmn[0]}"
@@ -312,7 +317,7 @@ def _nf_profile(col: str):
     """(nfType, [IPv4 addresses]) of the single NFProfile in a JSON body, or
     None. Bodies with no or several nfType members give None."""
     nf_types, addresses = [], []
-    for token in _tokens(col):
+    for token in tokens(col):
         for prefix in _NFPROFILE_PREFIXES:
             if token.startswith(prefix + "nfType:"):
                 nf_types.append(token[len(prefix) + len("nfType:"):])
@@ -329,8 +334,8 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
     if len(parts) < _N_FIELDS:
         parts += [""] * (_N_FIELDS - len(parts))
 
-    src_tokens = _tokens(parts[0])
-    dst_tokens = _tokens(parts[1])
+    src_tokens = tokens(parts[0])
+    dst_tokens = tokens(parts[1])
     if not src_tokens or not dst_tokens:
         return  # non-IPv4 frame
 
@@ -348,10 +353,10 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
         e.peers.add(peer)
         e.protocols.update(protocols - _BORING_LAYERS)
 
-    sctp_ports = set(_tokens(parts[3])) | set(_tokens(parts[4]))
-    sctp_dst = set(_tokens(parts[4]))
-    udp_ports = set(_tokens(parts[5])) | set(_tokens(parts[6]))
-    tcp_dst = _tokens(parts[7])
+    sctp_ports = set(tokens(parts[3])) | set(tokens(parts[4]))
+    sctp_dst = set(tokens(parts[4]))
+    udp_ports = set(tokens(parts[5])) | set(tokens(parts[6]))
+    tcp_dst = tokens(parts[7])
 
     # --- NGAP: the owner of SCTP 38412 is the AMF ---
     # (NGAP also appears embedded in SBI multipart bodies over TCP; the
@@ -379,11 +384,11 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
         node_ev.e2_node_side += 1
         # The E2 Setup Request names the E2 node (the response names the RIC
         # with a different IE, so this field only appears in the request).
-        if E2AP_SETUP in _tokens(parts[10]) and _tokens(parts[15]):
+        if E2AP_SETUP in tokens(parts[10]) and tokens(parts[15]):
             node_ev.e2_node_ids.add(_e2_node_id(parts))
 
     # --- PFCP: direction from session-level message types ---
-    for mt in _tokens(parts[11]):
+    for mt in tokens(parts[11]):
         if mt in PFCP_CP_SENDS:
             src_ev.pfcp_smf_side += 1
             dst_ev.pfcp_upf_side += 1
@@ -396,16 +401,16 @@ def _parse_line(line: str, obs: PcapObservations) -> None:
     if parts[11]:
         # The Node ID IE always names the sending node. Association messages
         # also announce the sender's side through its Function Features.
-        for node_id in _tokens(parts[19]) + _tokens(parts[20]):
+        for node_id in tokens(parts[19]) + tokens(parts[20]):
             src_ev.pfcp_node_ids.add(_name(node_id))
-        ie_types = set(_tokens(parts[18]))
+        ie_types = set(tokens(parts[18]))
         if PFCP_IE_CP_FEATURES in ie_types:
             src_ev.pfcp_cp_features += 1
         if PFCP_IE_UP_FEATURES in ie_types:
             src_ev.pfcp_up_features += 1
 
     # --- SBI (HTTP/2): dst of a frame carrying :path serves that API ---
-    for path in _tokens(parts[12]):
+    for path in tokens(parts[12]):
         if SBI_NOTIFY_MARKER in path:
             continue  # NRF callback endpoint — every NF serves this
         for prefix in SBI_PREFIXES:

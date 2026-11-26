@@ -32,31 +32,25 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+from flask import has_app_context
+
 import packet_table
 from models import db, PcapFile, IpRole
-# Stage 1 and 2 live in role_evidence (shared with the sensor's dpi_agent);
-# the names are re-exported here for existing callers and tests.
+# Stage 1 and 2 live in role_evidence (shared with the sensor's dpi_agent).
+# Only names this module uses, or tests import from it, are listed here.
 from role_evidence import (  # noqa: F401
     E2AP_PORTS,
     E2T_PORT,
-    GTPU_PORT,
     MONGODB_PORT,
     NGAP_PORT,
-    PFCP_CP_SENDS,
-    PFCP_UP_SENDS,
     REDIS_PORT,
-    SBI_NOTIFY_MARKER,
     SBI_PREFIXES,
     WEBUI_PORTS,
-    _BORING_LAYERS,
-    _N_FIELDS,
     _SIGNAL_LAYERS,
     _TSHARK_FIELDS,
-    IpEvidence,
     PcapObservations,
     _infer_cross_ip,
     _parse_line,
-    _tokens,
 )
 
 logger = logging.getLogger(__name__)
@@ -376,6 +370,10 @@ def get_or_compute_roles(
     filled in, and are not cached.
     """
     pcap_record = None
+    if not has_app_context():
+        # Background threads without an app context: plain analysis, no cache.
+        logger.debug("Role cache skipped for %s: no app context", pcap_file)
+        return assess_pcap(pcap_file, warnings=warnings)
     try:
         pcap_record = PcapFile.query.filter_by(file_path=pcap_file).first()
         if pcap_record:
@@ -391,10 +389,13 @@ def get_or_compute_roles(
                     )
                     for r in rows
                 }
-    except Exception as e:
-        # Expected in background threads without app context
-        logger.debug("Database lookup skipped (no app context): %s", e)
+    except Exception:
+        # The roles are still computed below, only the cache is skipped.
+        logger.exception("Reading cached roles for %s failed", pcap_file)
+        db.session.rollback()
         pcap_record = None
+        if warnings is not None:
+            warnings.append("Saved roles could not be read from the database; they were recomputed.")
 
     found_warnings: List[str] = []
     assessments = assess_pcap(pcap_file, warnings=found_warnings)

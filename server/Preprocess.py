@@ -105,9 +105,7 @@ def _pipeline_worker(pcap_file_path, model_name, result_queue, selected_ips=None
                 report["warnings"] = warnings
             result_queue.put(report)
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("Role pipeline failed for %s", pcap_file_path)
         result_queue.put({"status": "failed", "message": str(e)})
 
 

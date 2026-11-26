@@ -3,9 +3,12 @@ Traffic summaries of a capture, read from the shared tshark packet table
 (packet_table.py): packet count, per-pair conversations and, for
 /analyze-saved-pcap, the protocol stacks each source IP sent.
 """
+import logging
 from typing import Dict, List
 
 import packet_table
+
+logger = logging.getLogger(__name__)
 
 
 def summarize_traffic(filepath):
@@ -31,6 +34,7 @@ def summarize_traffic(filepath):
                 }
             conversations[key][f"{src}_to_{dst}"] += 1
     except Exception as e:
+        logger.exception("Traffic summary of %s failed", filepath)
         return None, f"Error processing PCAP: {str(e)}"
     return {"total_packets": total_packets, "conversations": conversations}, None
 
@@ -75,5 +79,6 @@ def initialize_analysis(filepath):
     try:
         result["ip_protocols"] = protocol_labels(filepath)
     except Exception as e:
+        logger.exception("Protocol labels of %s failed", filepath)
         return None, f"Error processing PCAP: {str(e)}"
     return result, None

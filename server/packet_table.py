@@ -13,7 +13,6 @@ and the field list, so a replaced capture or a changed field list re-extracts.
 """
 import logging
 import os
-import subprocess
 from typing import Dict, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
 import pcap_repair

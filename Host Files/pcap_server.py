@@ -259,6 +259,7 @@ def _run_nmap(target_list, profile):
         with _scan_lock:
             _scan_result = {"status": "error", "message": "Scan timed out.", "results": []}
     except Exception as e:
+        logger.exception("Nmap scan failed")
         with _scan_lock:
             _scan_result = {"status": "error", "message": str(e), "results": []}
 
