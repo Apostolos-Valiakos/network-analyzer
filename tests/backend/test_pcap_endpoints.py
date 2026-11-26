@@ -121,6 +121,52 @@ class TestSavePcap:
         assert data["filename"] is not None
         assert data["filename"].endswith(".pcap")
 
+    @pytest.fixture()
+    def out_dir(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("pcap_generator_service.PCAP_OUTPUT_DIR", str(tmp_path))
+        monkeypatch.setattr("blueprints.pcaps.PCAP_GEN_OUTPUT_DIR", str(tmp_path))
+        return tmp_path
+
+    def _chunk(self, client, headers, session_id, final=False):
+        body = {
+            "session_id": session_id,
+            "packets": [base64.b64encode(b"\x00" * 60).decode()],
+            "is_final_chunk": final,
+        }
+        return client.post("/save-pcap", data=json.dumps(body), headers=headers)
+
+    def test_another_users_session_cannot_be_appended_to(
+        self, client, admin_headers, user_headers, out_dir
+    ):
+        assert self._chunk(client, admin_headers, "admin_session").status_code == 200
+        size = (out_dir / "admin_session.pcap").stat().st_size
+
+        res = self._chunk(client, user_headers, "admin_session", final=True)
+
+        assert res.status_code == 403
+        assert res.get_json() == {"success": False, "error": "Access denied"}
+        assert (out_dir / "admin_session.pcap").stat().st_size == size
+
+    def test_a_stored_capture_with_the_session_file_name_is_protected(
+        self, client, app, admin_user, user_headers, out_dir
+    ):
+        _make_pcap_record(app, admin_user["id"], filename="upload1.pcap",
+                          file_path=str(out_dir / "upload1.pcap"), source="uploaded")
+        res = self._chunk(client, user_headers, "upload1")
+        assert res.status_code == 403
+        assert not (out_dir / "upload1.pcap").exists()
+
+    def test_your_own_session_takes_every_chunk(
+        self, client, app, regular_user, user_headers, out_dir
+    ):
+        assert self._chunk(client, user_headers, "mine").status_code == 200
+        res = self._chunk(client, user_headers, "mine", final=True)
+        assert res.status_code == 200
+        assert res.get_json()["filename"] == "mine.pcap"
+        with app.app_context():
+            record = PcapFile.query.filter_by(original_filename="mine").one()
+            assert record.user_id == regular_user["id"] and record.status == "COMPLETED"
+
     def test_save_pcap_cleanup(self, app, admin_user):
         """Clean up the generated PCAP files created by the tests above."""
         for session_id in ("test_session_001", "test_session_002", "test_final_session"):

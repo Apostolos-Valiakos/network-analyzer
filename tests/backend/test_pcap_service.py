@@ -102,7 +102,7 @@ class TestHandlePcapChunk:
         assert ok is False
 
     def test_empty_packets_creates_pcap_with_global_header(self, tmp_output_dir):
-        ok, name, err = handle_pcap_chunk("session_empty", [], is_final_chunk=False)
+        ok, name, err = handle_pcap_chunk("session_empty", [])
         assert ok is True
         assert err is None
         path = os.path.join(str(tmp_output_dir), "session_empty.pcap")
@@ -114,7 +114,7 @@ class TestHandlePcapChunk:
     def test_valid_packet_written_to_file(self, tmp_output_dir):
         pkt_bytes = b"\xff" * 60
         b64 = base64.b64encode(pkt_bytes).decode()
-        ok, name, err = handle_pcap_chunk("session_valid", [b64], is_final_chunk=False)
+        ok, name, err = handle_pcap_chunk("session_valid", [b64])
         assert ok is True
         path = os.path.join(str(tmp_output_dir), "session_valid.pcap")
         with open(path, "rb") as f:
@@ -124,7 +124,7 @@ class TestHandlePcapChunk:
 
     def test_multiple_packets_in_one_chunk(self, tmp_output_dir):
         pkts = [base64.b64encode(b"\xaa" * 40).decode() for _ in range(3)]
-        ok, name, err = handle_pcap_chunk("session_multi", pkts, is_final_chunk=False)
+        ok, name, err = handle_pcap_chunk("session_multi", pkts)
         assert ok is True
         path = os.path.join(str(tmp_output_dir), "session_multi.pcap")
         size = os.path.getsize(path)
@@ -142,12 +142,12 @@ class TestHandlePcapChunk:
         assert size == 24 + 16 + 10
 
     def test_is_final_chunk_true_returns_filename(self, tmp_output_dir):
-        ok, name, err = handle_pcap_chunk("session_final", [], is_final_chunk=True)
+        ok, name, err = handle_pcap_chunk("session_final", [])
         assert ok is True
         assert name == "session_final.pcap"
 
     def test_session_id_path_traversal_sanitised(self, tmp_output_dir):
-        ok, name, err = handle_pcap_chunk("../../etc/passwd", [], is_final_chunk=True)
+        ok, name, err = handle_pcap_chunk("../../etc/passwd", [])
         assert ok is True
         # os.path.basename strips directory components
         assert name == "passwd.pcap"
@@ -157,8 +157,8 @@ class TestHandlePcapChunk:
     def test_chunks_accumulate_across_calls(self, tmp_output_dir):
         pkt1 = base64.b64encode(b"\x01" * 20).decode()
         pkt2 = base64.b64encode(b"\x02" * 30).decode()
-        handle_pcap_chunk("session_accum", [pkt1], is_final_chunk=False)
-        handle_pcap_chunk("session_accum", [pkt2], is_final_chunk=True)
+        handle_pcap_chunk("session_accum", [pkt1])
+        handle_pcap_chunk("session_accum", [pkt2])
         path = os.path.join(str(tmp_output_dir), "session_accum.pcap")
         size = os.path.getsize(path)
         # global header written once + 2 packet records

@@ -249,6 +249,60 @@ class TestSaveResults:
         data = res.get_json()
         assert "download_url" in data
 
+    @pytest.mark.parametrize(
+        "name",
+        ["../escaped", "..", "sub/dir", "sub\\dir", "/abs/path", "C:\\abs", ".hidden", "  ", "a\0b"],
+    )
+    def test_names_that_are_not_plain_file_names_are_rejected(
+        self, client, user_headers, monkeypatch, tmp_path, name
+    ):
+        out = tmp_path / "out"
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(out))
+        res = client.post(
+            "/save-results",
+            data=json.dumps({"filename": name, "results": [{"ip": "1.2.3.4"}]}),
+            headers=user_headers,
+        )
+        assert res.status_code == 400
+        assert res.get_json() == {"error": "Invalid filename"}
+        assert list(tmp_path.rglob("*.csv")) == [] and list(tmp_path.rglob("*.json")) == []
+
+    def test_the_pcap_name_is_kept_and_files_stay_in_the_folder(
+        self, client, user_headers, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(tmp_path))
+        res = client.post(
+            "/save-results",
+            data=json.dumps({"filename": "my capture.pcap", "results": [{"ip": "1.2.3.4"}], "type": "csv"}),
+            headers=user_headers,
+        )
+        assert res.status_code == 200
+        assert res.get_json()["saved_file"] == "my capture.csv"
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["my capture.csv", "my capture.json"]
+
+    def test_another_users_result_is_not_overwritten(
+        self, client, app, admin_user, user_headers, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(tmp_path))
+        _make_cluster_result(app, admin_user["id"], filename="shared.json")
+        res = client.post(
+            "/save-results",
+            data=json.dumps({"filename": "shared", "results": [{"ip": "1.2.3.4"}]}),
+            headers=user_headers,
+        )
+        assert res.status_code == 409
+        assert list(tmp_path.iterdir()) == []
+
+    def test_saving_again_under_your_own_name_works(
+        self, client, app, regular_user, user_headers, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(tmp_path))
+        body = json.dumps({"filename": "again", "results": [{"ip": "1.2.3.4"}]})
+        assert client.post("/save-results", data=body, headers=user_headers).status_code == 200
+        assert client.post("/save-results", data=body, headers=user_headers).status_code == 200
+        with app.app_context():
+            assert ClusterResult.query.filter_by(user_id=regular_user["id"]).count() == 2
+
 
 # ── GET /clustering-output/<filename> ────────────────────────────────────────
 
@@ -266,3 +320,12 @@ class TestClusteringOutput:
         _make_cluster_result(app, admin_user["id"], filename="admin_cluster.json")
         res = client.get("/clustering-output/admin_cluster.json", headers=user_headers)
         assert res.status_code == 403
+
+    def test_admin_can_read_another_users_result(
+        self, client, app, regular_user, admin_headers, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr("blueprints.clustering.CLUSTERING_OUTPUT_DIR", str(tmp_path))
+        (tmp_path / "user_cluster.json").write_text("[]")
+        _make_cluster_result(app, regular_user["id"], filename="user_cluster.json")
+        res = client.get("/clustering-output/user_cluster.json", headers=admin_headers)
+        assert res.status_code == 200

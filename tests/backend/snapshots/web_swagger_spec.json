@@ -606,7 +606,7 @@
       },
       "/clustering-output/{filename}": {
         "get": {
-          "description": "Downloads a clustering output file (CSV or JSON, as saved by POST /save-results) by its exact stored filename. Ownership is checked against the caller's JWT identity via the ClusterResult row.\n",
+          "description": "Downloads a clustering output file (CSV or JSON, as saved by POST /save-results) by its exact stored filename. Ownership is checked against the caller's JWT identity via the ClusterResult row; admins can download any user's result.\n",
           "parameters": [
             {
               "description": "The name of the file to retrieve, exactly as returned in \"download_url\" by POST /save-results.",
@@ -626,7 +626,7 @@
               "description": "The requested file's raw content (JSON or CSV, per its extension)."
             },
             "403": {
-              "description": "The file exists but was saved by a different user.",
+              "description": "The file exists but was saved by a different user (and the caller is not an admin).",
               "schema": {
                 "properties": {
                   "error": {
@@ -1149,6 +1149,22 @@
                 "type": "object"
               }
             },
+            "403": {
+              "description": "The session (or a stored capture named \"<session_id>.pcap\") belongs to another user; nothing is written.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "Access denied",
+                    "type": "string"
+                  },
+                  "success": {
+                    "example": false,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
             "500": {
               "description": "Failed to write the chunk to disk, or a database error while updating the PcapFile record.",
               "schema": {
@@ -1191,7 +1207,7 @@
               "schema": {
                 "properties": {
                   "filename": {
-                    "description": "Base filename to save the results under (extension is added automatically).",
+                    "description": "Base filename to save the results under (an extension is replaced by .csv / .json). Must be a plain file name: a path, \"..\", or a name starting with \".\" is rejected with 400.\n",
                     "example": "cluster_42",
                     "type": "string"
                   },
@@ -1247,11 +1263,23 @@
               }
             },
             "400": {
-              "description": "Missing \"filename\" in the request body.",
+              "description": "Missing \"filename\" in the request body, or a filename that is not a plain file name (\"Invalid filename\").",
               "schema": {
                 "properties": {
                   "error": {
                     "example": "Missing filename",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "409": {
+              "description": "A saved result with this name belongs to another user; nothing is written.",
+              "schema": {
+                "properties": {
+                  "error": {
+                    "example": "A result with this name belongs to another user",
                     "type": "string"
                   }
                 },
